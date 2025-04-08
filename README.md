@@ -7,18 +7,20 @@ A powerful Flutter application powered by Google's Gemini AI. Apsara 2.5 offers 
 - Interactive chat interface with Gemini AI
 - Image recognition and processing
 - Multiple conversation support
-- Beautiful, responsive UI
+- Beautiful, responsive UI with ChatGPT-like interface
 - Markdown rendering support
 - Code syntax highlighting
 - Map integration
 - File sharing capabilities
 - Dark/Light theme support
+- **Wake word detection** - say "app-sara" to activate Apsara from anywhere in the app
 
 ## Tech Stack
 
 - Flutter for cross-platform development
 - Google Generative AI (Gemini) for AI capabilities
 - Hive for local storage
+- Porcupine for wake word detection
 - Various Flutter plugins for enhanced functionality
 
 ## Requirements
@@ -26,6 +28,7 @@ A powerful Flutter application powered by Google's Gemini AI. Apsara 2.5 offers 
 - Flutter 3.2.3 or higher
 - Dart 3.2.3 or higher
 - Google Gemini API key
+- Picovoice Porcupine API key (for wake word detection)
 
 ## Getting Started
 
@@ -35,7 +38,11 @@ A powerful Flutter application powered by Google's Gemini AI. Apsara 2.5 offers 
    flutter pub get
    ```
 3. Add your Gemini API key (follow instructions in the services directory)
-4. Run the app:
+4. Set up wake word detection:
+   - Create a Picovoice account and get an access key
+   - Place your custom "app-sara.ppn" keyword file in the `assets/keywords/` directory
+   - Update the access key in the `main.dart` file
+5. Run the app:
    ```
    flutter run
    ```
@@ -46,8 +53,20 @@ A powerful Flutter application powered by Google's Gemini AI. Apsara 2.5 offers 
   - `main.dart`: Entry point of the application
   - `chat_screen.dart`: Primary chat interface
   - `widgets/`: UI components
+    - `wake_word_popup.dart`: Popup UI that appears when wake word is detected
   - `services/`: API and data services
+    - `wake_word_service.dart`: Service for managing wake word detection
   - `theme_provider.dart`: Theme management
+
+## Wake Word Detection
+
+Apsara 2.5 uses Porcupine Flutter SDK for wake word detection. When the wake word "app-sara" is detected, a popup interface appears allowing you to quickly interact with Apsara.
+
+To customize or create your own wake word:
+1. Visit the [Picovoice Console](https://console.picovoice.ai/)
+2. Create a new wake word
+3. Download the .ppn file and place it in `assets/keywords/`
+4. Update the file path in `wake_word_service.dart`
 
 ## Credits
 

@@ -9,6 +9,8 @@
     <!-- For Android 10 (API level 29) and above -->
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES"/>
     <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
+    <!-- Audio Recording Permission -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
     
     <application
         android:label="Apsara 2.5"

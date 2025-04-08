@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'chat_screen.dart';
 import 'theme_provider.dart';
 import 'services/hive_service.dart';
+import 'services/wake_word_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -27,8 +28,73 @@ void main() async {
   runApp(const MyApp());
 }
 
-class MyApp extends StatelessWidget {
+class MyApp extends StatefulWidget {
   const MyApp({super.key});
+
+  @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
+  final WakeWordService _wakeWordService = WakeWordService();
+  final String _accessKey = "HbA+vB/MKtuMA2/trDIZ/ly37eRr/MGMgjW8gDl5re0ni0z5KbmEiA=="; // Replace with your Picovoice access key
+  
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    
+    // Initialize wake word service
+    _initializeWakeWordService();
+  }
+  
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _wakeWordService.dispose();
+    super.dispose();
+  }
+  
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    
+    // Manage wake word detection based on app lifecycle
+    switch (state) {
+      case AppLifecycleState.resumed:
+        _wakeWordService.startListening();
+        break;
+      case AppLifecycleState.inactive:
+      case AppLifecycleState.paused:
+        // Keep listening in background
+        break;
+      case AppLifecycleState.detached:
+        _wakeWordService.dispose();
+        break;
+      default:
+        break;
+    }
+  }
+  
+  Future<void> _initializeWakeWordService() async {
+    try {
+      await _wakeWordService.initialize(
+        accessKey: _accessKey,
+        onWakeWordDetected: () {
+          print("Wake word detected: 'app-sara'");
+          // The ChatScreen will handle showing the popup
+        },
+        onError: (error) {
+          print("Wake word service error: $error");
+        },
+      );
+      
+      // Start listening for wake word
+      await _wakeWordService.startListening();
+    } catch (e) {
+      print("Failed to initialize wake word service: $e");
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -40,7 +106,7 @@ class MyApp extends StatelessWidget {
           theme: _buildLightTheme(),
           darkTheme: _buildDarkTheme(),
           themeMode: themeMode,
-          home: const ChatScreen(),
+          home: ChatScreen(wakeWordService: _wakeWordService),
           debugShowCheckedModeBanner: false,
         );
       },
@@ -164,7 +230,7 @@ class MyApp extends StatelessWidget {
       useMaterial3: true,
       brightness: Brightness.dark,
       colorScheme: ColorScheme.fromSeed(
-        seedColor: const Color(0xFF9575CD), // Light Deep Purple
+        seedColor: const Color(0xFF10A37F), // ChatGPT green as seed color
         brightness: Brightness.dark,
       ),
     );
@@ -177,15 +243,15 @@ class MyApp extends StatelessWidget {
         centerTitle: false,
         titleSpacing: 0,
         toolbarHeight: 60,
-        backgroundColor: baseTheme.colorScheme.surface.withOpacity(0.8),
-        foregroundColor: baseTheme.colorScheme.onSurface,
+        backgroundColor: Colors.black,
+        foregroundColor: Colors.white,
         systemOverlayStyle: SystemUiOverlayStyle.light.copyWith(
           statusBarColor: Colors.transparent,
         ),
         titleTextStyle: GoogleFonts.poppins(
           fontSize: 20,
           fontWeight: FontWeight.w600,
-          color: baseTheme.colorScheme.onSurface,
+          color: Colors.white,
         ),
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
@@ -195,6 +261,8 @@ class MyApp extends StatelessWidget {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
           ),
+          backgroundColor: const Color(0xFF444654),
+          foregroundColor: Colors.white,
           textStyle: GoogleFonts.poppins(
             fontSize: 16,
             fontWeight: FontWeight.w500,
@@ -203,72 +271,91 @@ class MyApp extends StatelessWidget {
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: baseTheme.colorScheme.surfaceVariant.withOpacity(0.3),
+        fillColor: const Color(0xFF444654),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
           borderSide: BorderSide.none,
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
-          borderSide: BorderSide(
-            color: baseTheme.colorScheme.primary,
-            width: 2,
+          borderSide: const BorderSide(
+            color: Color(0xFF10A37F),
+            width: 1,
           ),
         ),
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
         hintStyle: GoogleFonts.poppins(
           fontSize: 16,
-          color: baseTheme.colorScheme.onSurfaceVariant.withOpacity(0.7),
+          color: Colors.grey.shade400,
         ),
       ),
       cardTheme: CardTheme(
-        elevation: 4,
+        elevation: 0,
+        color: const Color(0xFF444654),
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(12),
         ),
         clipBehavior: Clip.antiAlias,
       ),
-      iconTheme: IconThemeData(
-        color: baseTheme.colorScheme.primary,
+      iconTheme: const IconThemeData(
+        color: Colors.white,
         size: 24,
       ),
       chipTheme: ChipThemeData(
+        backgroundColor: const Color(0xFF444654),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(8),
         ),
         side: BorderSide.none,
       ),
-      dividerTheme: DividerThemeData(
+      dividerTheme: const DividerThemeData(
         space: 16,
         thickness: 1,
-        color: baseTheme.colorScheme.outline.withOpacity(0.2),
+        color: Color(0xFF555555),
       ),
       floatingActionButtonTheme: FloatingActionButtonThemeData(
-        elevation: 4,
+        backgroundColor: const Color(0xFF10A37F),
+        foregroundColor: Colors.white,
+        elevation: 2,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
         ),
       ),
       tooltipTheme: TooltipThemeData(
         decoration: BoxDecoration(
-          color: baseTheme.colorScheme.surfaceVariant,
+          color: const Color(0xFF444654),
           borderRadius: BorderRadius.circular(8),
         ),
         textStyle: GoogleFonts.poppins(
-          color: baseTheme.colorScheme.onSurfaceVariant,
+          color: Colors.white,
           fontSize: 12,
         ),
       ),
       snackBarTheme: SnackBarThemeData(
         behavior: SnackBarBehavior.floating,
+        backgroundColor: const Color(0xFF444654),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(8),
         ),
         contentTextStyle: GoogleFonts.poppins(
           fontSize: 14,
+          color: Colors.white,
         ),
       ),
-      scaffoldBackgroundColor: const Color(0xFF1A1A2E), // Deep dark blue background
+      scaffoldBackgroundColor: Colors.black, // Pure black background
+      colorScheme: baseTheme.colorScheme.copyWith(
+        background: Colors.black,
+        surface: Colors.black,
+        primary: const Color(0xFF10A37F), // ChatGPT green
+        secondary: const Color(0xFF10A37F),
+        tertiary: const Color(0xFF8E8EA0), // ChatGPT lighter text
+        primaryContainer: const Color(0xFF343541), // User message bubble
+        secondaryContainer: const Color(0xFF444654), // AI message background
+        onPrimaryContainer: Colors.white,
+        onSecondaryContainer: Colors.white,
+        onSurface: Colors.white,
+        onBackground: Colors.white,
+      ),
     );
   }
 } 

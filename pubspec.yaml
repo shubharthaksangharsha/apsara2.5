@@ -44,6 +44,7 @@ dependencies:
   flutter_spinkit: ^5.2.0
   vibration: ^3.1.0
   flutter_keyboard_visibility: ^6.0.0
+  porcupine_flutter: ^3.0.4
 
 dev_dependencies:
   flutter_test:
@@ -68,6 +69,8 @@ flutter:
     - assets/images/
     - assets/fonts/
     - assets/icons/
+    - assets/keywords/
+    - assets/keywords/app-sara.ppn
     - apsara.png
   
   fonts:
