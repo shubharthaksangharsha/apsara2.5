@@ -1,0 +1,914 @@
+Read the @apsara-docs  too and @apsara_backend  and clear me these points which will be better 
+1. Shall we make a image creator used as a tool instead ? so if user wants to generate an image LLM can do a tool call to use the image_generation as a tool depending on prompt whether to use image-gen or gemini-image-gen Keeping the api point of /generate  only 
+2. gemini-image-gen not only produce image but also text as output 
+so if the session start with this model then user can get both text and image as output (as this one have model response as TEXT and IMAGE) and other output text only 
+3. however in gemini thinking models can do think attaching the docs so add this if they select the model with thinking only 2 models can do it: 
+
+Use thinking models
+Models with thinking capabilities are available in Google AI Studio and through the Gemini API. Note that the thinking process is visible within Google AI Studio but is not provided as part of the API output.
+
+Send a basic request
+Python
+JavaScript
+Go
+REST
+
+from google import genai
+
+client = genai.Client(api_key="GEMINI_API_KEY")
+prompt = "Explain the concept of Occam's Razor and provide a simple, everyday example."
+response = client.models.generate_content(
+    model="gemini-2.5-pro-exp-03-25",  # or gemini-2.0-flash-thinking-exp
+    contents=prompt
+)
+
+print(response.text)
+Multi-turn thinking conversations
+To take the previous chat history into account, you can use multi-turn conversations.
+
+With the SDKs, you can create a chat session to manage the state of the conversation.
+
+Python
+JavaScript
+
+from google import genai
+
+client = genai.Client(api_key='GEMINI_API_KEY')
+
+chat = client.aio.chats.create(
+    model='gemini-2.5-pro-preview-03-25',  # or gemini-2.0-flash-thinking-exp
+)
+response = await chat.send_message('What is your name?')
+print(response.text)
+response = await chat.send_message('What did you just say before this?')
+print(response.text)
+Use tools with thinking models
+Thinking models can use tools to perform actions beyond generating text. This allows them to interact with external systems, execute code, or access real-time information, incorporating the results into their reasoning and final response.
+
+Search Tool
+The Search tool allows the model to query external search engines to find up-to-date information or information beyond its training data. This is useful for questions about recent events or highly specific topics.
+
+To configure the search tool, see Configure the Search tool.
+
+Prompt:
+
+What were the major scientific breakthroughs announced last week?
+Response (using Search Tool):
+
+Based on recent search results, here are some highlights from the past week in science:
+
+...
+(gemini-2.5-pro-exp-03-25)
+Code Execution
+The Code execution tool enables the model to generate and run Python code to perform calculations, manipulate data, or solve problems that are best handled algorithmically. The model receives the code's output and can use it in its response.
+
+To configure code execution, see Enable code execution on the model.
+
+Prompt:
+
+What is the sum of the first 50 prime numbers?
+Generate and run Python code for the calculation, and make sure you get all 50.
+Provide the final sum clearly.
+Response (using Code Execution Tool):
+
+Okay, I can calculate that. I will generate Python code to find the first 50 prime numbers and sum them up.
+
+```python
+def is_prime(num):
+    if num < 2:
+        return False
+    for i in range(2, int(num**0.5) + 1):
+        if num % i == 0:
+            return False
+    return True
+
+primes = []
+num = 2
+while len(primes) < 50:
+    if is_prime(num):
+        primes.append(num)
+    num += 1
+
+total_sum = sum(primes)
+print(total_sum)
+```
+
+Running the code...
+
+Code Execution Result:
+Outcome: OK
+Output:
+
+5117
+Use code with caution.
+The sum of the first 50 prime numbers is 5117.
+(gemini-2.5-pro-exp-03-25)
+Structured Output
+With structured output, you can constrain Gemini to respond with JSON, a structured output format suitable for automated processing. This is particularly useful for integrating the model's output into applications.
+
+You can specify the format directly in the prompt or supply a schema through model configuration.
+
+Prompt:
+
+Provide a list of 3 famous physicists and their key contributions
+in JSON format.
+Use this JSON schema:
+
+Physicist = {'name': str, 'contribution': str, 'era': str}
+Return: list[Physicist]
+Response (instructed for JSON):
+
+```json
+[
+{
+"name": "Albert Einstein",
+"contribution": "Theory of Relativity (Special and General)",
+"era": "Early 20th Century"
+},
+{
+"name": "Isaac Newton",
+"contribution": "Laws of Motion and Universal Gravitation",
+"era": "Late 17th / Early 18th Century"
+},
+{
+"name": "Marie Curie",
+"contribution": "Pioneering research on radioactivity",
+"era": "Late 19th / Early 20th Century"
+}
+]
+```
+(gemini-2.5-pro-preview-03-25)
+Prompting techniques for thinking models
+Effective prompting is crucial for maximizing the benefits of the Gemini thinking models. This section outlines some prompting practices for thinking models.
+
+Getting started
+Begin with general instructions that describe the desired outcome. Start with a simple prompt and observe the model's initial thoughts on how to tackle the challenge.
+
+Prompt:
+
+Describe the most unusual or striking architectural feature you've ever seen in a building or structure.
+Response:
+
+<...>
+The most unusual architectural feature that has truly stayed with me is the "floating roof" of the
+Heydar Aliyev Center in Baku, Azerbaijan, designed by Zaha Hadid Architects.
+
+Visually, it's breathtaking. Imagine a vast, undulating landscape of pure white, seemingly draped
+over the building. It's not just a roof in the traditional sense; it's an extension of the ground,
+flowing seamlessly upwards and over the building's various spaces before curving back down to meet
+the earth again. There are no sharp angles, no rigid lines. Instead, everything is fluid, organic,
+and continuous. It resembles a giant, pristine white wave frozen in motion, or perhaps a sand dune
+sculpted by an unseen wind.
+<...>
+(gemini-2.5-pro-exp-03-25)
+Provide Step-by-Step Instructions
+If the initial attempt does not yield the desired result, refine your prompt by providing more explicit step-by-step instructions to guide Gemini through the problem-solving process for a more focused approach. This allows you steer the model's initial understanding of the task with explicit suggestions and guidance.
+
+Prompt:
+
+Now imagine that architectural feature is not just for looks, but has a specific function or
+purpose related to the building's environment or the people who use it. Explain what that
+function could be and how it enhances the building's overall design and usability.
+Response:
+
+<...>
+Let's imagine that the "floating roof" of the Heydar Aliyev Center is not purely aesthetic but
+serves a crucial environmental and user-centric function: it's designed as a sophisticated climate
+moderator and natural ventilation system for the Baku environment.
+
+Here's how this function would work and enhance the building:
+
+Function: Passive Climate Control and Natural Ventilation System
+
+Shading and Solar Heat Mitigation: The undulating curves of the white GFRC roof are strategically
+shaped and oriented to provide optimal shading throughout the day, year-round. Baku experiences
+intense sun, especially during the summer. The overhanging curves, acting like giant brise-soleils,
+would block direct sunlight from hitting the building's glass facade, significantly reducing solar
+heat gain. The varying heights and depths of the curves would create dynamic shade patterns, ensuring
+that different parts of the building are shaded at different times of the day, optimizing comfort
+and reducing the need for excessive air conditioning. The white color of the GFRC further enhances
+this by reflecting a large portion of the solar radiation.
+<...>
+(gemini-2.5-pro-exp-03-25)
+Multishot Prompting with Thinking
+Multishot prompting in conjunction with thinking can further enhance Gemini's understanding and improve the accuracy of its responses. Provide several examples of input-output pairs, demonstrating the desired behavior and output format in your prompt.
+
+Prompt:
+
+Example 1:
+User: What is the tallest mountain in the world?
+Assistant: Mount Everest
+
+Example 2:
+User: What is the largest ocean?
+Assistant: Pacific Ocean
+
+User: What is the longest river in the world?
+Assistant:
+Response:
+
+Amazon River
+(gemini-2.5-pro-exp-03-25)
+Defining Output and Behavior
+When building an application where users will interact directly with the model, you may want to provide guidance for how Gemini's output and responses will sound and be formatted.
+
+System Instructions
+System instructions are a set of instructions that the model processes before it processes prompts. They are recalled each time the model is prompted and tell the model how you want it to behave and respond. For example, you can include things like the role or persona, contextual information, and formatting instructions.
+
+Prompt:
+
+System Instruction: You are a helpful and concise coding tutor. Always provide code examples and explain them briefly.
+
+User Prompt: Explain what is a closure in Javascript and give an example.
+Response:
+
+function outerFunction(outerVar) {
+function innerFunction(innerVar) {
+console.log(outerVar); // Accessing outerVar from outerFunction's scope
+console.log(innerVar);
+}
+return innerFunction;
+}
+
+const closureExample = outerFunction('I am from outer');
+closureExample('I am from inner');
+
+Explanation:
+
+A closure is created when a function (innerFunction in this example) is defined inside another function
+(outerFunction) and the inner function remembers and has access to the variables from the outer
+function's scope, even after the outer function has finished executing.
+
+In the example:
+
+outerFunction is called with 'I am from outer' and returns innerFunction.
+
+closureExample now holds a reference to innerFunction.
+
+When closureExample('I am from inner') is called, innerFunction executes.
+
+Even though outerFunction has already finished, innerFunction can still access and use outerVar
+(which is 'I am from outer') because of the closure.
+
+In essence, the innerFunction "closes over" the variables of its outer function's scope, creating
+a closure.
+(gemini-2.5-pro-exp-03-25)
+Verification and Reflection
+Include specific verification steps in either the System Instructions or your prompts directly. For example, ask Gemini to verify its sources, review its reasoning, identify potential errors, and check its final answer.
+
+Prompt:
+
+Verify the following statement and provide your sources: The capital of Brazil is Rio de Janeiro.
+Response:
+
+The statement "The capital of Brazil is Rio de Janeiro" is incorrect.
+
+The current capital of Brazil is Brasília.
+
+Rio de Janeiro was the capital of Brazil for a significant period, from 1763 to 1960. However, the
+capital was moved to Brasília in 1960 as part of a plan to develop the country's interior and create
+a more centrally located capital.
+
+Verification and Sources:
+
+You can easily verify this information from numerous reliable sources:
+
+Encyclopedias:
+
+Britannica: Searching for "Brazil" on Britannica will clearly state Brasília as the capital.
+
+https://www.britannica.com/place/Brazil (Look for the "Capital" information in the introductory summary or "Geography" section)
+
+Wikipedia: The Wikipedia article for "Brazil" also states Brasília as the capital.
+
+https://en.wikipedia.org/wiki/Brazil (Look in the infobox or introductory section)
+
+Government and Official Sources:
+
+CIA World Factbook: This is a highly reliable source for country information. Searching for "Brazil"
+will list Brasília as the capital.
+
+https://www.cia.gov/the-world-factbook/countries/brazil/ (Look under "Government" > "Capital")
+
+Official Website of the Brazilian Government (if accessible and in English): While navigating official
+government websites can sometimes be complex, they would definitively list Brasília as the capital.
+
+Geographic Resources:
+
+National Geographic: Their website and publications will confirm Brasília as the capital of Brazil.
+
+Atlases and Geography Textbooks: Any modern atlas or geography textbook will list Brasília as the capital.
+
+Why the confusion?
+
+The confusion might arise because:
+
+Rio de Janeiro is a very famous Brazilian city: It's a major tourist destination, known for its
+beaches, Carnival, and iconic landmarks like Christ the Redeemer. Its past status as capital adds
+to its historical significance and public recognition.
+
+Historical context: Rio de Janeiro was the capital for a long time. People who learned about Brazil
+in the past might remember it as the capital.
+
+In conclusion, the statement is false. The capital of Brazil is Brasília, not Rio de Janeiro. Rio
+de Janeiro was the former capital but is no longer the current capital.
+
+You can confidently use the sources listed above to verify this information.
+(gemini-2.5-pro-exp-03-25)
+Debugging and Steering
+Google AI Studio provides developers access to the model's thoughts in the UI. This is helpful as a developer reviewing your prompt when debugging:
+
+Analyze the Thought Process
+Carefully review Gemini's thought process to identify any areas where it may have gone astray. This analysis can provide valuable clues for refining your prompts and getting your expected response consistently in your application.
+
+Example Scenario: If Gemini's thought process shows it misunderstood a step in a complex instruction, you can refine the prompt to clarify that specific step.
+
+Prompt:
+
+Step 1: Summarize the following article about quantum physics.
+Step 2: Translate the summary into Spanish.
+Step 3: Extract the key entities from the Spanish summary.
+
+Article: ... [Article Text] ...
+Gemini's Thought Process Analysis (Example):
+
+The user wants me to process an article about Google's new quantum chip called Willow in three steps:
+Step 1: Summarize the article.
+Step 2: Translate the summary into Spanish.
+Step 3: Extract the key entities from the Spanish summary.
+
+Let's break down each step.
+
+Step 1: Summarize the article.
+I need to read the article and identify the main points. The article is about Google's new quantum
+chip, Willow, and its achievements. The key achievements are:
+
+Exponential error reduction as qubits scale up.
+
+Outperforming supercomputers in a benchmark computation (RCS).
+
+Willow is a step towards commercially relevant quantum computing.
+
+It's the first system below threshold for quantum error correction.
+
+It achieved a benchmark computation in under 5 minutes that would take a supercomputer 10 septillion years.
+
+It was fabricated in a new facility.
+
+It has state-of-the-art performance and high quality qubits.
+
+Google is looking towards real-world applications with Willow.
+
+Quantum computing will benefit AI.
+
+I will synthesize these points into a concise summary.
+
+Step 2: Translate the summary into Spanish.
+Once I have the summary in English, I will translate it into Spanish. I need to ensure the translation
+is accurate and natural-sounding in Spanish.
+
+Step 3: Extract the key entities from the Spanish summary.
+After translating the summary, I will identify and extract the key entities. Key entities are typically
+nouns or noun phrases that represent important objects, concepts, or actors. In this context, they
+will likely include:
+
+Names of chips (Willow, Sycamore)
+
+Companies/Organizations (Google Quantum AI, Google Research)
+
+Technologies (quantum chip, quantum computer, qubits, quantum error correction, superconducting
+quantum system, classical computers, supercomputers, AI)
+
+Benchmarks (random circuit sampling, RCS)
+
+People (Julian Kelly, Peter Shor, David Deutsch, Sergio Boixo, Hartmut Neven, John Preskill)
+
+Concepts (exponential error reduction, below threshold, beyond breakeven, state-of-the-art performance,
+commercially relevant applications, quantum mechanics, multiverse, T1 times, system benchmarks,
+algorithmic benchmarks)
+
+I will need to carefully review the Spanish summary to identify these entities and list them out.
+
+Provide Corrective Feedback
+If you observe errors or inconsistencies in Gemini's reasoning, provide corrective feedback in your prompt and/or System Instructions to anticipate where the model's response may deviate from your desired outcome.
+
+Prompt:
+
+You are an expert in botany. When asked to identify a plant, focus on leaf shape, flower structure, and stem characteristics.
+
+Identify this plant based on these characteristics: ... [Plant Characteristics Description] ...
+
+Previous incorrect response focused on habitat only. Please disregard habitat and focus on morphology.
+Refined Prompt (if needed based on thought process):
+
+Previous incorrect response focused on habitat only. Please disregard habitat and focus on morphology.
+Response:
+
+Tabebuia vellosoi
+(gemini-2.5-pro-exp-03-25)
+Making the Best of Long Outputs and Longform Thinking
+Thinking generates “thoughts” as part of the Token Output that showcases Gemini's detailed reasoning. To make the most of these outputs:
+
+Review the Reasoning
+Pay close attention to Gemini's reasoning process (available in the Google AI Studio UI), how it broke down the task and the choices it made for your output. This can help you understand how it arrived at its conclusion.
+
+Provide Guidance in Reasoning
+If your desired output is to be particularly lengthy, you may want to provide more guidance in your prompt to constrain the amount of thinking needed to accomplish the task presented in the prompt. This allows you to reserve more of the Token Output for your response.
+
+Example: For a detailed report, you might specify sections and sub-sections in your prompt to guide Gemini's thinking and structure the output efficiently.
+
+Prompt:
+
+Generate a detailed report on the impact of climate change on coastal ecosystems.
+
+Report Structure:
+
+Introduction
+
+Rising Sea Levels
+2.1. Impact on Mangroves
+2.2. Impact on Coral Reefs
+
+Ocean Acidification
+3.1. Impact on Shellfish
+3.2. Impact on Plankton
+
+Extreme Weather Events
+4.1. Increased Storm Intensity
+4.2. Coastal Erosion
+
+Conclusion
+
+Provide detailed analysis within each section.
+Response:
+
+<...>
+Climate Change Impact on Coastal Ecosystems: A Detailed Report
+
+1. Introduction
+
+Coastal ecosystems, the dynamic interface between land and sea, are among the most productive and
+biodiverse environments on Earth. They provide crucial ecosystem services, including coastal protection,
+fisheries, carbon sequestration, and support for a vast array of species. However, these vital
+ecosystems are increasingly threatened by the multifaceted impacts of climate change. Driven by
+anthropogenic greenhouse gas emissions, climate change is manifesting in several interconnected ways
+that are profoundly altering the physical and chemical conditions of coastal environments. This report
+will delve into the key impacts of climate change on coastal ecosystems, focusing on rising sea levels,
+ocean acidification, and extreme weather events, and their specific consequences for critical habitats
+like mangroves and coral reefs, and key organisms like shellfish and plankton. Understanding these
+impacts is crucial for developing effective conservation and management strategies to mitigate the
+damage and enhance the resilience of these invaluable ecosystems.
+
+2. Rising Sea Levels
+
+Rising sea levels are a direct and significant consequence of global warming, driven by thermal
+expansion of seawater and the melting of land ice (glaciers and ice sheets). This phenomenon poses a
+direct threat to low-lying coastal ecosystems by inundating habitats, altering salinity regimes, and
+increasing erosion rates. The rate of sea level rise is accelerating, and projections for the 21st
+century indicate a continued upward trend, with potentially devastating consequences for coastal
+environments.
+
+2.1. Impact on Mangroves
+
+Mangrove forests are unique coastal ecosystems found in tropical and subtropical intertidal zones.
+They provide numerous benefits, including coastal protection against storms, nursery grounds for
+fish and invertebrates, and significant carbon sequestration...
+<...>
+
+also add gemini-live api too which can do multi function calling too add async feature for streaming (also in previous models if they support it use @all_models.txt  to understand) 
+Live API
+Preview: The Live API is in preview.
+
+The Live API enables low-latency bidirectional voice and video interactions with Gemini. Using the Live API, you can provide end users with the experience of natural, human-like voice conversations, and with the ability to interrupt the model's responses using voice commands. The model can process text, audio, and video input, and it can provide text and audio output.
+
+You can try the Live API in Google AI Studio.
+
+To try a tutorial that lets you use your voice and camera to talk to Gemini through the Live API, see the Web Console Demo project.
+What's new
+The Live API has new features and capabilities!
+
+New capabilities:
+
+Two new voices and 30 new languages, with configurable output language
+Configurable image resolutions 66/256 tokens
+Configurable turn coverage: Send all inputs all the time or only when the user is speaking
+Configure if input should interrupt the model or not
+Configurable Voice Activity Detection and new client events for end of turn signaling
+Token counts
+A client event for signaling end of stream
+Text streaming
+Configurable session resumption, with session data stored on the server for 24 hours
+Longer session support with a sliding context window
+New client events:
+
+End of audio stream / mic closed
+Activity start/end events for manually controlling turn transition
+New server events:
+
+Go away notification signaling a need to restart a session
+Generation complete
+Use the Live API
+This section describes how to use the Live API with one of our SDKs. For more information about the underlying WebSockets API, see the WebSockets API reference.
+
+Send and receive text
+
+import asyncio
+from google import genai
+
+client = genai.Client(api_key="GEMINI_API_KEY")
+model = "gemini-2.0-flash-live-001"
+
+config = {"response_modalities": ["TEXT"]}
+
+async def main():
+    async with client.aio.live.connect(model=model, config=config) as session:
+        while True:
+            message = input("User> ")
+            if message.lower() == "exit":
+                break
+            await session.send_client_content(
+                turns={"role": "user", "parts": [{"text": message}]}, turn_complete=True
+            )
+
+            async for response in session.receive():
+                if response.text is not None:
+                    print(response.text, end="")
+
+if __name__ == "__main__":
+    asyncio.run(main())
+Receive audio
+The following example shows how to receive audio data and write it to a .wav file.
+
+
+import asyncio
+import wave
+from google import genai
+
+client = genai.Client(api_key="GEMINI_API_KEY", http_options={'api_version': 'v1alpha'})
+model = "gemini-2.0-flash-live-001"
+
+config = {"response_modalities": ["AUDIO"]}
+
+async def main():
+    async with client.aio.live.connect(model=model, config=config) as session:
+        wf = wave.open("audio.wav", "wb")
+        wf.setnchannels(1)
+        wf.setsampwidth(2)
+        wf.setframerate(24000)
+
+        message = "Hello? Gemini are you there?"
+        await session.send_client_content(
+            turns={"role": "user", "parts": [{"text": message}]}, turn_complete=True
+        )
+
+        async for idx,response in async_enumerate(session.receive()):
+            if response.data is not None:
+                wf.writeframes(response.data)
+
+            # Un-comment this code to print audio data info
+            # if response.server_content.model_turn is not None:
+            #      print(response.server_content.model_turn.parts[0].inline_data.mime_type)
+
+        wf.close()
+
+if __name__ == "__main__":
+    asyncio.run(main())
+Audio formats
+The Live API supports the following audio formats:
+
+Input audio format: Raw 16 bit PCM audio at 16kHz little-endian
+Output audio format: Raw 16 bit PCM audio at 24kHz little-endian
+Stream audio and video
+To see an example of how to use the Live API in a streaming audio and video format, run the "Live API - Quickstart" file in the cookbooks repository:
+
+View on GitHub
+
+System instructions
+System instructions let you steer the behavior of a model based on your specific needs and use cases. System instructions can be set in the setup configuration and will remain in effect for the entire session.
+
+
+from google.genai import types
+
+config = {
+    "system_instruction": types.Content(
+        parts=[
+            types.Part(
+                text="You are a helpful assistant and answer in a friendly tone."
+            )
+        ]
+    ),
+    "response_modalities": ["TEXT"],
+}
+Incremental content updates
+Use incremental updates to send text input, establish session context, or restore session context. For short contexts you can send turn-by-turn interactions to represent the exact sequence of events:
+
+Python
+JSON
+
+turns = [
+    {"role": "user", "parts": [{"text": "What is the capital of France?"}]},
+    {"role": "model", "parts": [{"text": "Paris"}]},
+]
+
+await session.send_client_content(turns=turns, turn_complete=False)
+
+turns = [{"role": "user", "parts": [{"text": "What is the capital of Germany?"}]}]
+
+await session.send_client_content(turns=turns, turn_complete=True)
+For longer contexts it's recommended to provide a single message summary to free up the context window for subsequent interactions.
+
+Change voices
+The Live API supports the following voices: Puck, Charon, Kore, Fenrir, Aoede, Leda, Orus, and Zephyr.
+
+To specify a voice, set the voice name within the speechConfig object as part of the session configuration:
+
+Python
+JSON
+
+from google.genai import types
+
+config = types.LiveConnectConfig(
+    response_modalities=["AUDIO"],
+    speech_config=types.SpeechConfig(
+        voice_config=types.VoiceConfig(
+            prebuilt_voice_config=types.PrebuiltVoiceConfig(voice_name="Kore")
+        )
+    )
+)
+Use function calling
+You can define tools with the Live API. See the Function calling tutorial to learn more about function calling.
+
+Tools must be defined as part of the session configuration:
+
+
+config = types.LiveConnectConfig(
+    response_modalities=["TEXT"],
+    tools=[set_light_values]
+)
+
+async with client.aio.live.connect(model=model, config=config) as session:
+    await session.send_client_content(
+        turns={
+            "role": "user",
+            "parts": [{"text": "Turn the lights down to a romantic level"}],
+        },
+        turn_complete=True,
+    )
+
+    async for response in session.receive():
+        print(response.tool_call)
+From a single prompt, the model can generate multiple function calls and the code necessary to chain their outputs. This code executes in a sandbox environment, generating subsequent BidiGenerateContentToolCall messages. The execution pauses until the results of each function call are available, which ensures sequential processing.
+
+The client should respond with BidiGenerateContentToolResponse.
+
+Audio inputs and audio outputs negatively impact the model's ability to use function calling.
+
+Handle interruptions
+Users can interrupt the model's output at any time. When Voice activity detection (VAD) detects an interruption, the ongoing generation is canceled and discarded. Only the information already sent to the client is retained in the session history. The server then sends a BidiGenerateContentServerContent message to report the interruption.
+
+In addition, the Gemini server discards any pending function calls and sends a BidiGenerateContentServerContent message with the IDs of the canceled calls.
+
+
+async for response in session.receive():
+    if response.server_content.interrupted is not None:
+        # The generation was interrupted
+Configure voice activity detection (VAD)
+By default, the model automatically performs voice activity detection (VAD) on a continuous audio input stream. VAD can be configured with the realtimeInputConfig.automaticActivityDetection field of the setup configuration.
+
+When the audio stream is paused for more than a second (for example, because the user switched off the microphone), an audioStreamEnd event should be sent to flush any cached audio. The client can resume sending audio data at any time.
+
+Alternatively, the automatic VAD can be disabled by setting realtimeInputConfig.automaticActivityDetection.disabled to true in the setup message. In this configuration the client is responsible for detecting user speech and sending activityStart and activityEnd messages at the appropriate times. An audioStreamEnd isn't sent in this configuration. Instead, any interruption of the stream is marked by an activityEnd message.
+
+SDK support for this feature will be available in the coming weeks.
+
+Get the token count
+You can find the total number of consumed tokens in the usageMetadata field of the returned server message.
+
+
+from google.genai import types
+
+async with client.aio.live.connect(
+    model='gemini-2.0-flash-live-001',
+    config=types.LiveConnectConfig(
+        response_modalities=['AUDIO'],
+    ),
+) as session:
+    # Session connected
+    while True:
+        await session.send_client_content(
+            turns=types.Content(role='user', parts=[types.Part(text='Hello world!')])
+        )
+        async for message in session.receive():
+            # The server will periodically send messages that include
+            # UsageMetadata.
+            if message.usage_metadata:
+                usage = message.usage_metadata
+                print(
+                    f'Used {usage.total_token_count} tokens in total. Response token'
+                    ' breakdown:'
+                )
+            for detail in usage.response_tokens_details:
+                match detail:
+                  case types.ModalityTokenCount(modality=modality, token_count=count):
+                      print(f'{modality}: {count}')
+
+            # For the purposes of this example, placeholder input is continually fed
+            # to the model. In non-sample code, the model inputs would come from
+            # the user.
+            if message.server_content and message.server_content.turn_complete:
+                break
+Configure session resumption
+To prevent session termination when the server periodically resets the WebSocket connection, configure the sessionResumption field within the setup configuration.
+
+Passing this configuration causes the server to send SessionResumptionUpdate messages, which can be used to resume the session by passing the last resumption token as the SessionResumptionConfig.handle of the subsequent connection.
+
+
+from google.genai import types
+
+print(f"Connecting to the service with handle {previous_session_handle}...")
+async with client.aio.live.connect(
+    model="gemini-2.0-flash-live-001",
+    config=types.LiveConnectConfig(
+        response_modalities=["AUDIO"],
+        session_resumption=types.SessionResumptionConfig(
+            # The handle of the session to resume is passed here,
+            # or else None to start a new session.
+            handle=previous_session_handle
+        ),
+    ),
+) as session:
+    # Session connected
+    while True:
+        await session.send_client_content(
+            turns=types.Content(
+                role="user", parts=[types.Part(text="Hello world!")]
+            )
+        )
+        async for message in session.receive():
+            # Periodically, the server will send update messages that may
+            # contain a handle for the current state of the session.
+            if message.session_resumption_update:
+                update = message.session_resumption_update
+                if update.resumable and update.new_handle:
+                    # The handle should be retained and linked to the session.
+                    return update.new_handle
+
+            # For the purposes of this example, placeholder input is continually fed
+            # to the model. In non-sample code, the model inputs would come from
+            # the user.
+            if message.server_content and message.server_content.turn_complete:
+                break
+Receive a message before the session disconnects
+The server sends a GoAway message that signals that the current connection will soon be terminated. This message includes the timeLeft, indicating the remaining time and lets you take further action before the connection will be terminated as ABORTED.
+
+Receive a message when the generation is complete
+The server sends a generationComplete message that signals that the model finished generating the response.
+
+Enable context window compression
+To enable longer sessions, and avoid abrupt connection termination, you can enable context window compression by setting the contextWindowCompression field as part of the session configuration.
+
+In the ContextWindowCompressionConfig, you can configure a sliding-window mechanism and the number of tokens that triggers compression.
+
+
+from google.genai import types
+
+config = types.LiveConnectConfig(
+    response_modalities=["AUDIO"],
+    context_window_compression=(
+        # Configures compression with default parameters.
+        types.ContextWindowCompressionConfig(
+            sliding_window=types.SlidingWindow(),
+        )
+    ),
+)
+Change the media resolution
+You can specify the media resolution for the input media by setting the mediaResolution field as part of the session configuration:
+
+
+from google.genai import types
+
+config = types.LiveConnectConfig(
+    response_modalities=["AUDIO"],
+    media_resolution=types.MediaResolution.MEDIA_RESOLUTION_LOW,
+)
+Limitations
+Consider the following limitations of the Live API and Gemini 2.0 when you plan your project.
+
+Client authentication
+The Live API only provides server to server authentication and isn't recommended for direct client use. Client input should be routed through an intermediate application server for secure authentication with the Live API.
+
+Session duration
+Session duration can be extended to unlimited by enabling session compression. Without compression, audio-only sessions are limited to 15 minutes, and audio plus video sessions are limited to 2 minutes. Exceeding these limits without compression will terminate the connection.
+
+Context window
+A session has a context window limit of 32k tokens.
+
+Also replace test_backend.py with the following testing:- 
+import requests
+import uuid
+import os
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
+
+# Set the API base URL
+BASE_URL = "http://localhost:8000"
+
+def test_api():
+    """Test the Apsara 2.5 API endpoints."""
+    print("Testing Apsara 2.5 API...")
+    
+    # Step 1: Test root endpoint
+    print("\n=== Testing Root Endpoint ===")
+    response = requests.get(f"{BASE_URL}/")
+    print(f"Status Code: {response.status_code}")
+    print(f"Response: {response.json()}")
+    
+    # Step 2: Test available models
+    print("\n=== Testing Available Models ===")
+    response = requests.get(f"{BASE_URL}/models/")
+    print(f"Status Code: {response.status_code}")
+    if response.status_code == 200:
+        models = response.json().get("models", [])
+        print(f"Found {len(models)} models")
+        for model in models[:2]:  # Print first 2 models
+            print(f"- {model['display_name']}: {model['description']}")
+        if len(models) > 2:
+            print(f"- ... and {len(models) - 2} more")
+    
+    # Step 3: Test available tools
+    print("\n=== Testing Available Tools ===")
+    response = requests.get(f"{BASE_URL}/tools/")
+    print(f"Status Code: {response.status_code}")
+    if response.status_code == 200:
+        tools = response.json().get("tools", [])
+        print(f"Found {len(tools)} tools")
+        for tool in tools:
+            print(f"- {tool['display_name']}: {tool['description']}")
+    
+    # Step 4: Create a new chat session
+    print("\n=== Creating a New Chat Session ===")
+    session_id = str(uuid.uuid4())
+    response = requests.post(f"{BASE_URL}/chat/sessions", params={"session_id": session_id})
+    print(f"Status Code: {response.status_code}")
+    print(f"Response: {response.json()}")
+    
+    # Step 5: Send a message
+    print("\n=== Sending a Message ===")
+    chat_request = {
+        "session_id": session_id,
+        "message": "Hello! What can you help me with today?",
+        "model": "gemini-1.5-flash",
+        "system_instruction": "You are a helpful assistant named Apsara.",
+        "tools_enabled": False
+    }
+    
+    try:
+        response = requests.post(f"{BASE_URL}/chat/messages", json=chat_request)
+        print(f"Status Code: {response.status_code}")
+        if response.status_code == 200:
+            chat_response = response.json()
+            print(f"Response: {chat_response['response'][:100]}...")  # Print first 100 chars
+    except Exception as e:
+        print(f"Error sending message: {str(e)}")
+    
+    # Step 6: Get messages for this session
+    print("\n=== Getting Messages ===")
+    response = requests.get(f"{BASE_URL}/chat/messages/{session_id}")
+    print(f"Status Code: {response.status_code}")
+    if response.status_code == 200:
+        messages = response.json().get("messages", [])
+        print(f"Found {len(messages)} messages")
+        for message in messages:
+            print(f"- {message['role']}: {message['content'][:50]}...")  # Print first 50 chars
+    
+    # Step 7: Test tool execution
+    print("\n=== Testing Tool Execution ===")
+    tool_request = {
+        "tool_name": "calculator",
+        "args": {
+            "expression": "2 + 2 * 3"
+        }
+    }
+    
+    try:
+        response = requests.post(f"{BASE_URL}/tools/execute", json=tool_request)
+        print(f"Status Code: {response.status_code}")
+        if response.status_code == 200:
+            tool_response = response.json()
+            print(f"Result: {tool_response}")
+    except Exception as e:
+        print(f"Error executing tool: {str(e)}")
+    
+    print("\n=== All tests completed ===")
+
+if __name__ == "__main__":
+    # Check if the API key is set
+    api_key = os.getenv("GEMINI_API_KEY")
+    if not api_key or api_key == "${GEMINI_API_KEY}":
+        print("WARNING: GEMINI_API_KEY environment variable is not set or is a placeholder.")
+        print("Some tests may fail due to missing API credentials.")
+    
+    # Run tests
+    test_api() 
