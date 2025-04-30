@@ -1,0 +1,136 @@
+# ========================
+# Node.js (JavaScript/React)
+# ========================
+# React & Node
+apsara-js/frontend/node_modules/
+apsara-js/frontend/build/
+apsara-js/backend/node_modules/
+apsara-js/backend/dist/
+
+# Python
+apsara-backend-python/venv/
+apsara-backend-python/__pycache__/
+
+# IDEs, OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+package-lock.json
+yarn.lock
+
+# Build artifacts
+build/
+dist/
+.cache/
+.next/
+out/
+
+# React-specific
+*.env.local
+*.env.development.local
+*.env.test.local
+*.env.production.local
+.env
+.env.*
+
+# ========================
+# Python
+# ========================
+__pycache__/
+*.py[cod]
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+pip-log.txt
+*.sqlite3
+db.sqlite3
+*.pyc
+
+# Python environments
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Jupyter Notebooks
+.ipynb_checkpoints
+
+# pytest
+.cache/
+.pytest_cache/
+
+# mypy
+.mypy_cache/
+
+# coverage reports
+htmlcov/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+
+# pylint
+pylint-report.txt
+pylint-output.txt
+
+# ========================
+# OS/System Files
+# ========================
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Icon?
+Desktop.ini
+
+# ========================
+# IDEs and Editors
+# ========================
+.idea/
+.vscode/
+*.swo
+*.swp
+
+# ========================
+# Logs
+# ========================
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# ========================
+# Others
+# ========================
+*.pem
+*.key
+*.crt
+*.pid
+*.seed
+*.bak
+*.orig
+*.rej
+*.sublime-workspace
+*.sublime-project
+*.tmp
+*.temp
+*.pid
+*.pid.lock
+
+# Ignore coverage or testing files
+coverage/
+

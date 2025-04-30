@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Apsara 2.5 - Advanced AI Chat</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap">
+    <link rel="stylesheet" href="css/styles.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11.7.0/styles/github-dark.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/marked@4.2.4/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.7.0/highlight.min.js"></script>
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="logo-container">
+                <h1 class="logo">Apsara <span class="version">2.5</span></h1>
+            </div>
+            
+            <div class="new-chat-btn-container">
+                <button id="newChatBtn" class="new-chat-btn">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M12 4V20M4 12H20" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                    New Chat
+                </button>
+            </div>
+            
+            <div class="conversations">
+                <h3>Recent Chats</h3>
+                <ul id="conversationsList">
+                    <!-- Conversations will be loaded here -->
+                </ul>
+                <button id="clearAllConversationsBtn" class="clear-all-conversations">
+                    Clear All Conversations
+                </button>
+            </div>
+            
+            <div class="sidebar-footer">
+                <div class="user-info">
+                    <div class="avatar">
+                        <span>S</span>
+                    </div>
+                    <span class="username">shubharthak</span>
+                </div>
+            </div>
+        </aside>
+        
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Chat Header -->
+            <header class="chat-header">
+                <div class="model-selector">
+                    <label for="modelSelect">Model:</label>
+                    <select id="modelSelect">
+                        <!-- Models will be loaded here -->
+                    </select>
+                    <div id="modelInfo" class="model-info">
+                        <!-- Model-specific information will appear here -->
+                    </div>
+                </div>
+                <div class="actions-container">
+                    <button id="liveModeBtn" class="header-action-btn" title="Toggle Live Chat Mode">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <circle cx="12" cy="12" r="4" fill="currentColor"/>
+                            <path d="M12 2C6.48 2 2 6.48 2 12C2 17.52 6.48 22 12 22C17.52 22 22 17.52 22 12C22 6.48 17.52 2 12 2ZM12 20C7.58 20 4 16.42 4 12C4 7.58 7.58 4 12 4C16.42 4 20 7.58 20 12C20 16.42 16.42 20 12 20Z" fill="currentColor" fill-opacity="0.3"/>
+                            <path d="M12 6C8.69 6 6 8.69 6 12C6 15.31 8.69 18 12 18C15.31 18 18 15.31 18 12C18 8.69 15.31 6 12 6ZM12 16C9.79 16 8 14.21 8 12C8 9.79 9.79 8 12 8C14.21 8 16 9.79 16 12C16 14.21 14.21 16 12 16Z" fill="currentColor"/>
+                        </svg>
+                        <span>Live</span>
+                    </button>
+                    <div class="theme-toggle-btn" title="Toggle dark/light mode">
+                        <button id="themeToggleBtn" class="header-action-btn">
+                            <svg id="lightModeIcon" width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M12 17C14.7614 17 17 14.7614 17 12C17 9.23858 14.7614 7 12 7C9.23858 7 7 9.23858 7 12C7 14.7614 9.23858 17 12 17Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                <path d="M12 1V3M12 21V23M4.22 4.22L5.64 5.64M18.36 18.36L19.78 19.78M1 12H3M21 12H23M4.22 19.78L5.64 18.36M18.36 5.64L19.78 4.22" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                            <svg id="darkModeIcon" width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="display: none;">
+                                <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                        </button>
+                    </div>
+                    <div class="settings-btn" title="Settings">
+                        <button id="settingsBtn" class="header-action-btn">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M12 15C13.6569 15 15 13.6569 15 12C15 10.3431 13.6569 9 12 9C10.3431 9 9 10.3431 9 12C9 13.6569 10.3431 15 12 15Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                <path d="M19.4 15C19.1277 15.8031 19.2292 16.6718 19.68 17.38C20.1308 18.0881 19.9776 19.0487 19.32 19.6L19.18 19.74C18.5513 20.3575 17.5857 20.5136 16.8 20.06C16.0337 19.6157 15.0733 19.5367 14.24 19.86C13.4067 20.1833 12.8 21.0201 12.8 21.94V22C12.8 23.1046 11.9046 24 10.8 24H10.2C9.09543 24 8.2 23.1046 8.2 22V21.86C8.2 20.9401 7.5933 20.1033 6.76 19.78C5.92673 19.4567 4.96627 19.5357 4.2 19.98C3.41434 20.4336 2.44873 20.2775 1.82 19.66L1.68 19.52C1.02243 18.9687 0.869216 18.0081 1.32 17.3C1.77078 16.5919 1.87231 15.7232 1.6 14.92C1.32769 14.1168 0.49088 13.6 -0.44 13.6H-0.5C-1.60457 13.6 -2.5 12.7046 -2.5 11.6V11C-2.5 9.89543 -1.60457 9 -0.5 9H-0.36C0.52957 9 1.36134 8.4887 1.64 7.7C1.91866 6.9113 1.81594 6.04241 1.36 5.34C0.904152 4.6319 1.05738 3.67134 1.72 3.11L1.86 2.98C2.48873 2.36249 3.45434 2.20636 4.24 2.66C5.00627 3.10432 5.96673 3.18329 6.8 2.86C7.63327 2.53671 8.24 1.69986 8.24 0.78V0.72C8.24 -0.384567 9.13543 -1.28 10.24 -1.28H10.84C11.9446 -1.28 12.84 -0.384567 12.84 0.72V0.86C12.84 1.77986 13.4467 2.61671 14.28 2.94C15.1133 3.26329 16.0737 3.18432 16.84 2.74C17.6257 2.28636 18.5913 2.44249 19.22 3.06L19.36 3.2C20.0176 3.75134 20.1708 4.7119 19.72 5.42C19.2692 6.12809 19.1677 6.99678 19.44 7.8C19.7123 8.60322 20.5491 9.12 21.48 9.12H21.54C22.6446 9.12 23.54 10.0154 23.54 11.12V11.72C23.54 12.8246 22.6446 13.72 21.54 13.72H21.4C20.5104 13.72 19.6787 14.2313 19.4 15.0201" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+            </header>
+            
+            <!-- Chat Messages Area -->
+            <div class="chat-messages" id="chatMessages">
+                <div class="welcome-message">
+                    <h2>Welcome to Apsara 2.5</h2>
+                    <p>An advanced AI chat interface for Gemini models</p>
+                    <p class="small">Developed by shubharthak</p>
+                </div>
+                <!-- Chat messages will be displayed here -->
+            </div>
+            
+            <!-- Message Input Area -->
+            <div class="message-input-container">
+                <!-- Attachment previews will be inserted here by app.js -->
+                <div class="message-input-row"> <!-- New wrapper -->
+                    <div class="attachment-btn">
+                        <button id="attachmentBtn" title="Attach Image or File"> <!-- Added title -->
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M21.44 11.05L12.25 20.24C11.1242 21.3658 9.59722 21.9983 8.005 21.9983C6.41278 21.9983 4.88584 21.3658 3.76 20.24C2.63416 19.1142 2.00166 17.5872 2.00166 15.995C2.00166 14.4028 2.63416 12.8758 3.76 11.75L12.33 3.18C13.0806 2.42976 14.0991 2.00049 15.16 2.00049C16.2209 2.00049 17.2394 2.42976 17.99 3.18C18.7403 3.93064 19.1695 4.94905 19.1695 6.01C19.1695 7.07095 18.7403 8.08936 17.99 8.84L9.41 17.41C9.03472 17.7853 8.52573 17.9961 7.995 17.9961C7.46427 17.9961 6.95528 17.7853 6.58 17.41C6.20472 17.0347 5.99389 16.5257 5.99389 15.995C5.99389 15.4643 6.20472 14.9553 6.58 14.58L15.07 6.1" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                        </button>
+                        <input type="file" id="fileInput" accept="image/*,application/pdf,text/plain,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" hidden> <!-- Accept more file types -->
+                    </div>
+                    <div class="input-wrapper">
+                        <textarea id="messageInput" placeholder="Type a message or attach files..." rows="1"></textarea>
+                        <button id="sendBtn" class="send-btn" title="Send Message"> <!-- Added title -->
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M22 2L11 13M22 2L15 22L11 13M22 2L2 9L11 13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </main>
+        
+        <!-- Settings Side Panel -->
+        <div id="settingsPanel" class="settings-panel">
+            <div class="settings-panel-header">
+                <h2>Settings</h2>
+                <button class="settings-panel-close-btn">&times;</button>
+            </div>
+            <div class="settings-panel-body">
+                <div class="settings-section">
+                    <h3>System Instruction</h3>
+                    <textarea id="systemInstruction" rows="3">You are Apsara 2.5, an advanced AI assistant developed by shubharthak. You provide helpful, accurate, and thoughtful responses. You can analyze images, generate creative content, and assist with various tasks. Always strive to be ethical, unbiased, and user-focused.</textarea>
+                </div>
+                
+                <div class="settings-section">
+                    <h3>Speech Output (TTS)</h3>
+                    <div class="setting-group">
+                        <label for="voiceSelect">Voice:</label>
+                        <select id="voiceSelect">
+                            <option value="">Loading voices...</option>
+                            <!-- Voices will be loaded here by app.js -->
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="settings-section">
+                    <h3>Advanced Options</h3>
+                    <div class="setting-group">
+                        <label>
+                            <input type="checkbox" id="enableJsonMode">
+                            Enable JSON Mode
+                        </label>
+                        <div id="jsonSchemaContainer" style="display: none;">
+                            <p>JSON Schema:</p>
+                            <textarea id="jsonSchema" rows="4" placeholder="{&quot;type&quot;: &quot;object&quot;, &quot;properties&quot;: {...}}"></textarea>
+                        </div>
+                    </div>
+                    
+                    <div class="setting-group">
+                        <label>
+                            <input type="checkbox" id="enableGrounding">
+                            Enable Google Search Grounding
+                        </label>
+                    </div>
+                    
+                    <div class="setting-group">
+                        <label>
+                            <input type="checkbox" id="enableThinking" checked>
+                            Enable Thinking Budget
+                        </label>
+                        <div id="thinkingBudgetContainer">
+                            <input type="range" id="thinkingBudget" min="0" max="8000" step="100" value="1024">
+                            <span id="thinkingBudgetValue">1024 tokens</span>
+                        </div>
+                    </div>
+                    
+                    <div class="setting-group">
+                        <label>Temperature:</label>
+                        <input type="range" id="temperature" min="0" max="1" step="0.1" value="0.7">
+                        <span id="temperatureValue">0.7</span>
+                    </div>
+                    
+                    <div class="setting-group">
+                        <label>
+                            <input type="checkbox" id="streamResponse" checked>
+                            Stream Response
+                        </label>
+                    </div>
+                    
+                    <div class="setting-group image-gen-settings" id="imageGenSettings" style="display: none;">
+                        <h4>Image Generation Settings</h4>
+                        <div class="setting-option">
+                            <label>Number of Images:</label>
+                            <select id="numberOfImages">
+                                <option value="1">1</option>
+                                <option value="2">2</option>
+                                <option value="3">3</option>
+                                <option value="4">4</option>
+                            </select>
+                        </div>
+                        <div class="setting-option">
+                            <label>Aspect Ratio:</label>
+                            <select id="aspectRatio">
+                                <option value="square">Square (1:1)</option>
+                                <option value="portrait">Portrait (2:3)</option>
+                                <option value="landscape">Landscape (3:2)</option>
+                                <option value="widescreen">Widescreen (16:9)</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Floating typing indicator -->
+        <div id="typingIndicator" class="typing-indicator">
+            <span></span>
+            <span></span>
+            <span></span>
+        </div>
+        
+        <!-- Progress Bar for Streaming Responses -->
+        <div id="streamProgressBar" class="stream-progress-bar"></div>
+
+        <!-- == Live Mode Popup/Modal == -->
+        <div id="liveModePopup" class="live-popup-overlay" style="display: none;">
+            <div class="live-popup-content">
+                <div class="live-popup-header">
+                    <h2>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="vertical-align: middle; margin-right: 5px;"> <circle cx="12" cy="12" r="4" fill="currentColor"></circle> <path d="M12 2C6.48 2 2 6.48 2 12C2 17.52 6.48 22 12 22C17.52 22 22 17.52 22 12C22 6.48 17.52 2 12 2ZM12 20C7.58 20 4 16.42 4 12C4 7.58 7.58 4 12 4C16.42 4 20 7.58 20 12C20 16.42 16.42 20 12 20Z" fill="currentColor" fill-opacity="0.3"></path> <path d="M12 6C8.69 6 6 8.69 6 12C6 15.31 8.69 18 12 18C15.31 18 18 15.31 18 12C18 8.69 15.31 6 12 6ZM12 16C9.79 16 8 14.21 8 12C8 9.79 9.79 8 12 8C14.21 8 16 9.79 16 12C16 14.21 14.21 16 12 16Z" fill="currentColor"></path> </svg>
+                        Apsara Live
+                    </h2>
+                    <div class="live-header-controls">
+                        <span id="liveStatusIndicator" class="live-status-indicator disconnected">Disconnected</span>
+                        <span id="liveTimerDisplay" class="live-timer-display"></span>
+                        <button id="livePopupSettingsBtn" class="header-action-btn live-popup-settings-btn" title="Live Settings">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 15C13.6569 15 15 13.6569 15 12C15 10.3431 13.6569 9 12 9C10.3431 9 9 10.3431 9 12C9 13.6569 10.3431 15 12 15Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path><path d="M19.4 15C19.1277 15.8031 19.2292 16.6718 19.68 17.38C20.1308 18.0881 19.9776 19.0487 19.32 19.6L19.18 19.74C18.5513 20.3575 17.5857 20.5136 16.8 20.06C16.0337 19.6157 15.0733 19.5367 14.24 19.86C13.4067 20.1833 12.8 21.0201 12.8 21.94V22C12.8 23.1046 11.9046 24 10.8 24H10.2C9.09543 24 8.2 23.1046 8.2 22V21.86C8.2 20.9401 7.5933 20.1033 6.76 19.78C5.92673 19.4567 4.96627 19.5357 4.2 19.98C3.41434 20.4336 2.44873 20.2775 1.82 19.66L1.68 19.52C1.02243 18.9687 0.869216 18.0081 1.32 17.3C1.77078 16.5919 1.87231 15.7232 1.6 14.92C1.32769 14.1168 0.49088 13.6 -0.44 13.6H-0.5C-1.60457 13.6 -2.5 12.7046 -2.5 11.6V11C-2.5 9.89543 -1.60457 9 -0.5 9H-0.36C0.52957 9 1.36134 8.4887 1.64 7.7C1.91866 6.9113 1.81594 6.04241 1.36 5.34C0.904152 4.6319 1.05738 3.67134 1.72 3.11L1.86 2.98C2.48873 2.36249 3.45434 2.20636 4.24 2.66C5.00627 3.10432 5.96673 3.18329 6.8 2.86C7.63327 2.53671 8.24 1.69986 8.24 0.78V0.72C8.24 -0.384567 9.13543 -1.28 10.24 -1.28H10.84C11.9446 -1.28 12.84 -0.384567 12.84 0.72V0.86C12.84 1.77986 13.4467 2.61671 14.28 2.94C15.1133 3.26329 16.0737 3.18432 16.84 2.74C17.6257 2.28636 18.5913 2.44249 19.22 3.06L19.36 3.2C20.0176 3.75134 20.1708 4.7119 19.72 5.42C19.2692 6.12809 19.1677 6.99678 19.44 7.8C19.7123 8.60322 20.5491 9.12 21.48 9.12H21.54C22.6446 9.12 23.54 10.0154 23.54 11.12V11.72C23.54 12.8246 22.6446 13.72 21.54 13.72H21.4C20.5104 13.72 19.6787 14.2313 19.4 15.0201" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+                        </button>
+                    </div>
+                    <button id="closeLivePopupBtn" class="live-popup-close-btn">&times;</button>
+                </div>
+                <div class="live-popup-body-wrapper">
+                    <div class="live-popup-messages" id="liveChatMessages">
+                         <!-- Messages -->
+                    </div>
+
+                    <!-- == Live Settings Panel == -->
+                    <div id="liveSettingsPanel" class="live-settings-panel">
+                         <div class="live-settings-header">
+                             <h4>Run settings</h4>
+                             <button id="closeLiveSettingsBtn" class="live-settings-close-btn">&times;</button>
+                         </div>
+                         <div class="live-settings-body">
+                             <div class="live-setting-group">
+                                 <label>Output format</label>
+                                 <div class="live-button-group">
+                                     <button id="liveOutputAudioText" class="live-setting-btn active">Audio & Text</button>
+                                     <button id="liveOutputText" class="live-setting-btn">Text</button>
+                                 </div>
+                             </div>
+                             <div class="live-setting-group">
+                                 <label for="liveVoiceSelect">Voice</label>
+                                 <select id="liveVoiceSelect">
+                                     <!-- Voices loaded by JS -->
+                                 </select>
+                             </div>
+                             <div class="live-setting-group">
+                                 <label for="liveLanguageSelect">Language</label>
+                                 <select id="liveLanguageSelect" disabled> <!-- Add languages later -->
+                                     <option>English (United States)</option>
+                                 </select>
+                             </div>
+                             <!-- Add other settings like Turn Coverage etc. later if needed -->
+                              <div class="live-setting-group">
+                                 <label>Turn Coverage</label>
+                                 <label class="live-switch">
+                                     <input type="checkbox" id="liveTurnCoverage" disabled>
+                                     <span class="live-slider round"></span>
+                                 </label>
+                             </div>
+                             <!-- More settings can be added here -->
+                         </div>
+                    </div>
+                    <!-- == End Live Settings Panel == -->
+
+                </div>
+                <div class="live-popup-input-container">
+                     <button id="liveMicBtn" class="mic-btn" title="Toggle Microphone Input" disabled>
+                         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                             <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" fill="currentColor"/>
+                             <path d="M19 10v2a7 7 0 0 1-14 0v-2H3v2a9 9 0 0 0 8 8.94V24h2v-3.06A9 9 0 0 0 21 12v-2h-2z" fill="currentColor"/>
+                         </svg>
+                     </button>
+                     <div class="input-wrapper live-input-wrapper">
+                        <textarea id="liveMessageInput" placeholder="Type or talk..." rows="1" disabled></textarea>
+                        <button id="liveSendBtn" class="send-btn" disabled>
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M22 2L11 13M22 2L15 22L11 13M22 2L2 9L11 13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+                        </button>
+                     </div>
+                     <button id="liveConnectDisconnectBtn" class="live-connect-btn">Connect</button>
+                </div>
+            </div>
+        </div>
+        <!-- == End Live Mode Popup == -->
+
+    </div> <!-- End app-container -->
+    <script src="js/app.js"></script>
+    <!-- Add this template somewhere accessible, e.g., near the end of body -->
+    <template id="audioPlayerTemplate">
+        <div class="audio-player-message">
+            <audio controls class="audio-player-element"></audio>
+            <!-- Optional: Add visualizer or other controls later -->
+        </div>
+    </template>
+</body>
+</html> 
