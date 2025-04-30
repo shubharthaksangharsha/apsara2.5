@@ -1,0 +1,51 @@
+// Make sure to include this import:
+// import 'package:google_generative_ai/google_generative_ai.dart';
+Map<String, Object?> setLightValues(Map<String, Object?> args) {
+  return args;
+}
+
+final controlLightFunction = FunctionDeclaration(
+    'controlLight',
+    'Set the brightness and color temperature of a room light.',
+    Schema.object(properties: {
+      'brightness': Schema.number(
+          description:
+              'Light level from 0 to 100. Zero is off and 100 is full brightness.',
+          nullable: false),
+      'colorTemperatur': Schema.string(
+          description:
+              'Color temperature of the light fixture which can be `daylight`, `cool`, or `warm`',
+          nullable: false),
+    }));
+
+final functions = {controlLightFunction.name: setLightValues};
+FunctionResponse dispatchFunctionCall(FunctionCall call) {
+  final function = functions[call.name]!;
+  final result = function(call.args);
+  return FunctionResponse(call.name, result);
+}
+
+final model = GenerativeModel(
+  model: 'gemini-1.5-pro',
+  apiKey: apiKey,
+  tools: [
+    Tool(functionDeclarations: [controlLightFunction])
+  ],
+);
+
+final prompt = 'Dim the lights so the room feels cozy and warm.';
+final content = [Content.text(prompt)];
+var response = await model.generateContent(content);
+
+List<FunctionCall> functionCalls;
+while ((functionCalls = response.functionCalls.toList()).isNotEmpty) {
+  var responses = <FunctionResponse>[
+    for (final functionCall in functionCalls)
+      dispatchFunctionCall(functionCall)
+  ];
+  content
+    ..add(response.candidates.first.content)
+    ..add(Content.functionResponses(responses));
+  response = await model.generateContent(content);
+}
+print('Response: ${response.text}');
