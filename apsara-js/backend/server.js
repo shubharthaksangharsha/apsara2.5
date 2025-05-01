@@ -353,30 +353,28 @@ server.on('upgrade', (req, socket, head) => {
 });
 
 async function handleLiveConnection(ws, req) {
-   console.log("[Live Backend] handleLiveConnection started."); // Log entry
+   console.log("[Live Backend] handleLiveConnection started.");
    let requestedModality = Modality.TEXT;
    let requestedVoice = availableVoices[0];
    let requestedRealtimeConfig = {};
+   let requestedSystemInstruction = null;
 
    try {
        const parsedUrl = parse(req.url, true);
        console.log(`[Live Backend] Handling connection for URL: ${req.url}`);
 
-       // --- Modality Parsing Fix ---
+       // --- Modality Parsing ---
        const modalityParam = parsedUrl.query.modalities?.toString().trim().toUpperCase();
        if (modalityParam === 'AUDIO') {
            requestedModality = Modality.AUDIO;
            console.log("[Live Backend] Requested Modality: AUDIO");
-       } else if (modalityParam === 'TEXT') {
-            requestedModality = Modality.TEXT;
-            console.log("[Live Backend] Requested Modality: TEXT");
-       } else {
-           console.warn(`[Live Backend] Invalid or missing modality '${modalityParam}', defaulting to TEXT.`);
-           requestedModality = Modality.TEXT; // Default if invalid or missing
+       } else { // Default to TEXT if not AUDIO or missing
+           requestedModality = Modality.TEXT;
+           console.log("[Live Backend] Requested Modality: TEXT");
        }
        // --------------------------
 
-       // Voice parsing (only relevant if modality is AUDIO)
+       // --- Voice Parsing ---
        if (requestedModality === Modality.AUDIO && parsedUrl.query.voice) {
            const voiceParam = parsedUrl.query.voice;
            if (availableVoices.includes(voiceParam)) {
@@ -385,10 +383,25 @@ async function handleLiveConnection(ws, req) {
            } else {
                console.warn(`[Live Backend] Requested voice '${voiceParam}' not available, using default '${requestedVoice}'`);
            }
-       } else if (requestedModality !== Modality.AUDIO) {
-           console.log("[Live Backend] Text modality selected, voice parameter ignored.");
-            requestedVoice = null; // Ensure no voice config is sent for TEXT modality
+       } else {
+           console.log("[Live Backend] Text modality selected or voice param missing, voice parameter ignored.");
+            requestedVoice = null;
        }
+
+       // --- System Instruction Parsing ---
+       if (parsedUrl.query.systemInstruction) {
+           // Decode URI component in case it's encoded
+           try {
+               requestedSystemInstruction = decodeURIComponent(parsedUrl.query.systemInstruction.toString());
+               console.log(`[Live Backend] Using requested system instruction: "${requestedSystemInstruction.substring(0, 50)}..."`);
+           } catch (e) {
+                console.error('[Live Backend] Error decoding system instruction parameter:', e);
+                // Decide how to handle error - ignore or reject connection? Let's ignore for now.
+           }
+       } else {
+           console.log("[Live Backend] No system instruction provided.");
+       }
+       // ---------------------------------
 
        // VAD Config (Example)
        if (parsedUrl.query.disableVAD === 'true' && requestedModality === Modality.AUDIO) {
@@ -402,12 +415,11 @@ async function handleLiveConnection(ws, req) {
        return; // Stop execution
    }
 
-    console.log(`[Live Backend] Effective Modality: ${requestedModality}, Voice: ${requestedVoice || 'N/A'}`);
+    console.log(`[Live Backend] Effective Modality: ${requestedModality}, Voice: ${requestedVoice || 'N/A'}, System Instruction: ${!!requestedSystemInstruction}`);
 
 
    // --- Prepare Config based on Request ---
    const liveConnectConfig = {
-       // Pass the single determined modality
        responseModalities: [requestedModality],
        // Add speechConfig ONLY if AUDIO modality is requested AND a voice is set
        ...(requestedModality === Modality.AUDIO && requestedVoice && {
@@ -415,9 +427,13 @@ async function handleLiveConnection(ws, req) {
                voiceConfig: { prebuiltVoiceConfig: { voiceName: requestedVoice } }
            }
        }),
-       // Add realtimeInputConfig if specific settings were requested (like VAD)
+       // Add realtimeInputConfig if specific settings were requested
        ...(Object.keys(requestedRealtimeConfig).length > 0 && {
             realtimeInputConfig: requestedRealtimeConfig
+       }),
+       // Add systemInstruction if provided
+       ...(requestedSystemInstruction && {
+           systemInstruction: { role: 'system', parts: [{ text: requestedSystemInstruction }] }
        })
    };
 
@@ -428,11 +444,11 @@ async function handleLiveConnection(ws, req) {
    try {
        console.log('[Live Backend] Calling ai.live.connect...');
        session = await ai.live.connect({
-           model: 'gemini-2.0-flash-live-001', // Or stick with the recommended latest
+           model: 'gemini-2.0-flash-live-001', // Or adapt based on frontend selection if needed later
            config: liveConnectConfig,
            callbacks: {
                onopen: () => {
-                    const sessionIdShort = session?.conn?.id?.substring(0, 8) ?? 'N/A'; // Safer logging for session ID
+                    const sessionIdShort = session?.conn?.id?.substring(0, 8) ?? 'N/A';
                     console.log(`[Live Backend] Google Session <${sessionIdShort}> OPENED.`);
                     try {
                         if (ws.readyState === WebSocket.OPEN) {
@@ -448,11 +464,16 @@ async function handleLiveConnection(ws, req) {
                 onmessage: async (evt) => {
                     const sessionIdShort = session?.conn?.id?.substring(0, 8) ?? 'N/A'; // Safer logging
                     const messageType = Object.keys(evt).find(key => evt[key] !== undefined && key !== 'type') || 'unknown';
-                    console.log(`[Live Backend] Google <${sessionIdShort}> 'onmessage' [${messageType}]:`, JSON.stringify(evt).substring(0, 150) + "...");
+                    // Reduce log verbosity for content chunks
+                    if (evt.serverContent?.modelTurn?.parts?.some(p => p.inlineData)) {
+                        console.log(`[Live Backend] Google <${sessionIdShort}> 'onmessage' [${messageType}]: Received chunk with media data.`);
+                    } else {
+                        console.log(`[Live Backend] Google <${sessionIdShort}> 'onmessage' [${messageType}]:`, JSON.stringify(evt).substring(0, 150) + "...");
+                    }
+
 
                     try {
                          if (ws.readyState === WebSocket.OPEN) {
-                             // Forward the *entire* structured message from Google to the client
                             ws.send(JSON.stringify(evt));
                          } else {
                              console.warn(`[Live Backend] Cannot forward Google message [${messageType}] <${sessionIdShort}> to client WS (not open). State: ${ws.readyState}`);
@@ -468,13 +489,11 @@ async function handleLiveConnection(ws, req) {
                      console.error('--- End Google Session Error ---');
                       try {
                           if (ws.readyState === WebSocket.OPEN) {
-                               // Send a structured error event
                                ws.send(JSON.stringify({ event: 'error', message: e.message || 'Unknown Google live session error' }));
                           }
                      } catch (wsErr) {
                          console.error(`[Live Backend] Error sending Google error event <${sessionIdShort}> to client:`, wsErr);
                      }
-                     // Close client WS on Google error
                      try { ws.close(1011, "Google session error"); } catch (closeErr) {}
                  },
                  onclose: (closeEvent) => {
@@ -484,7 +503,6 @@ async function handleLiveConnection(ws, req) {
                     console.log(`--- [Live Backend] Google Session <${sessionIdShort}> CLOSED --- Code: ${code}, Reason: ${reason}`);
                      try {
                          if (ws.readyState === WebSocket.OPEN) {
-                             // Send structured close event
                              ws.send(JSON.stringify({ event: 'closed', code: code, reason: reason }));
                          } else {
                              console.warn(`[Live Backend] Google 'onclose' <${sessionIdShort}> fired, but client WS already closed. State: ${ws.readyState}`);
@@ -492,7 +510,6 @@ async function handleLiveConnection(ws, req) {
                     } catch (wsErr) {
                         console.error(`[Live Backend] Error sending 'closed' event <${sessionIdShort}> to client:`, wsErr);
                     }
-                     // Ensure client connection is also closed & clean up map
                      try { if (ws.readyState !== WebSocket.CLOSED && ws.readyState !== WebSocket.CLOSING) ws.close(1000, "Google session closed"); } catch(e){}
                      sessions.delete(ws);
                  }
@@ -503,32 +520,21 @@ async function handleLiveConnection(ws, req) {
 
     } catch (connectError) {
          console.error('--- [Live Backend] CRITICAL: Error during ai.live.connect call ---');
-         console.error(connectError); // Log the full error from the SDK
+         console.error(connectError);
          console.error('--- End Connect Error ---');
           try {
              if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
-                 // Make sure the error message is specific
                  ws.send(JSON.stringify({ event: 'error', message: `Backend failed during Google Live API connection: ${connectError.message || 'Unknown SDK error'}` }));
                  ws.close(1011, "Backend connection error to Google");
              }
          } catch(e){ console.error("[Live Backend] Error handling SDK connection error:", e); }
-         return; // Stop further execution for this failed connection
+         return;
     }
 
-    // ---> FIX: Add more robust checks immediately after await <---
-    if (!session) {
-        // This case should ideally be caught by the catch block, but double-check
-        console.error("[Live Backend] CRITICAL: session is null/undefined immediately after ai.live.connect returned successfully. Aborting setup.");
-        try { ws.close(1011, "Backend session initialization error after connect"); } catch(e){}
-        return;
-    }
-     // Log the raw session object to see its structure upon return
-     console.log("[Live Backend] ai.live.connect returned session object:", session);
-
-    if (!session.conn) {
-        console.error("[Live Backend] CRITICAL: session.conn is null/undefined after successful connect. Aborting setup.");
-        console.log("[Live Backend] Session object structure:", JSON.stringify(session, null, 2)); // Log structure for clues
-        try { ws.close(1011, "Backend session.conn initialization error"); } catch(e){}
+    // ... session validation checks ...
+    if (!session || !session.conn) {
+        console.error("[Live Backend] CRITICAL: session or session.conn is null/undefined after ai.live.connect. Aborting setup.");
+        try { ws.close(1011, "Backend session initialization error"); } catch(e){}
         return;
     }
 
@@ -539,16 +545,14 @@ async function handleLiveConnection(ws, req) {
     // ---> END FIX <---
 
 
-    // Now it should be safer to proceed
-    const sessionId = session.conn?.id?.substring(0, 8) ?? 'N/A'; // Use the safer access here too
+    const sessionId = session.conn?.id?.substring(0, 8) ?? 'N/A';
     console.log(`[Live Backend] Client WS <${sessionId}> connected, associated with Google session. Setting up message handlers.`);
-    sessions.set(ws, session); // Store session associated with the client WebSocket
+    sessions.set(ws, session);
 
 
     // --- Client WebSocket Message Handler ---
     ws.on('message', async (data, isBinary) => {
        const currentSession = sessions.get(ws);
-       // Add check here too, though less likely to be the issue if set succeeded
        const currentSessionId = currentSession?.conn?.id?.substring(0, 8) ?? 'N/A';
        if (!currentSession) {
              console.warn("[Live Backend] Received message from client WS, but no associated Google session found. Closing WS.");
@@ -558,13 +562,16 @@ async function handleLiveConnection(ws, req) {
 
         try {
           if (isBinary) {
-              // Received audio data (Buffer) from Client -> Send to Google
+              // Received audio data (Buffer) from Client -> Send to Google via sendRealtimeInput
               console.log(`[Live Backend] Received BINARY data from client <${currentSessionId}>. Size: ${data.length}. Sending via sendRealtimeInput.`);
-              // Ensure the model/config expects audio input
-              if (requestedModality === Modality.AUDIO) {
-                 await currentSession.sendRealtimeInput({ media: data });
+              // Ensure the model/config expects audio input (should match requestedModality check)
+              // Note: The underlying API might handle this even if response modality is TEXT,
+              // but it's good practice to align. Let's assume AUDIO modality implies audio input capability.
+              if (requestedModality === Modality.AUDIO) { // Check if audio input is expected
+                  // The 'data' here is likely a Buffer from ws library
+                  await currentSession.sendRealtimeInput({ media: data });
               } else {
-                 console.warn(`[Live Backend] Received audio data from client <${currentSessionId}>, but modality is TEXT. Ignoring.`);
+                  console.warn(`[Live Backend] Received audio data from client <${currentSessionId}>, but modality is TEXT. Ignoring.`);
               }
 
           } else {

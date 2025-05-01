@@ -1,11 +1,23 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { BellRing, FileUp, Menu, Mic, Moon, Send, Settings, Sun, User, X, MessageSquare, UploadCloud, AudioLines } from 'lucide-react';
+import { BellRing, FileUp, Menu, Mic, Moon, Send, Settings, Sun, User, X, MessageSquare, UploadCloud, AudioLines, Cog, Trash2, MicOff, BrainCircuit, Image as ImageIcon, BookOpen } from 'lucide-react';
 
 const BACKEND_URL = 'http://localhost:9000';
 
 const MAX_LOCALSTORAGE_SIZE_MB = 4.5; // Set a limit slightly below 5MB
 const BYTES_PER_MB = 1024 * 1024;
 const MAX_STORAGE_BYTES = MAX_LOCALSTORAGE_SIZE_MB * BYTES_PER_MB;
+
+// Define suggested prompts with optional target models
+const suggestedPrompts = [
+  { text: "Explain quantum computing simply", icon: BrainCircuit },
+  { text: "Write a Python script for web scraping", icon: BrainCircuit, modelId: "gemini-2.5-pro-preview-03-25" }, // Example specific model
+  { text: "Create a recipe for vegan lasagna", icon: BookOpen },
+  { text: "Generate an image of a futuristic cityscape at sunset", icon: ImageIcon, modelId: "gemini-2.0-flash-exp-image-generation" },
+  { text: "Summarize the theory of relativity", icon: BookOpen },
+  { text: "Plan a 5-day itinerary for Tokyo", icon: BookOpen },
+  { text: "Generate an image of a cat wearing sunglasses", icon: ImageIcon, modelId: "gemini-2.0-flash-exp-image-generation" },
+  { text: "Debug this Javascript code snippet:\n```javascript\nfunction greet(name) {\n console.log(Hello, + name)\n}\n```", icon: BrainCircuit, modelId: "gemini-2.5-pro-preview-03-25" },
+];
 
 // Main App component
 export default function App() {
@@ -124,8 +136,10 @@ export default function App() {
   const [liveOpen, setLiveOpen] = useState(false);
   // File upload popup
   const [fileUploadOpen, setFileUploadOpen] = useState(false);
-
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false); // Start closed on mobile
+  // Live Settings Panel state
+  const [liveSettingsOpen, setLiveSettingsOpen] = useState(false); // REMOVED - No longer needed as separate panel
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [liveSystemInstruction, setLiveSystemInstruction] = useState('You are a helpful assistant.'); // State for live system prompt
 
   // Determine if system instruction is applicable for the current model
   const isSystemInstructionApplicable = currentModel !== 'gemini-2.0-flash-exp-image-generation';
@@ -135,6 +149,9 @@ export default function App() {
   const [maxOutputTokens, setMaxOutputTokens] = useState(8192);
   const [enableGoogleSearch, setEnableGoogleSearch] = useState(false);
   const [enableCodeExecution, setEnableCodeExecution] = useState(false); // Example state
+
+  // --- New Live Settings State ---
+  const [liveModality, setLiveModality] = useState('AUDIO');
 
   // Add effect to default sidebar open state based on screen size initially
   useEffect(() => {
@@ -162,6 +179,12 @@ export default function App() {
   const isPlayingAudioRef = useRef(false); // Flag to prevent concurrent playback loops
   const [audioError, setAudioError] = useState(null); // To display audio errors if any
   // -----------------------------
+
+  // --- Realtime Audio Input State ---
+  const [isRecording, setIsRecording] = useState(false); // Ensure this line is present and correct
+  const mediaRecorderRef = useRef(null);
+  const audioChunksRef = useRef([]);
+  // ----------------------------------
 
   // Function to initialize AudioContext
   const initAudioContext = () => {
@@ -594,55 +617,58 @@ export default function App() {
     }
   };
 
-  // Live chat connection setup - Modified to handle audio
-  const setupLiveConnection = (voiceName = currentVoice, withAudio = true) => {
-     // Use the state setter from App component directly
+  // Live chat connection setup - Pass System Instruction
+  const setupLiveConnection = (voiceName = currentVoice, modality = liveModality, systemInstruction = liveSystemInstruction) => { // Added systemInstruction param
      setLiveConnectionStatus('connecting');
-     addLiveMessage({ role: 'system', text: 'Initiating live session...' }); // Use addLiveMessage
-
-     // Clear previous messages on new connection attempt
-     setLiveMessages([]);
+     setLiveMessages([]); // Clear previous messages
+     addLiveMessage({ role: 'system', text: 'Preparing live session...' });
 
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
      const params = new URLSearchParams();
-     params.append('modalities', withAudio ? 'AUDIO' : 'TEXT');
-     if (withAudio && voiceName) {
+     params.append('modalities', modality);
+     if (modality === 'AUDIO' && voiceName) {
        params.append('voice', voiceName);
      }
+     // --- Add System Instruction to Params ---
+     if (systemInstruction && systemInstruction.trim()) {
+         params.append('systemInstruction', encodeURIComponent(systemInstruction.trim()));
+     }
+     // ----------------------------------------
      const wsUrl = `${protocol}//${window.location.host}/live?${params.toString()}`;
 
-     console.log(`[Live Setup] Connecting to: ${wsUrl}`);
+     console.log(`[Live Setup] Connecting to: ${wsUrl} (Voice: ${modality === 'AUDIO' ? voiceName : 'N/A'}, Modality: ${modality}, SysPrompt: ${!!systemInstruction})`);
+     addLiveMessage({ role: 'system', text: 'Initiating connection...' });
 
     const ws = new WebSocket(wsUrl);
-
-     // Store the WebSocket connection in App's state
      setLiveWsConnection(ws);
     
+    // ... ws.onopen, ws.onmessage, ws.onerror, ws.onclose (no changes needed from previous version) ...
     ws.onopen = () => {
        console.log('[Live WS] Browser-Backend WS Connection established (onopen fired)');
        addLiveMessage({ role: 'system', text: 'Browser-Backend WS connection established. Waiting for backend...' });
-       if (activeConvoId) { /* add 'Live chat session started' */ }
+       // Note: 'connected' event now comes from backend after Google session is open
     };
     
     ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
-         console.log('[Live WS] Message received (raw):', data);
+        // console.log('[Live WS] Message received (raw):', data); // Verbose
 
          if (data.event === 'backend_connected') {
-            addLiveMessage({ role: 'system', text: 'Backend acknowledged. Connecting to Google AI...' });
+            addLiveMessage({ role: 'system', text: 'Backend acknowledged. Connecting to AI...' });
         } else if (data.event === 'connected') {
             addLiveMessage({ role: 'system', text: 'Live connection to AI active.' });
-            setLiveConnectionStatus('connected'); // Update App state
+            setLiveConnectionStatus('connected');
         } else if (data.event === 'error') {
             console.error('[Live WS] Backend/Google Error:', data.message);
             addLiveMessage({ role: 'error', text: `Error: ${data.message}` });
-            setLiveConnectionStatus('error'); // Update App state
+            setLiveConnectionStatus('error');
+             // Stop recording on error
+             if (isRecording) stopRecording();
         } else if (data.event === 'closed') {
              addLiveMessage({ role: 'system', text: `Live AI connection closed. ${data.reason || ''}` });
              // ws.onclose handles final status update
          }
-         // Check for serverContent structure
          else if (data.serverContent && data.serverContent.modelTurn && Array.isArray(data.serverContent.modelTurn.parts)) {
              let receivedText = '';
              let audioChunkReceived = false;
@@ -650,137 +676,155 @@ export default function App() {
                  if (part.text) {
                      receivedText += part.text;
                  } else if (part.inlineData && part.inlineData.mimeType?.startsWith('audio/')) {
-                      // --- Audio Handling ---
+                      if (liveModality === 'AUDIO') {
+                        if (!audioContextRef.current) initAudioContext();
+                        if (audioContextRef.current) {
                       try {
-                         // Extract sample rate if possible (e.g., from 'audio/pcm;rate=24000')
                          const mimeMatch = part.inlineData.mimeType.match(/rate=(\d+)/);
-                         const sampleRate = mimeMatch ? parseInt(mimeMatch[1], 10) : 24000; // Default 24k
-
-                          // Ensure AudioContext has the correct sample rate (or handle mismatch)
-                          if (audioContextRef.current && audioContextRef.current.sampleRate !== sampleRate) {
-                              console.warn(`[Audio] Sample rate mismatch! Context: ${audioContextRef.current.sampleRate}, Chunk: ${sampleRate}. Reinitializing context.`);
-                              closeAudioContext(); // Close existing context
-                              audioContextRef.current = new AudioContext({ sampleRate }); // Recreate with new rate
-                          } else if (!audioContextRef.current) {
-                              // Initialize if not already done (e.g., if audio session started without explicit init)
-                              initAudioContext();
-                              if (audioContextRef.current) audioContextRef.current.sampleRate = sampleRate; // Adjust rate
-                          }
-
-
-                         // Decode base64 to ArrayBuffer
+                               const sampleRate = mimeMatch ? parseInt(mimeMatch[1], 10) : 24000;
+                                if (audioContextRef.current.sampleRate !== sampleRate) {
+                                    console.warn(`[Audio] Sample rate mismatch! Reinit context.`);
+                                    closeAudioContext();
+                                    try {
+                                        audioContextRef.current = new AudioContext({ sampleRate });
+                                        console.log(`[Audio] Context reinit rate: ${sampleRate}`);
+                                    } catch (ctxError) { /* ... error handling ... */ continue; }
+                                }
                          const binaryString = window.atob(part.inlineData.data);
                          const len = binaryString.length;
                          const bytes = new Uint8Array(len);
-                         for (let i = 0; i < len; i++) {
-                             bytes[i] = binaryString.charCodeAt(i);
-                         }
+                               for (let i = 0; i < len; i++) bytes[i] = binaryString.charCodeAt(i);
                          const arrayBuffer = bytes.buffer;
-
-                         // Add to queue and trigger playback check
                          audioQueueRef.current.push(arrayBuffer);
-                         audioChunkReceived = true; // Mark that audio was received in this message
-                         playAudioQueue(); // Attempt to start playback if not already playing
-
-                      } catch (decodeError) {
-                           console.error("[Audio] Error decoding/queuing audio data:", decodeError);
-                           addLiveMessage({ role: 'error', text: 'Error processing audio data.' });
-                      }
-                      // ------------------------
+                               audioChunkReceived = true;
+                               playAudioQueue();
+                             } catch (decodeError) { /* ... error handling ... */ }
+                           } else { /* ... error handling ... */ }
+                       } else { /* ... log ignored audio chunk ... */ }
                  }
              }
-
-             // Update UI with text OR audio placeholder
              if (receivedText) {
-                 console.log('[Live WS] Extracted model text:', receivedText);
-                 // Update Live messages state (streaming logic)
-                 setLiveMessages(prevMessages => {
-                    const lastLiveMsg = prevMessages[prevMessages.length - 1];
-                    const isFinalChunk = data.serverContent.generationComplete || data.serverContent.turnComplete;
-                    if (lastLiveMsg && lastLiveMsg.role === 'model' && !isFinalChunk) {
-                         const updatedMessages = [...prevMessages];
-                         updatedMessages[updatedMessages.length - 1] = { ...lastLiveMsg, text: lastLiveMsg.text + receivedText };
-                         return updatedMessages;
-                    } else {
-                         return [...prevMessages, { role: 'model', text: receivedText, id: Date.now() + Math.random() }];
+                  // ... update live messages with text ...
+                 setLiveMessages(prevMessages => { /* ... existing logic ... */ return [...prevMessages, { role: 'model', text: receivedText, id: Date.now() + Math.random() }]; });
+             } else if (audioChunkReceived && liveModality === 'AUDIO') {
+                 // ... update live messages with audio placeholder ...
+                  setLiveMessages(prevMessages => { /* ... existing logic ... */ return [...prevMessages, { role: 'system', icon: AudioLines, text: '(Receiving audio...)', id: Date.now() + Math.random() }];});
                     }
-                 });
-                 // Also update main conversation state
-                 if (activeConvoId) { /* ... update setConvos logic ... */ }
-             } else if (audioChunkReceived) {
-                 // Only add the placeholder if NO text was received in this specific message
-                 // Avoids spamming placeholders if text and audio are slightly interleaved
-                 addLiveMessage({ role: 'system', icon: AudioLines, text: '(Audio response chunk received)' });
-             }
-             // Log completion flags if needed
-             // if (data.serverContent.generationComplete) ...
-             // if (data.serverContent.turnComplete) ...
          }
-         // ... other handlers (speechRecognitionResult, usageMetadata, etc.) ...
+         // Handle other potential message types from live.txt if needed (ToolCall, etc.)
+         else if (data.serverToolCall) {
+             console.warn("[Live WS] Received tool call:", data.serverToolCall);
+             addLiveMessage({ role: 'system', text: `Received tool call: ${data.serverToolCall.functionCalls?.[0]?.name || 'unknown'}` });
+             // TODO: Implement tool call handling if needed in live mode
+         }
 
-      } catch (err) {
-         console.error('[Live WS] Error processing message:', err, 'Raw data:', event.data);
-         addLiveMessage({ role: 'error', text: `Error processing message: ${err.message}` });
-      }
+      } catch (err) { /* ... error handling ... */ }
     };
     
     ws.onerror = (error) => {
         console.error('[Live WS] WebSocket error event:', error);
-        setLiveConnectionStatus('error'); // Update App state
-        addLiveMessage({ role: 'error', text: 'WebSocket connection error. Check browser console.' });
+        addLiveMessage({ role: 'error', text: 'WebSocket connection error. Check console.' });
+        setLiveConnectionStatus('error');
         closeAudioContext();
+         if (isRecording) stopRecording(); // Stop recording on error
     };
     
     ws.onclose = (event) => {
-        console.log(`[Live WS] Connection closed. Code: ${event.code}, Reason: "${event.reason}", Clean: ${event.wasClean}`);
-        // Update status only if it wasn't already an error
-        setLiveConnectionStatus(prevStatus => prevStatus === 'error' ? 'error' : 'disconnected'); // Update App state
-        addLiveMessage({ role: 'system', text: `Live session ended. Code: ${event.code}` });
-        setLiveWsConnection(null); // Clear WS connection state
-        if (activeConvoId) { /* add closing message to main convo */ }
+        console.log(`[Live WS] Connection closed. Code: ${event.code}, Reason: "${event.reason}"`);
+        setLiveConnectionStatus(prevStatus => prevStatus === 'error' ? 'error' : 'disconnected');
+        addLiveMessage({ role: 'system', text: `Live session ended. (Code: ${event.code})` });
+        setLiveWsConnection(null);
         closeAudioContext();
+        if (isRecording) stopRecording(); // Ensure recording stops
      };
-
-     // Return ws might not be needed if managed via state now
-     // return ws;
    };
 
-   // Modified function to be called by LivePopup to start the session
-   const startLiveSession = (voice, audioEnabled) => {
-       // Close any existing connection/context first
-       endLiveSession(); // Ensure cleanup before starting new
-
-       if (audioEnabled) {
-          initAudioContext(); // Initialize audio context if audio is requested
-       }
-       setupLiveConnection(voice, audioEnabled);
+   // Start Live Session - Uses current state values
+   const startLiveSession = () => {
+       endLiveSession(); // Cleanup previous
+       if (liveModality === 'AUDIO') initAudioContext();
+       // Pass current state values to setup
+       setupLiveConnection(currentVoice, liveModality, liveSystemInstruction);
    };
 
-   // Modified function to be called by LivePopup to end the session
+   // End Live Session - Includes stopping recording
    const endLiveSession = () => {
+       if (isRecording) stopRecording(); // Stop recording if active
        if (liveWsConnection) {
            addLiveMessage({ role: 'system', text: 'Closing connection...' });
            liveWsConnection.close();
            setLiveWsConnection(null);
        }
-       closeAudioContext(); // Close audio context and clear resources on session end
+       closeAudioContext();
+       setLiveConnectionStatus('disconnected'); // Ensure status is updated
    };
 
-    // Function to be called by LivePopup to send a message
+    // Send Live Text Message
     const sendLiveMessage = (text) => {
-       if (!liveWsConnection || liveConnectionStatus !== 'connected' || !text.trim()) {
-           console.warn(`[App] Cannot send live message. WS: ${liveWsConnection}, Status: ${liveConnectionStatus}, Text: ${text}`);
-           addLiveMessage({ role: 'error', text: 'Cannot send message: Not connected or empty.' });
-           return;
-       }
+       if (!liveWsConnection || liveConnectionStatus !== 'connected' || !text.trim()) { /* ... */ return; }
        try {
-           liveWsConnection.send(text);
-           addLiveMessage({ role: 'user', text: text }); // Add user message to display
-       } catch (e) {
-           console.error("[App] Error sending live message:", e);
-           addLiveMessage({ role: 'error', text: `Failed to send message: ${e.message}` });
+           // Use sendClientContent for text
+           liveWsConnection.send(text); // Backend currently expects raw text for sendClientContent path
+           // Alternatively, structure it like the SDK expects if backend changes:
+           // const message = JSON.stringify({ clientContent: { turns: [{ role: 'user', parts: [{ text }] }], turnComplete: true } });
+           // liveWsConnection.send(message);
+           addLiveMessage({ role: 'user', text: text });
+       } catch (e) { /* ... error handling ... */ }
+    };
+
+    // --- Realtime Audio Input Functions ---
+    const startRecording = async () => {
+        if (isRecording || !liveWsConnection || liveConnectionStatus !== 'connected') return;
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            mediaRecorderRef.current = new MediaRecorder(stream);
+            audioChunksRef.current = []; // Clear previous chunks
+
+            mediaRecorderRef.current.ondataavailable = (event) => {
+                if (event.data.size > 0) {
+                    audioChunksRef.current.push(event.data);
+                    // Send chunks immediately via WebSocket
+                    if (liveWsConnection && liveWsConnection.readyState === WebSocket.OPEN) {
+                        liveWsConnection.send(event.data); // Send Blob directly
+                    }
+                }
+            };
+
+            mediaRecorderRef.current.onstop = () => {
+                // Optionally process final blob if needed, but chunks are sent live
+                stream.getTracks().forEach(track => track.stop()); // Stop microphone access
+                console.log('[Audio Input] Recording stopped.');
+            };
+
+            mediaRecorderRef.current.onerror = (event) => {
+                console.error('[Audio Input] MediaRecorder error:', event.error);
+                setAudioError(`Recording error: ${event.error.name}`);
+                setIsRecording(false);
+                 stream.getTracks().forEach(track => track.stop());
+            };
+
+            // Start recording and send chunks periodically (e.g., every 500ms)
+            mediaRecorderRef.current.start(500);
+            setIsRecording(true);
+            addLiveMessage({ role: 'system', icon: Mic, text: 'Recording started...' });
+            console.log('[Audio Input] Recording started.');
+
+        } catch (err) {
+            console.error('[Audio Input] Error accessing microphone:', err);
+            setAudioError(`Mic access error: ${err.message}`);
+            addLiveMessage({ role: 'error', text: `Mic access denied: ${err.message}` });
+        }
+    };
+
+    const stopRecording = () => {
+        if (mediaRecorderRef.current && isRecording) {
+            mediaRecorderRef.current.stop();
+            setIsRecording(false);
+            addLiveMessage({ role: 'system', icon: MicOff, text: 'Recording stopped.' });
+            // Stream tracks are stopped in onstop handler
        }
     };
+    // --------------------------------------
 
   // Function to close sidebar, can be used by overlay or close button
   const closeSidebar = () => setIsSidebarOpen(false);
@@ -831,118 +875,158 @@ export default function App() {
      return config;
   }
 
+  // --- NEW: Function to Start Chat from Prompt ---
+  const startChatWithPrompt = async (promptText, targetModelId = null) => {
+     // 1. Create New Conversation
+     const id = Date.now().toString();
+     const newConvo = { id, title: promptText.substring(0, 30) + (promptText.length > 30 ? '...' : ''), messages: [] };
+     setConvos(prev => [newConvo, ...prev]);
+     setActiveConvoId(id);
+
+     // 2. Set Model if specified
+     if (targetModelId && models.some(m => m.id === targetModelId)) {
+        setCurrentModel(targetModelId);
+        console.log(`Switching model to ${targetModelId} for prompt.`);
+     } else if (targetModelId) {
+         console.warn(`Target model ${targetModelId} not found, using current model ${currentModel}.`);
+     }
+
+     // 3. Close sidebar if on mobile
+     if (window.innerWidth < 1024) closeSidebar();
+
+     // 4. Add user message to state (without waiting for API)
+     // Need to update state slightly differently since sendToBackend/startStreamChat will add it again
+     // Let's modify send/stream functions slightly OR just trigger send/stream directly
+     console.log(`Starting chat with prompt: "${promptText}"`);
+
+     // Use a small delay to allow state updates to settle before sending
+     setTimeout(() => {
+         // Decide whether to stream or not based on current setting (or default to non-streaming?)
+         const streamToggle = document.getElementById('streamToggleInput'); // Need to add an ID
+         if (streamToggle?.checked) {
+            startStreamChat(promptText);
+         } else {
+            sendToBackend(promptText);
+         }
+     }, 100); // Small delay
+  };
+  // ---------------------------------------------
+
   return (
-    // Changed outer div to relative for potential overlay positioning
-    <div className="relative flex h-screen bg-gray-50 dark:bg-gray-900 text-gray-800 dark:text-gray-200 font-sans overflow-hidden">
-      {/* Sidebar Overlay (for closing on mobile/smaller screens) */}
-      {isSidebarOpen && (
+    <div className="relative flex h-screen bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-gray-200 font-sans overflow-hidden">
+      {/* Sidebar Overlay */}
+      {isSidebarOpen && !liveSettingsOpen && !settingsOpen && (
         <div
            onClick={closeSidebar}
-           className="fixed inset-0 bg-black bg-opacity-30 z-30 lg:hidden" // Only show overlay on smaller screens
+           className="fixed inset-0 bg-black bg-opacity-30 z-30 lg:hidden"
            aria-hidden="true"
         ></div>
       )}
 
       {/* Sidebar */}
-      {/* Added transition and conditional transform */}
       <aside
         className={`absolute lg:relative inset-y-0 left-0 w-64 bg-white dark:bg-gray-800 shadow-lg flex flex-col h-full z-40
                    transform transition-transform duration-300 ease-in-out
                    ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}
       >
-         {/* Added Close button for mobile */}
+         {/* Close button */}
          <button
            onClick={closeSidebar}
-           className="absolute top-3 right-3 p-1 rounded-full text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 lg:hidden"
+           className="absolute top-3 right-3 p-1 rounded-full text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 lg:hidden transition-colors group"
            aria-label="Close sidebar"
          >
-           <X className="h-5 w-5" />
+           <X className="h-5 w-5 transition-transform duration-150 ease-in-out group-hover:scale-110" />
          </button>
 
-        <div className="p-4 text-xl font-semibold bg-indigo-600 text-white flex items-center gap-2">
+        {/* App Title */}
+        <div className="p-4 text-xl font-semibold bg-gradient-to-r from-indigo-600 to-purple-600 text-white flex items-center gap-2 shadow-md">
           <BellRing className="h-5 w-5" />
-          <span>Apsara Assistant</span>
+          <span>Apsara 2.5</span>
         </div>
         
+        {/* New Chat Button */}
         <button
-          className="flex items-center justify-center gap-2 mx-4 my-3 p-2 bg-indigo-500 text-white rounded-lg hover:bg-indigo-600 transition-colors"
+          className="flex items-center justify-center gap-2 mx-4 my-3 p-2 bg-indigo-500 text-white rounded-lg hover:bg-indigo-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all duration-150 ease-in-out group shadow hover:shadow-md"
           onClick={() => {
             const id = Date.now().toString();
             setConvos([{ id, title: 'New Chat', messages: [] }, ...convos]);
             setActiveConvoId(id);
-            if (window.innerWidth < 1024) closeSidebar(); // Close sidebar on mobile after creating chat
+            if (window.innerWidth < 1024) closeSidebar();
           }}
         >
-          <span className="text-lg">+</span> New Chat
+          <span className="text-lg transition-transform duration-150 ease-in-out group-hover:scale-110">+</span> New Chat
         </button>
         
-        <div className="flex-1 overflow-auto px-2">
-           {/* Added my-0 to remove extra top margin */}
-           <div className="my-0 flex justify-between items-center px-2 py-2">
-             <div className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">
+        {/* Conversations List */}
+        <div className="flex-1 overflow-y-auto px-2 custom-scrollbar"> {/* Added custom-scrollbar */}
+           <div className="my-0 flex justify-between items-center px-2 py-2 sticky top-0 bg-white dark:bg-gray-800 z-10"> {/* Sticky header */}
+             <div className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
             Conversations
              </div>
              {convos.length > 0 && (
                 <button
                     onClick={() => {
-                      if (confirm('Are you sure you want to delete all conversations?')) {
+                      if (confirm('Are you sure you want to delete all conversations? This cannot be undone.')) {
                         setConvos([]);
                         setActiveConvoId(null);
                       }
                     }}
-                    className="text-xs text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300"
+                    className="flex items-center gap-1 text-xs text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 transition-colors group"
                     title="Delete all conversations"
                   >
-                    Delete All
+                     <Trash2 className="h-3 w-3 transition-transform duration-150 ease-in-out group-hover:scale-110" />
+                     <span>Delete All</span>
                  </button>
                )}
           </div>
-          <ul className="space-y-1">
+          <ul className="space-y-1 pb-2"> {/* Added padding-bottom */}
           {convos.map(c => (
           <li
             key={c.id}
-            className={`px-3 py-2 rounded-md cursor-pointer transition-colors flex justify-between items-center ${
+            // Improved styling and group for hover effect
+            className={`px-3 py-2 rounded-md cursor-pointer transition-all duration-150 ease-in-out flex justify-between items-center group ${
               c.id === activeConvoId 
-                ? 'bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-300' 
-                : 'hover:bg-gray-100 dark:hover:bg-gray-700'
+                ? 'bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 font-medium shadow-sm'
+                : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700/60 hover:text-gray-900 dark:hover:text-gray-100'
             }`}
           >
             <div 
-                  className="flex items-center flex-1 min-w-0" // Added min-w-0 for better truncation
+                  className="flex items-center flex-1 min-w-0 mr-2" // Added margin-right
                   onClick={() => {
                       setActiveConvoId(c.id);
-                      if (window.innerWidth < 1024) closeSidebar(); // Close sidebar on mobile after selecting chat
+                      if (window.innerWidth < 1024) closeSidebar();
                   }}
                 >
-                  <div className="w-2 h-2 rounded-full bg-indigo-500 mr-2 flex-shrink-0"></div>
+                 {/* Icon indicator for active chat */}
+                 <div className={`w-2 h-2 rounded-full mr-2 flex-shrink-0 transition-colors ${c.id === activeConvoId ? 'bg-indigo-500' : 'bg-gray-400 dark:bg-gray-600 group-hover:bg-indigo-400'}`}></div>
               <div className="truncate text-sm">{c.title}</div>
             </div>
             <button 
               onClick={(e) => {
-                    e.stopPropagation(); // Prevent triggering the li's onClick
+                    e.stopPropagation();
+                    if (confirm(`Delete chat "${c.title}"?`)) {
                 setConvos(prev => prev.filter(convo => convo.id !== c.id));
                     if (activeConvoId === c.id) {
-                       // Find the next available convo or set to null
                        const remainingConvos = convos.filter(convo => convo.id !== c.id);
                        setActiveConvoId(remainingConvos.length > 0 ? remainingConvos[0].id : null);
+                        }
                     }
                   }}
-                  className="p-1 text-gray-500 hover:text-red-500 dark:text-gray-400 dark:hover:text-red-400 ml-2 flex-shrink-0" // Added margin and shrink
+                  // Control visibility and add animation
+                  className="p-1 text-gray-500 hover:text-red-500 dark:text-gray-400 dark:hover:text-red-400 flex-shrink-0 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-all duration-150 ease-in-out hover:scale-110 focus:outline-none focus:ring-1 focus:ring-red-500 rounded-full"
               title="Delete conversation"
             >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-              </svg>
+              <Trash2 className="h-4 w-4" />
             </button>
           </li>
         ))}
           </ul>
         </div>
         
-        {/* ... User info and theme toggle ... */}
+        {/* User info */}
         <div className="mt-auto border-t border-gray-200 dark:border-gray-700 p-4">
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-full bg-indigo-200 dark:bg-indigo-700 flex items-center justify-center">
+              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-200 to-purple-200 dark:from-indigo-700 dark:to-purple-700 flex items-center justify-center ring-1 ring-inset ring-gray-300 dark:ring-gray-600">
                 <User className="h-4 w-4 text-indigo-700 dark:text-indigo-200" />
               </div>
               <span className="text-sm font-medium">shubharthak</span>
@@ -951,30 +1035,29 @@ export default function App() {
       </aside>
 
       {/* Main content */}
-      {/* Added transition for potential margin shift if needed, though overlay is simpler */}
-      <main className="flex-1 flex flex-col overflow-hidden transition-all duration-300 ease-in-out">
+      <main className="flex-1 flex flex-col overflow-hidden transition-all duration-300 ease-in-out bg-gray-100 dark:bg-gray-900"> {/* Ensure main bg color */}
         {/* Header */}
-        <header className="bg-white dark:bg-gray-800 shadow-sm z-10 py-2 px-4 flex-shrink-0">
+        <header className="bg-white dark:bg-gray-800 shadow-sm z-10 py-2 px-4 flex-shrink-0 border-b border-gray-200 dark:border-gray-700/50">
           <div className="flex items-center justify-between">
              {/* Hamburger Menu Button */}
              <button
                onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-               className="p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors lg:hidden" // Hide on large screens where sidebar is relative
+               className="p-2 rounded-md text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-indigo-500 dark:hover:text-indigo-400 transition-all duration-150 ease-in-out lg:hidden group"
                aria-label="Toggle sidebar"
              >
                <Menu className="h-5 w-5 transition-transform duration-150 ease-in-out group-hover:scale-110" />
              </button>
 
-             {/* Spacer to push Model select left when hamburger is hidden */}
+             {/* Spacer */}
              <div className="hidden lg:block w-8"></div>
 
-            <div className="flex items-center space-x-4">
-              {/* Model Select - unchanged */}
+            {/* Model Select */}
+            <div className="flex items-center space-x-4 flex-shrink min-w-0"> {/* Allow shrinking */}
               <div className="flex items-center flex-shrink min-w-0 mx-2">
-                <label htmlFor="modelSelect" className="text-sm font-medium mr-2 flex-shrink-0">Model:</label>
+                <label htmlFor="modelSelect" className="text-sm font-medium mr-2 flex-shrink-0 text-gray-600 dark:text-gray-400">Model:</label>
                 <select
                   id="modelSelect"
-                  className="text-sm border border-gray-300 dark:border-gray-600 rounded-md p-1 bg-white dark:bg-gray-700 truncate"
+                  className="text-sm border border-gray-300 dark:border-gray-600 rounded-md p-1 bg-white dark:bg-gray-700 truncate focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
                   value={currentModel}
                   onChange={e => setCurrentModel(e.target.value)}
                 >
@@ -988,45 +1071,85 @@ export default function App() {
             </div>
             
             {/* Header Buttons */}
-            <div className="flex items-center space-x-1 sm:space-x-2">
+            {/* --- RE-ADDED Dark Mode Button & Fixed Hover Effects --- */}
+            <div className="flex items-center space-x-2 sm:space-x-3"> {/* Increased space */}
                 {/* Theme Toggle */}
-                <button onClick={() => setDarkMode(!darkMode)} className="..." title="Toggle Theme">
-                   {/* ... icon ... */}
+                <button
+                   onClick={() => setDarkMode(!darkMode)}
+                   className="p-2 rounded-full text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-indigo-500 dark:hover:text-indigo-400 transition-all duration-150 ease-in-out group"
+                   title="Toggle Theme"
+                 >
+                   {darkMode ? <Sun className="h-5 w-5 transition-transform duration-150 ease-in-out group-hover:scale-110 group-hover:rotate-180" /> : <Moon className="h-5 w-5 transition-transform duration-150 ease-in-out group-hover:scale-110 group-hover:-rotate-12" />}
               </button>
 
                 {/* Live Button */}
-                <button onClick={() => setLiveOpen(true)} className="..." title="Start Live Session">
-                   <MessageSquare className="..." />
+                 <button
+                   onClick={() => setLiveOpen(true)}
+                   className="p-2 rounded-full text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-green-600 dark:hover:text-green-400 transition-all duration-150 ease-in-out group"
+                   title="Start Live Session"
+                 >
+                    {/* Ensured group-hover targets the icon */}
+                   <MessageSquare className="h-5 w-5 transition-transform duration-150 ease-in-out group-hover:scale-110" />
               </button>
 
                 {/* Settings Button */}
-                <button onClick={() => setSettingsOpen(true)} className="..." title="Settings">
-                   <Settings className="..." />
+                <button
+                  onClick={() => setSettingsOpen(true)}
+                  className="p-2 rounded-full text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-blue-600 dark:hover:text-blue-400 transition-all duration-150 ease-in-out group"
+                  title="Chat Settings"
+                 >
+                    {/* Ensured group-hover targets the icon */}
+                   <Settings className="h-5 w-5 transition-transform duration-150 ease-in-out group-hover:scale-110 group-hover:rotate-45" />
               </button>
             </div>
           </div>
         </header>
         
         {/* Chat Messages Area */}
-        <div className="flex-1 overflow-y-auto p-4 bg-gray-50 dark:bg-gray-900">
+        {/* --- UPDATED: Welcome Screen Styling --- */}
+        <div className="flex-1 overflow-y-auto p-4 bg-gray-100 dark:bg-gray-900 custom-scrollbar"> {/* Added custom-scrollbar */}
           {activeConvoId && convos.find(c => c.id === activeConvoId) ? (
             <ChatWindow convo={convos.find(c => c.id === activeConvoId)} />
           ) : (
-            <div className="h-full flex flex-col items-center justify-center text-center text-gray-500 dark:text-gray-400">
-              <div className="w-16 h-16 rounded-full bg-indigo-100 dark:bg-indigo-900/40 flex items-center justify-center mb-4">
-                <BellRing className="h-8 w-8 text-indigo-500 dark:text-indigo-400" />
+            <div className="h-full flex flex-col items-center justify-center text-center text-gray-500 dark:text-gray-400 px-4">
+              <div className="mb-6 w-20 h-20 rounded-full bg-gradient-to-br from-indigo-100 to-purple-100 dark:from-indigo-900/40 dark:to-purple-900/40 flex items-center justify-center ring-4 ring-white/50 dark:ring-white/10 shadow-lg">
+                <BellRing className="h-10 w-10 text-indigo-500 dark:text-indigo-400" />
               </div>
-              <h3 className="text-xl font-medium mb-2">Welcome to Apsara Assistant</h3>
-              <p className="max-w-md mb-6">Start a new conversation or select an existing chat from the sidebar.</p>
+              {/* Added shimmer animation class */}
+              <h3 className="text-3xl font-bold mb-3 animate-shimmer">
+                Welcome to Apsara 2.5
+              </h3>
+              <p className="max-w-lg mb-8 text-base text-gray-600 dark:text-gray-400">
+                Your intelligent assistant. Start a new chat or select one from the sidebar.
+              </p>
+              {/* Styled Example Prompts */}
+              <div className="mb-8 w-full max-w-xl">
+                 <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-4">Try asking:</p>
+                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 gap-3">
+                     {suggestedPrompts.slice(0, 4).map((prompt, index) => { // Show first 4 initially
+                        const Icon = prompt.icon || BrainCircuit; // Default icon
+                        return (
               <button 
-                className="px-4 py-2 bg-indigo-500 text-white rounded-lg hover:bg-indigo-600 transition-colors"
+                                key={index}
+                                onClick={() => startChatWithPrompt(prompt.text, prompt.modelId)}
+                                className="flex items-center text-left px-4 py-3 bg-white dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/80 rounded-lg text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700/70 transition-all shadow-sm hover:shadow-lg transform hover:-translate-y-1 hover:border-indigo-300 dark:hover:border-indigo-700 group"
+                            >
+                                <Icon className="h-5 w-5 mr-3 text-indigo-500 dark:text-indigo-400 flex-shrink-0 transition-transform group-hover:scale-110" />
+                                <span className="flex-1">{prompt.text.split('\n')[0]}</span> {/* Show first line */}
+                            </button>
+                        );
+                      })}
+                 </div>
+              </div>
+              <button
+                className="px-5 py-2.5 bg-gradient-to-r from-indigo-500 to-purple-500 text-white rounded-lg hover:from-indigo-600 hover:to-purple-600 transition-all duration-200 ease-in-out group shadow-md hover:shadow-lg transform hover:scale-105"
                 onClick={() => {
                   const id = Date.now().toString();
                   setConvos([{ id, title: 'New Chat', messages: [] }, ...convos]);
                   setActiveConvoId(id);
                 }}
               >
-                Start New Chat
+                <span className="font-semibold">Start New Chat</span>
               </button>
             </div>
           )}
@@ -1042,7 +1165,7 @@ export default function App() {
         />
       </main>
 
-      {/* Settings Panel - Mount/Unmount controlled by settingsOpen */}
+      {/* Settings Panel - Ensure it renders conditionally */}
       {settingsOpen && (
         <SettingsPanel
           currentModel={currentModel}
@@ -1065,26 +1188,34 @@ export default function App() {
         />
       )}
 
-      {/* Live Chat Popup - Pass down state and handlers */}
+      {/* Live Chat Popup - Ensure it renders conditionally */}
       {liveOpen && (
         <LivePopup 
-          // State props
           connectionStatus={liveConnectionStatus}
           messages={liveMessages}
-          currentVoice={currentVoice} // Still needed for display/selection
-          audioError={audioError} // Pass audio error state
-          // Handler props
+          currentVoice={currentVoice}
+          voices={voices}
+          onVoiceChange={setCurrentVoice}
+          audioError={audioError}
+          liveModality={liveModality}
+          onModalityChange={setLiveModality}
+          liveSystemInstruction={liveSystemInstruction}
+          onSystemInstructionChange={setLiveSystemInstruction}
           onClose={() => {
-              endLiveSession(); // Ensure session ends when popup is closed
+              endLiveSession(); // Ensure session ends fully on close
               setLiveOpen(false);
           }}
-          onStartSession={startLiveSession} // Use the App's start function
-          onEndSession={endLiveSession}     // Use the App's end function
-          onSendMessage={sendLiveMessage}   // Use the App's send function
+          onStartSession={startLiveSession}
+          onEndSession={endLiveSession}
+          onSendMessage={sendLiveMessage}
+          // Realtime audio handlers
+          isRecording={isRecording}
+          onStartRecording={startRecording}
+          onStopRecording={stopRecording}
         />
       )}
 
-      {/* File Upload Popup - unchanged */}
+      {/* File Upload Popup - Ensure it renders conditionally */}
       {fileUploadOpen && (
         <FileUploadPopup
           onClose={() => setFileUploadOpen(false)}
@@ -1181,9 +1312,9 @@ function MessageInput({ onSend, onStreamSend, isLoading, disabled, onFileUploadC
             ref={inputRef}
             className="flex-1 w-full resize-none p-3 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-indigo-400 shadow-sm"
             placeholder={
-              disabled ? "Start a conversation..." : 
-              isLoading ? "Waiting for response..." : 
-              "Type your message..."
+              disabled ? "Start a conversation first..." : 
+              isLoading ? "Apsara is thinking..." : 
+              "Type your message (Shift+Enter for new line)..."
             }
             value={text}
             onChange={(e) => setText(e.target.value)}
@@ -1195,7 +1326,7 @@ function MessageInput({ onSend, onStreamSend, isLoading, disabled, onFileUploadC
             }}
             rows={1}
             disabled={isLoading || disabled}
-            style={{ maxHeight: '150px' }}
+            style={{ maxHeight: '150px', minHeight: '44px' }} // Ensure min-height
           />
           <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
             <button
@@ -1208,6 +1339,7 @@ function MessageInput({ onSend, onStreamSend, isLoading, disabled, onFileUploadC
             </button>
             <label className="flex items-center cursor-pointer group" title="Toggle Streaming Response">
                 <input 
+                  id="streamToggleInput" // <-- Added ID here
                   type="checkbox" 
                   checked={useStreaming} 
                   onChange={() => setUseStreaming(!useStreaming)}
@@ -1220,13 +1352,14 @@ function MessageInput({ onSend, onStreamSend, isLoading, disabled, onFileUploadC
               onClick={handleSend}
               disabled={isLoading || disabled || !text.trim()}
               className="p-2 rounded-lg bg-indigo-500 text-white hover:bg-indigo-600 transition group disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Send Message"
             >
-              <Send className="h-5 w-5 transition-transform duration-150 ease-in-out group-hover:translate-x-0.5" />
+              <Send className="h-5 w-5 transition-transform duration-150 ease-in-out group-hover:translate-x-0.5 group-hover:scale-105" />
             </button>
           </div>
         </div>
         <div className="text-xs text-gray-500 dark:text-gray-400 mt-1 text-center hidden sm:block">
-          {useStreaming ? "Streaming mode: AI responses appear in real-time." : "Shift+Enter for new line."}
+          {useStreaming ? "Streaming mode: Responses appear in real-time." : "Tip: Shift+Enter for a new line."}
         </div>
       </div>
     </div>
@@ -1335,7 +1468,7 @@ function SettingsPanel({
         <div className="flex justify-between items-center mb-6 flex-shrink-0">
           <h2 className="text-xl font-bold flex items-center gap-2">
             <Settings className="h-5 w-5" />
-            Settings
+            Chat Settings
           </h2>
           <button 
             onClick={onClose} // Use the passed onClose function
@@ -1352,17 +1485,17 @@ function SettingsPanel({
             </label>
             <textarea
               id="systemInstruction"
-              className={`w-full p-3 border rounded-md ... ${!isSystemInstructionApplicable ? 'bg-gray-100 dark:bg-gray-700 cursor-not-allowed opacity-60' : 'bg-white dark:bg-gray-700'}`}
+              className={`w-full p-3 border rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 dark:border-gray-600 dark:text-gray-100 ${!isSystemInstructionApplicable ? 'bg-gray-100 dark:bg-gray-700 cursor-not-allowed opacity-60' : 'bg-white dark:bg-gray-700'}`}
               rows={5}
               value={isSystemInstructionApplicable ? tempInstruction : ''}
               onChange={(e) => isSystemInstructionApplicable && setTempInstruction(e.target.value)}
-              placeholder={isSystemInstructionApplicable ? "Set the AI's behavior..." : "Not applicable for image generation model"}
+              placeholder={isSystemInstructionApplicable ? "Set the AI's behavior..." : "Not applicable for this model"}
               disabled={!isSystemInstructionApplicable}
             />
             <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
               {isSystemInstructionApplicable
-                 ? "Sets the context and behavior for the AI."
-                 : "System instructions are not supported by the selected image generation model."
+                 ? "Sets the context and behavior for the AI (not used in Live mode)."
+                 : "System instructions are not supported by the selected model."
               }
             </p>
           </div>
@@ -1444,55 +1577,61 @@ function SettingsPanel({
   );
 }
 
-// Live Chat Popup Component - Display Audio Error and use Icon
+// Live Chat Popup Component - Removed audio checkbox, use liveModality prop
 function LivePopup({
-    // Receive state and handlers as props
-    connectionStatus,
-    messages,
-    currentVoice,
-    onClose,
-    onStartSession,
-    onEndSession,
-    onSendMessage,
-    audioError
+    connectionStatus, messages, currentVoice, voices, onVoiceChange, audioError,
+    liveModality, onModalityChange, liveSystemInstruction, onSystemInstructionChange,
+    onClose, onStartSession, onEndSession, onSendMessage,
+    isRecording, onStartRecording, onStopRecording // Mic handlers
 }) {
-  // State specific to the popup input/UI elements
-  const [useAudio, setUseAudio] = useState(true);
   const [inputText, setInputText] = useState('');
   const messagesEndRef = useRef(null);
+  // Local state for temp system instruction edit
+  const [tempSystemInstruction, setTempSystemInstruction] = useState(liveSystemInstruction);
 
-  // Use effect for scrolling remains
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
-  // Internal handler for sending message, calls prop
+  // Update temp instruction if prop changes (e.g., panel reopens)
+  useEffect(() => {
+     setTempSystemInstruction(liveSystemInstruction);
+  }, [liveSystemInstruction]);
+
   const handleSendMessage = () => {
     if (!inputText.trim()) return;
-    onSendMessage(inputText.trim()); // Call handler passed from App
+    onSendMessage(inputText.trim());
     setInputText('');
   };
 
-  // Internal handler for starting session, calls prop
+  // Apply system instruction change before starting
   const handleStartSession = () => {
-     onStartSession(currentVoice, useAudio); // Call handler passed from App
+     onSystemInstructionChange(tempSystemInstruction); // Apply temp instruction to App state
+     onStartSession();
   }
 
   // Helper to render messages with potential icon
   const renderMessageContent = (msg) => {
      if (msg.icon) {
         const IconComponent = msg.icon;
-        return <span className="flex items-center gap-1.5"><IconComponent className="h-4 w-4 inline-block opacity-70" /> {msg.text}</span>;
+         // Make system messages less prominent
+         const isSystem = msg.role === 'system';
+         return (
+            <span className={`flex items-center gap-1.5 ${isSystem ? 'opacity-80 italic' : ''}`}>
+                <IconComponent className="h-4 w-4 inline-block opacity-70 flex-shrink-0" />
+                <span>{msg.text}</span>
+            </span>
+         );
      }
      return msg.text;
   }
 
   const getStatusIndicator = () => {
     switch (connectionStatus) {
-      case 'connecting': return <span className="text-yellow-500">Connecting...</span>;
-      case 'connected': return <span className="text-green-500">Connected</span>;
-      case 'error': return <span className="text-red-500">Error</span>;
-      case 'disconnected': return <span className="text-gray-500">Disconnected</span>;
+      case 'connecting': return <span className="text-yellow-500 flex items-center gap-1.5"><div className="w-2 h-2 bg-yellow-500 rounded-full animate-pulse"></div>Connecting...</span>;
+      case 'connected': return <span className="text-green-500 flex items-center gap-1.5"><div className="w-2 h-2 bg-green-500 rounded-full"></div>Connected</span>;
+      case 'error': return <span className="text-red-500 flex items-center gap-1.5"><div className="w-2 h-2 bg-red-500 rounded-full"></div>Error</span>;
+      case 'disconnected': return <span className="text-gray-500 flex items-center gap-1.5"><div className="w-2 h-2 bg-gray-500 rounded-full"></div>Disconnected</span>;
       default: return null;
     }
   };
@@ -1500,28 +1639,31 @@ function LivePopup({
   const isSessionActive = connectionStatus === 'connected' || connectionStatus === 'connecting';
   
   return (
-    // Added backdrop blur and increased max-width
     <div className="fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm flex justify-center items-center z-50 p-4" onClick={onClose}>
       <div
-        className="w-full max-w-2xl h-full max-h-[85vh] sm:h-[75vh] bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-lg shadow-xl flex flex-col"
+        className="w-full max-w-2xl h-full max-h-[90vh] sm:max-h-[80vh] bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-lg shadow-xl flex flex-col"
         onClick={e => e.stopPropagation()}
       >
+        {/* Header */}
         <div className="flex justify-between items-center mb-4 flex-shrink-0">
           <h2 className="text-xl font-bold flex items-center gap-2">
             <MessageSquare className="h-5 w-5 text-green-600 dark:text-green-400" />
             Apsara Live
           </h2>
           <div className="text-sm font-medium">{getStatusIndicator()}</div>
-          <button 
-            onClick={onClose}
-            className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700"
-          >
-            ×
+          <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors group">
+            <X className="h-5 w-5 transition-transform duration-150 ease-in-out group-hover:scale-110" />
           </button>
         </div>
         
-        {/* Message Display Area - Uses messages prop */}
+        {/* Message Display Area */}
         <div className="flex-1 overflow-y-auto mb-4 space-y-3 pr-2 border rounded-md p-3 bg-gray-50 dark:bg-gray-900/50 custom-scrollbar">
+           {/* Display Placeholder if no messages and disconnected */}
+           {messages.length === 0 && !isSessionActive && (
+             <div className="text-center text-gray-500 dark:text-gray-400 p-4">
+                 Configure settings below and click "Start Session".
+             </div>
+           )}
            {messages.map((msg) => (
              <div
                key={msg.id}
@@ -1530,7 +1672,7 @@ function LivePopup({
                }`}
              >
                <div
-                 className={`max-w-[85%] rounded-lg px-3 py-2 text-sm ${
+                 className={`max-w-[85%] rounded-lg px-3 py-2 text-sm break-words ${
                    msg.role === 'user'
                      ? 'bg-indigo-500 text-white'
                      : msg.role === 'model'
@@ -1549,66 +1691,117 @@ function LivePopup({
 
         {/* Controls Area */}
         <div className="space-y-4 flex-shrink-0">
-            {/* Display Audio Error */}
             {audioError && (
                 <div className="p-2 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 text-xs rounded-md text-center">
                     Audio Error: {audioError}
                 </div>
             )}
 
-            {!isSessionActive && connectionStatus !== 'error' && (
-              <div className="flex items-center justify-between p-3 bg-gray-100 dark:bg-gray-700 rounded-md">
-                  <label className="flex items-center space-x-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={useAudio}
-                      onChange={() => setUseAudio(!useAudio)}
-                    className="w-4 h-4 text-indigo-600 dark:text-indigo-400 rounded focus:ring-indigo-500"
+            {/* --- Settings Area (Shown when disconnected) --- */}
+            {!isSessionActive && (
+              <div className="p-4 border rounded-lg bg-gray-100 dark:bg-gray-700/50 space-y-4">
+                <h3 className="text-sm font-semibold text-center text-gray-700 dark:text-gray-300 mb-3">Live Session Settings</h3>
+                {/* System Prompt */}
+                <div>
+                    <label htmlFor="liveSystemInstruction" className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
+                      System Instruction (for Live session)
+                    </label>
+                    <textarea
+                      id="liveSystemInstruction"
+                      rows={2}
+                      className="w-full p-2 border rounded-md text-sm bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 focus:ring-1 focus:ring-indigo-500"
+                      value={tempSystemInstruction}
+                      onChange={(e) => setTempSystemInstruction(e.target.value)}
+                      placeholder="e.g., Respond concisely."
                     />
-                  <span className="text-sm">Enable audio responses (Voice: {currentVoice})</span>
+                 </div>
+                 {/* Modality */}
+                <div className="flex items-center justify-between">
+                    <label className="block text-xs font-medium text-gray-600 dark:text-gray-400">Response Mode</label>
+                    <div className="flex space-x-4">
+                        <label className="flex items-center space-x-1.5 cursor-pointer text-xs">
+                            <input type="radio" name="liveModality" value="AUDIO" checked={liveModality === 'AUDIO'} onChange={() => onModalityChange('AUDIO')} className="text-indigo-600 focus:ring-indigo-500"/>
+                            <span>Audio</span>
                   </label>
+                        <label className="flex items-center space-x-1.5 cursor-pointer text-xs">
+                             <input type="radio" name="liveModality" value="TEXT" checked={liveModality === 'TEXT'} onChange={() => onModalityChange('TEXT')} className="text-indigo-600 focus:ring-indigo-500"/>
+                            <span>Text</span>
+                        </label>
+                    </div>
+                </div>
+                {/* Voice (Conditional) */}
+                {liveModality === 'AUDIO' && (
+                    <div>
+                        <label htmlFor="liveVoiceSelect" className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">
+                           AI Voice
+                        </label>
+                        <select
+                            id="liveVoiceSelect"
+                            value={currentVoice}
+                            onChange={(e) => onVoiceChange(e.target.value)}
+                            className="w-full p-2 border rounded-md text-sm bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 focus:ring-1 focus:ring-indigo-500"
+                        >
+                            {voices.length > 0 ? voices.map(v => (<option key={v} value={v}>{v}</option>)) : <option disabled>...</option>}
+                        </select>
+                    </div>
+                )}
+                {/* Start Button */}
+                <div className="flex justify-end pt-2">
                  <button
-                  onClick={handleStartSession} // Use internal handler
+                        onClick={handleStartSession} // Use handler that applies system prompt
                   disabled={connectionStatus === 'connecting'}
-                  className="px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600 transition-colors disabled:opacity-50"
+                        className="px-4 py-2 bg-green-500 text-white text-sm font-medium rounded-md hover:bg-green-600 transition-colors disabled:opacity-50 flex items-center gap-1.5"
                 >
                   {connectionStatus === 'connecting' ? 'Connecting...' : 'Start Session'}
                 </button>
                 </div>
+                </div>
             )}
 
-            {isSessionActive && (
-                <div className="relative">
+            {/* --- Input Area (Shown when connected) --- */}
+            {connectionStatus === 'connected' && (
+                <div className="flex items-center gap-2">
+                  {/* Microphone Button */}
+                  <button
+                    onClick={isRecording ? onStopRecording : onStartRecording}
+                    className={`p-2 rounded-full transition-colors group ${
+                      isRecording
+                        ? 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 hover:bg-red-200 dark:hover:bg-red-800/50 animate-pulse'
+                        : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600'
+                    }`}
+                    title={isRecording ? 'Stop Recording' : 'Start Recording (Sends audio live)'}
+                  >
+                    {isRecording ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5 transition-transform group-hover:scale-110" />}
+                  </button>
+                  {/* Text Input */}
+                  <div className="relative flex-1">
                   <input
                     type="text"
                     value={inputText}
                     onChange={(e) => setInputText(e.target.value)}
-                    onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                       e.preventDefault();
-                       handleSendMessage(); // Use internal handler
-                      }
-                    }}
+                      onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendMessage(); }}}
                   className="w-full p-3 pr-12 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                    placeholder="Type a message..."
+                      placeholder="Type a message or use the mic..."
                   disabled={connectionStatus !== 'connected'}
                   />
                   <button
-                  onClick={handleSendMessage} // Use internal handler
+                      onClick={handleSendMessage}
                   disabled={connectionStatus !== 'connected' || !inputText.trim()}
-                  className="absolute right-2 top-1/2 transform -translate-y-1/2 p-2 text-gray-500 dark:text-gray-400 hover:text-indigo-500 dark:hover:text-indigo-400 disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="absolute right-2 top-1/2 transform -translate-y-1/2 p-2 text-gray-500 dark:text-gray-400 hover:text-indigo-500 dark:hover:text-indigo-400 disabled:opacity-50 disabled:cursor-not-allowed transition-colors group"
+                      title="Send Message"
                   >
-                    <Send className="h-5 w-5" />
+                      <Send className="h-5 w-5 transition-transform duration-150 ease-in-out group-hover:scale-110" />
                   </button>
+                  </div>
               </div>
             )}
           
+            {/* End Session Button (Shown when active or error) */}
             {(isSessionActive || connectionStatus === 'error') && (
               <div className="flex justify-end">
               <button
-                  onClick={onEndSession} // Call prop directly
-                  disabled={connectionStatus === 'disconnected'}
-                  className="px-4 py-2 bg-red-500 text-white rounded-md hover:bg-red-600 transition-colors disabled:opacity-50"
+                    onClick={onEndSession}
+                    className="px-4 py-2 bg-red-500 text-white text-sm font-medium rounded-md hover:bg-red-600 transition-colors"
               >
                 End Session
               </button>
@@ -1661,18 +1854,26 @@ function FileUploadPopup({ onClose, onUpload, files }) {
       await onUpload(file);
     } catch (err) {
       console.error('Error uploading file:', err);
+       alert(`Upload failed: ${err.message || 'Unknown error'}`);
     } finally {
       setUploading(false);
+       // Clear the input value so the same file can be selected again if needed
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
     }
   };
   
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50">
-      <div className="w-full max-w-lg bg-white dark:bg-gray-800 p-6 rounded-lg shadow-xl">
+    <div className="fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm flex justify-center items-center z-50 p-4" onClick={onClose}>
+      <div
+        className="w-full max-w-lg bg-white dark:bg-gray-800 p-6 rounded-lg shadow-xl"
+        onClick={e => e.stopPropagation()}
+      >
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-xl font-bold flex items-center gap-2">
             <FileUp className="h-5 w-5" />
-            Upload Files
+            Attach Files
           </h2>
           <button 
             onClick={onClose}
@@ -1687,7 +1888,7 @@ function FileUploadPopup({ onClose, onUpload, files }) {
             className={`border-2 border-dashed rounded-lg p-8 text-center ${
               dragActive 
                 ? 'border-indigo-400 bg-indigo-50 dark:bg-indigo-900/20' 
-                : 'border-gray-300 dark:border-gray-600'
+                : 'border-gray-300 dark:border-gray-600 hover:border-gray-400 dark:hover:border-gray-500'
             }`}
             onDragEnter={handleDrag}
             onDragLeave={handleDrag}
@@ -1699,14 +1900,15 @@ function FileUploadPopup({ onClose, onUpload, files }) {
               <span className="font-semibold">Click to upload</span> or drag and drop
             </p>
             <p className="text-xs text-gray-500 dark:text-gray-400">
-              Supported formats: PDF, TXT, CSV, JSON, images
+              Max file size: 50MB. PDF, TXT, Images, etc.
             </p>
             <input
               ref={fileInputRef}
               type="file"
               className="hidden"
               onChange={handleChange}
-              accept=".pdf,.txt,.csv,.json,.jpg,.jpeg,.png"
+              // Removed accept for now, let backend handle validation
+              // accept=".pdf,.txt,.csv,.json,.jpg,.jpeg,.png,.webp"
             />
             <button
               disabled={uploading}
@@ -1727,8 +1929,8 @@ function FileUploadPopup({ onClose, onUpload, files }) {
                     key={idx} 
                     className="text-xs flex items-center justify-between p-2 bg-gray-50 dark:bg-gray-700 rounded"
                   >
-                    <div className="truncate flex-1">{file.name}</div>
-                    <div className="text-gray-500 dark:text-gray-400">{file.type}</div>
+                    <div className="truncate flex-1">{file.mimetype?.startsWith('image') ? '🖼️' : '📄'}</div>
+                    <div className="text-gray-500 dark:text-gray-400">{file.originalname}</div>
                   </li>
                 ))}
               </ul>

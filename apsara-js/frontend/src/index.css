@@ -1,3 +1,75 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Add custom animation for text shimmer */
+@layer utilities {
+  @keyframes shimmer {
+    0% { background-position: -500% 0; }
+    100% { background-position: 500% 0; }
+  }
+  .animate-shimmer {
+    background: linear-gradient(to right,
+      theme('colors.indigo.400') 20%,
+      theme('colors.purple.400') 40%,
+      theme('colors.pink.400') 60%,
+      theme('colors.indigo.400') 80%
+    );
+    background-size: 200% auto;
+    color: transparent;
+    background-clip: text;
+    -webkit-background-clip: text;
+    animation: shimmer 5s linear infinite;
+  }
+  .dark .animate-shimmer {
+     background: linear-gradient(to right,
+      theme('colors.indigo.300') 20%,
+      theme('colors.purple.300') 40%,
+      theme('colors.pink.300') 60%,
+      theme('colors.indigo.300') 80%
+    );
+    background-size: 200% auto;
+    color: transparent;
+    background-clip: text;
+    -webkit-background-clip: text;
+    animation: shimmer 5s linear infinite;
+  }
+
+  /* Custom scrollbar styles */
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 6px; /* Adjust width */
+  }
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: theme('colors.gray.100');
+    border-radius: 10px;
+  }
+  .dark .custom-scrollbar::-webkit-scrollbar-track {
+    background: theme('colors.gray.700');
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: theme('colors.gray.400');
+    border-radius: 10px;
+  }
+  .dark .custom-scrollbar::-webkit-scrollbar-thumb {
+     background: theme('colors.gray.500');
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+     background: theme('colors.gray.500');
+  }
+   .dark .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+     background: theme('colors.gray.400');
+  }
+  /* Firefox scrollbar */
+  .custom-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: theme('colors.gray.400') theme('colors.gray.100');
+  }
+   .dark .custom-scrollbar {
+     scrollbar-color: theme('colors.gray.500') theme('colors.gray.700');
+   }
+}
+
+/* Ensure body takes full height for layout */
+html, body, #root {
+  height: 100%;
+}
