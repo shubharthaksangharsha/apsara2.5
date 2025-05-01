@@ -10,7 +10,7 @@ const MAX_STORAGE_BYTES = MAX_LOCALSTORAGE_SIZE_MB * BYTES_PER_MB;
 // Define suggested prompts with optional target models
 const suggestedPrompts = [
   { text: "Explain quantum computing simply", icon: BrainCircuit },
-  { text: "Write a Python script for web scraping", icon: BrainCircuit, modelId: "gemini-2.5-pro-preview-03-25" }, // Example specific model
+  { text: "Write a Python script for web scraping", icon: BrainCircuit, modelId: "gemini-2.5-pro-exp-03-25" }, // Example specific model
   { text: "Create a recipe for vegan lasagna", icon: BookOpen },
   { text: "Generate an image of a futuristic cityscape at sunset", icon: ImageIcon, modelId: "gemini-2.0-flash-exp-image-generation" },
   { text: "Summarize the theory of relativity", icon: BookOpen },
@@ -185,9 +185,15 @@ export default function App() {
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
   // ----------------------------------
+  const [isModelSpeaking, setIsModelSpeaking] = useState(false); // State for audio pulse
 
   // --- NEW: State to track the ID of the model message being streamed ---
   const [streamingModelMessageId, setStreamingModelMessageId] = useState(null);
+
+  // --- State specifically for aggregating live text chunks ---
+  const liveStreamingTextRef = useRef('');
+  const liveStreamingMsgIdRef = useRef(null);
+  // ----------------------------------------------------------
 
   // Function to initialize AudioContext
   const initAudioContext = () => {
@@ -303,7 +309,15 @@ export default function App() {
   // Function to add messages to the live state
   const addLiveMessage = (msg) => {
     // Ensure unique IDs even if called rapidly
-    setLiveMessages(prev => [...prev, { ...msg, id: Date.now() + Math.random() * 1000 }]);
+    // Add timestamp for potential sorting/debugging
+    setLiveMessages(prev => [...prev, { ...msg, id: Date.now() + Math.random() * 1000, timestamp: Date.now() }]);
+  };
+
+  // Function to update an existing live message (for text streaming)
+  const updateLiveMessage = (id, newText) => {
+     setLiveMessages(prev => prev.map(m =>
+        m.id === id ? { ...m, text: newText } : m
+     ));
   };
 
   // --- Modified applyConfigSettings ---
@@ -337,7 +351,7 @@ export default function App() {
      if (Object.keys(config.generationConfig).length === 0) delete config.generationConfig;
 
      return config;
-  }
+      }
   // --- End modified applyConfigSettings ---
 
   // --- Modified sendToBackend ---
@@ -377,7 +391,7 @@ export default function App() {
       const validMessages = (activeConvo.messages || [])
           .filter(msg => (msg.role === 'user' || msg.role === 'model') && msg.parts?.length > 0);
         turns = [...validMessages, { role: 'user', parts: [{ text }] }];
-
+      
         // Update UI immediately with user message for existing convo
         updatedConvoState = prev => prev.map(c => {
             if (c.id !== convoIdToUse) return c;
@@ -405,7 +419,7 @@ export default function App() {
       
       const data = await response.json();
       if (data.error) throw new Error(data.error.message || data.error);
-
+      
       // Process response
       const responseParts = [];
       if (typeof data.response === 'string') responseParts.push({ text: data.response });
@@ -419,13 +433,13 @@ export default function App() {
         metadata: { finishReason: data.finishReason, usageMetadata: data.usageMetadata },
         id: Date.now() + Math.random(), // Add unique ID
       };
-
+      
       // Update conversation with AI reply
       setConvos(prev => prev.map(c => {
         if (c.id !== finalConvoId) return c;
         return { ...c, messages: [...(c.messages || []), reply] };
       }));
-
+      
       // Update title for new conversations (check if messages array only had the user prompt initially)
       const finalConvo = convos.find(c => c.id === finalConvoId) || activeConvo; // Get latest state if possible
       if (finalConvo && finalConvo.messages.length <= 1) { // If only user message exists before reply
@@ -448,7 +462,7 @@ export default function App() {
     }
   };
   // --- End modified sendToBackend ---
-
+  
   // --- Modified startStreamChat ---
   const startStreamChat = async (text, targetConvoId = null, initialConvoData = null, targetModelId = null) => {
     const convoIdToUse = targetConvoId || activeConvoId;
@@ -491,7 +505,7 @@ export default function App() {
       const validMessages = (activeConvo.messages || [])
            .filter(msg => (msg.role === 'user' || msg.role === 'model') && msg.parts?.length > 0);
          turns = [...validMessages, { role: 'user', parts: [{ text }] }];
-
+      
          tempModelMessageId = Date.now() + Math.random() + '_model';
          setStreamingModelMessageId(tempModelMessageId);
 
@@ -565,7 +579,7 @@ export default function App() {
                                newParts[existingTextPartIndex] = { text: currentTextPart };
                 } else {
                                newParts.push({ text: currentTextPart });
-                           }
+                }
                            return { ...m, parts: newParts };
                         }
                         return m;
@@ -584,7 +598,7 @@ export default function App() {
                  // Add image part
                   responseParts.push({ inlineData: data.inlineData });
                  // Update state immediately with text + image
-                 setConvos(prev => prev.map(c => {
+                setConvos(prev => prev.map(c => {
                      if (c.id !== finalConvoId) return c;
                       const messages = c.messages.map(m => {
                         if (m.id === tempModelMessageId) {
@@ -623,7 +637,7 @@ export default function App() {
                  setStreamingModelMessageId(null); // Clear tracked ID
                  currentTextPart = ''; // Reset for next stream
                  responseParts = []; // Reset
-               }
+                }
              } catch (e) { console.error('Error parsing stream data:', e, "Line:", line); }
            } else if (line.startsWith('event: done')) {
              // Stream completed event from backend (may be redundant if finishReason is always sent)
@@ -636,7 +650,7 @@ export default function App() {
                    throw new Error(errorData.error || 'Unknown stream error event');
             } catch (e) {
                    throw new Error(e.message || 'Failed to parse stream error event');
-               }
+            }
            }
          } // end for..of lines
        } // end while(true)
@@ -669,7 +683,7 @@ export default function App() {
     } finally {
       setIsLoading(false);
        setStreamingModelMessageId(null); // Clear ID in finally
-     }
+    }
   };
   // --- End modified startStreamChat ---
 
@@ -732,6 +746,8 @@ export default function App() {
      setLiveConnectionStatus('connecting');
      setLiveMessages([]); // Clear previous messages
      addLiveMessage({ role: 'system', text: 'Preparing live session...' });
+     liveStreamingTextRef.current = ''; // Reset text aggregator
+     liveStreamingMsgIdRef.current = null; // Reset streaming ID tracker
 
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
      const params = new URLSearchParams();
@@ -762,7 +778,7 @@ export default function App() {
     ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
-        // console.log('[Live WS] Message received (raw):', data); // Verbose
+        // console.log('[Live WS] Message received (parsed):', data); // More detailed log
 
          if (data.event === 'backend_connected') {
             addLiveMessage({ role: 'system', text: 'Backend acknowledged. Connecting to AI...' });
@@ -770,65 +786,98 @@ export default function App() {
             addLiveMessage({ role: 'system', text: 'Live connection to AI active.' });
             setLiveConnectionStatus('connected');
         } else if (data.event === 'error') {
-            console.error('[Live WS] Backend/Google Error:', data.message);
-            addLiveMessage({ role: 'error', text: `Error: ${data.message}` });
+            console.error('[Live WS] Backend/Google Error Event:', data.message);
+            addLiveMessage({ role: 'error', text: `Error: ${data.message || 'Unknown backend/Google error'}` });
             setLiveConnectionStatus('error');
-             // Stop recording on error
              if (isRecording) stopRecording();
+             setIsModelSpeaking(false);
+             liveStreamingTextRef.current = '';
+             liveStreamingMsgIdRef.current = null;
         } else if (data.event === 'closed') {
-             addLiveMessage({ role: 'system', text: `Live AI connection closed. ${data.reason || ''}` });
-             // ws.onclose handles final status update
+             addLiveMessage({ role: 'system', text: `Live AI connection closed. (Code: ${data.code || 'N/A'}, Reason: ${data.reason || 'N/A'})` });
+             // ws.onclose handles final status update & cleanup
+             setIsModelSpeaking(false);
+             liveStreamingTextRef.current = '';
+             liveStreamingMsgIdRef.current = null;
          }
+         // --- Refined Server Content Handling ---
          else if (data.serverContent && data.serverContent.modelTurn && Array.isArray(data.serverContent.modelTurn.parts)) {
-             let receivedText = '';
-             let audioChunkReceived = false;
+             let audioChunkReceivedThisMessage = false; // Track audio within *this specific message*
+
              for (const part of data.serverContent.modelTurn.parts) {
                  if (part.text) {
-                     receivedText += part.text;
+                      // --- Aggregate Live Text ---
+                      if (!liveStreamingMsgIdRef.current) {
+                           // Start of a new streaming message
+                           const newMsgId = Date.now() + Math.random() * 1000 + '_live_model';
+                           liveStreamingMsgIdRef.current = newMsgId;
+                           liveStreamingTextRef.current = part.text;
+                           // Add placeholder message immediately
+                           setLiveMessages(prev => [...prev, { role: 'model', text: liveStreamingTextRef.current, id: newMsgId, timestamp: Date.now() }]);
+                      } else {
+                           // Append to existing streaming message
+                           liveStreamingTextRef.current += part.text;
+                           // Update the existing message in state
+                           updateLiveMessage(liveStreamingMsgIdRef.current, liveStreamingTextRef.current);
+                      }
+                      // --------------------------
                  } else if (part.inlineData && part.inlineData.mimeType?.startsWith('audio/')) {
+                      audioChunkReceivedThisMessage = true; // Mark audio in this message
                       if (liveModality === 'AUDIO') {
-                        if (!audioContextRef.current) initAudioContext();
-                        if (audioContextRef.current) {
-                      try {
+                         if (!isModelSpeaking) { // Only set true on the *first* chunk of a speaking turn
+                            setIsModelSpeaking(true);
+                            console.log('[Audio Pulse] Set isModelSpeaking = true');
+                         }
+                         if (!audioContextRef.current) initAudioContext();
+                         if (audioContextRef.current) {
+                           try {
+                               // ... [audio processing and queueing logic - no change] ...
                          const mimeMatch = part.inlineData.mimeType.match(/rate=(\d+)/);
-                               const sampleRate = mimeMatch ? parseInt(mimeMatch[1], 10) : 24000;
-                                if (audioContextRef.current.sampleRate !== sampleRate) {
-                                    console.warn(`[Audio] Sample rate mismatch! Reinit context.`);
-                                    closeAudioContext();
-                                    try {
-                                        audioContextRef.current = new AudioContext({ sampleRate });
-                                        console.log(`[Audio] Context reinit rate: ${sampleRate}`);
-                                    } catch (ctxError) { /* ... error handling ... */ continue; }
-                                }
+                                const sampleRate = mimeMatch ? parseInt(mimeMatch[1], 10) : 24000;
+                                // ... rest of audio buffer creation and playing ...
+                                if (audioContextRef.current.sampleRate !== sampleRate) { /* ... handle rate mismatch ... */ }
                          const binaryString = window.atob(part.inlineData.data);
                          const len = binaryString.length;
                          const bytes = new Uint8Array(len);
-                               for (let i = 0; i < len; i++) bytes[i] = binaryString.charCodeAt(i);
+                                for (let i = 0; i < len; i++) bytes[i] = binaryString.charCodeAt(i);
                          const arrayBuffer = bytes.buffer;
+                                if (audioContextRef.current?.state === 'running') {
                          audioQueueRef.current.push(arrayBuffer);
-                               audioChunkReceived = true;
-                               playAudioQueue();
-                             } catch (decodeError) { /* ... error handling ... */ }
-                           } else { /* ... error handling ... */ }
-                       } else { /* ... log ignored audio chunk ... */ }
+                                   playAudioQueue();
+                                } else { console.warn('[Audio] Context not running, skipping queueing.'); }
+                           } catch (decodeError) { console.error("[Audio] Error decoding/queuing audio chunk:", decodeError); setAudioError("Error processing received audio."); }
+                           } else { setAudioError("Audio context not available for playback."); }
+                       } else { console.log("[Live WS] Received audio chunk but modality is TEXT. Ignoring."); }
                  }
-             }
-             if (receivedText) {
-                  // ... update live messages with text ...
-                 setLiveMessages(prevMessages => { /* ... existing logic ... */ return [...prevMessages, { role: 'model', text: receivedText, id: Date.now() + Math.random() }]; });
-             } else if (audioChunkReceived && liveModality === 'AUDIO') {
-                 // ... update live messages with audio placeholder ...
-                  setLiveMessages(prevMessages => { /* ... existing logic ... */ return [...prevMessages, { role: 'system', icon: AudioLines, text: '(Receiving audio...)', id: Date.now() + Math.random() }];});
-                    }
-         }
+             } // End parts loop
+
+             // --- Turn Completion Handling ---
+             if (data.serverContent.turnComplete || data.serverContent.generationComplete) {
+                  if (isModelSpeaking) { // Stop pulse if it was active
+                      setIsModelSpeaking(false);
+                      console.log('[Audio Pulse] Set isModelSpeaking = false (turn complete)');
+                  }
+                   // Reset live text streaming tracker for the next turn
+                   liveStreamingTextRef.current = '';
+                   liveStreamingMsgIdRef.current = null;
+              }
+             // ------------------------------
+
+         } // End serverContent handling
          // Handle other potential message types from live.txt if needed (ToolCall, etc.)
          else if (data.serverToolCall) {
              console.warn("[Live WS] Received tool call:", data.serverToolCall);
              addLiveMessage({ role: 'system', text: `Received tool call: ${data.serverToolCall.functionCalls?.[0]?.name || 'unknown'}` });
              // TODO: Implement tool call handling if needed in live mode
+                    } else {
+             // Log unexpected message structures
+             // console.log("[Live WS] Received unhandled message structure:", data);
          }
 
-      } catch (err) { /* ... error handling ... */ }
+      } catch (err) {
+         console.error('[Live WS] Error processing message:', err, 'Raw data:', event.data);
+           addLiveMessage({ role: 'error', text: `Frontend error processing message: ${err.message}`});
+      }
     };
     
     ws.onerror = (error) => {
@@ -846,6 +895,9 @@ export default function App() {
         setLiveWsConnection(null);
         closeAudioContext();
         if (isRecording) stopRecording(); // Ensure recording stops
+        setIsModelSpeaking(false); // Ensure speaking indicator stops
+        liveStreamingTextRef.current = ''; // Reset text aggregator
+        liveStreamingMsgIdRef.current = null; // Reset streaming ID tracker
      };
    };
 
@@ -867,83 +919,131 @@ export default function App() {
        }
        closeAudioContext();
        setLiveConnectionStatus('disconnected'); // Ensure status is updated
+      setIsModelSpeaking(false); // Ensure speaking indicator stops
    };
 
-    // Send Live Text Message
+    // --- Updated Send Live Text Message ---
     const sendLiveMessage = (text) => {
-       if (!liveWsConnection || liveConnectionStatus !== 'connected' || !text.trim()) { /* ... */ return; }
+       if (!liveWsConnection || liveConnectionStatus !== 'connected' || !text.trim()) {
+            console.warn("sendLiveMessage: Cannot send, WS not connected or text empty.");
+           return;
+       }
        try {
-           // Use sendClientContent for text
-           liveWsConnection.send(text); // Backend currently expects raw text for sendClientContent path
-           // Alternatively, structure it like the SDK expects if backend changes:
-           // const message = JSON.stringify({ clientContent: { turns: [{ role: 'user', parts: [{ text }] }], turnComplete: true } });
-           // liveWsConnection.send(message);
+           // Reset the live text streaming tracker *before* sending user message
+           liveStreamingMsgIdRef.current = null;
+           liveStreamingTextRef.current = '';
+           console.log('[Live Send] Reset live stream tracker for new user message.');
+
+           liveWsConnection.send(text);
            addLiveMessage({ role: 'user', text: text });
-       } catch (e) { /* ... error handling ... */ }
+       } catch (e) {
+            console.error('[Live WS] Error sending text message:', e);
+            addLiveMessage({ role: 'error', text: `Error sending message: ${e.message}`});
+            // Reset tracker on error too
+            liveStreamingMsgIdRef.current = null;
+            liveStreamingTextRef.current = '';
+       }
     };
+    // --- End Updated Send Live Text Message ---
 
     // --- Realtime Audio Input Functions ---
     const startRecording = async () => {
-        if (isRecording || !liveWsConnection || liveConnectionStatus !== 'connected') return;
+        if (isRecording || !liveWsConnection || liveConnectionStatus !== 'connected') {
+             console.warn(`startRecording: Cannot start. isRecording=${isRecording}, connectionStatus=${connectionStatus}`);
+             return;
+        }
+        addLiveMessage({ role: 'system', icon: Mic, text: 'Attempting to start recording...' });
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            addLiveMessage({ role: 'system', icon: Mic, text: 'Microphone access granted.' });
 
-            // --- Define preferred mime type ---
             const options = {
-                 // Prioritize opus in webm container if supported
                  mimeType: MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
                     ? 'audio/webm;codecs=opus'
-                    // Fallback to ogg/opus
                     : MediaRecorder.isTypeSupported('audio/ogg;codecs=opus')
                     ? 'audio/ogg;codecs=opus'
-                    // Add other fallbacks if needed, e.g., audio/wav (less ideal for streaming)
-                    : '' // Let browser choose default if none supported (might be PCM)
+                    : ''
             };
             console.log(`[Audio Input] Using mimeType: ${options.mimeType || 'browser default'}`);
+            if (!options.mimeType) {
+                 addLiveMessage({ role: 'error', text: 'Browser does not support preferred audio formats (Opus in WebM/Ogg).' });
+            }
 
-            mediaRecorderRef.current = new MediaRecorder(stream, options); // Pass options
-            audioChunksRef.current = [];
+            mediaRecorderRef.current = new MediaRecorder(stream, options);
+            audioChunksRef.current = []; // Clear any old chunks
 
             mediaRecorderRef.current.ondataavailable = (event) => {
+                // console.log(`[Audio Input] ondataavailable fired, size: ${event.data.size}`); // Debug log
                 if (event.data.size > 0) {
-                    // Don't accumulate locally - send immediately
-                    // audioChunksRef.current.push(event.data);
                     if (liveWsConnection && liveWsConnection.readyState === WebSocket.OPEN) {
-                        liveWsConnection.send(event.data); // Send Blob directly
-                        // console.log(`[Audio Input] Sent chunk, size: ${event.data.size}, type: ${event.data.type}`);
+                        try {
+                            liveWsConnection.send(event.data); // Send Blob directly
+                            // console.log(`[Audio Input] Sent chunk, size: ${event.data.size}, type: ${event.data.type}`);
+                        } catch (sendErr) {
+                             console.error("[Audio Input] Error sending audio chunk:", sendErr);
+                             addLiveMessage({ role: 'error', text: `Error sending audio data: ${sendErr.message}` });
+                             // Stop recording if sending fails?
+                             stopRecording();
+                        }
+     } else {
+                         console.warn("[Audio Input] WS connection not open, cannot send audio chunk.");
+                         // Stop recording if connection is lost during recording
+                         stopRecording();
                     }
                 }
             };
 
             mediaRecorderRef.current.onstop = () => {
-                stream.getTracks().forEach(track => track.stop());
-                console.log('[Audio Input] Recording stopped.');
-                 // Send any remaining buffered chunks (usually not needed with live sending)
-                // if (audioChunksRef.current.length > 0 && liveWsConnection && liveWsConnection.readyState === WebSocket.OPEN) {
-                //     const finalBlob = new Blob(audioChunksRef.current, { type: options.mimeType || undefined });
-                //     liveWsConnection.send(finalBlob);
-                // }
+                stream.getTracks().forEach(track => track.stop()); // Stop mic access
+                console.log('[Audio Input] Recording stopped (MediaRecorder onstop).');
+                // No need to add message here, already handled in stopRecording func
                 audioChunksRef.current = []; // Clear buffer
             };
 
-            mediaRecorderRef.current.onerror = (event) => { /* ... error handling ... */ };
+            mediaRecorderRef.current.onerror = (event) => {
+                console.error('[Audio Input] MediaRecorder error:', event.error);
+                addLiveMessage({ role: 'error', text: `MediaRecorder error: ${event.error.name} - ${event.error.message}` });
+                setIsRecording(false); // Ensure state is updated
+            };
 
-            // Start recording, send data when available (browser decides chunking, typically frequent)
-            // Removed timeslice (500ms) to let browser handle chunking based on encoding/buffer
-            mediaRecorderRef.current.start();
+            // Start recording; data sent via ondataavailable
+            mediaRecorderRef.current.start(250); // Send chunks roughly every 250ms
             setIsRecording(true);
-            addLiveMessage({ role: 'system', icon: Mic, text: 'Recording started...' });
+            addLiveMessage({ role: 'system', icon: Mic, text: 'Recording started.' });
             console.log('[Audio Input] Recording started.');
 
-        } catch (err) { /* ... error handling ... */ }
+        } catch (err) {
+            console.error('[Audio Input] Error starting recording:', err);
+            let errorText = `Error starting recording: ${err.message}`;
+            if (err.name === 'NotAllowedError') {
+               errorText = 'Microphone permission denied. Please allow access in browser settings.';
+            } else if (err.name === 'NotFoundError') {
+                errorText = 'No microphone found.';
+            }
+            addLiveMessage({ role: 'error', text: errorText });
+            setIsRecording(false); // Ensure recording state is false
+        }
     };
 
     const stopRecording = () => {
+        // Check both state and recorder existence
         if (mediaRecorderRef.current && isRecording) {
-            mediaRecorderRef.current.stop();
-            setIsRecording(false);
+            console.log('[Audio Input] stopRecording called.');
             addLiveMessage({ role: 'system', icon: MicOff, text: 'Recording stopped.' });
-            // Stream tracks are stopped in onstop handler
+            // Stop the recorder; onstop handler will clean up stream tracks
+            try {
+                mediaRecorderRef.current.stop();
+            } catch (e) {
+                 console.error("[Audio Input] Error stopping MediaRecorder:", e);
+            }
+            setIsRecording(false); // Update state immediately
+       } else {
+            // If stopRecording is called but we weren't recording (e.g., error cleanup)
+            if (mediaRecorderRef.current?.stream) {
+                 mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
+            }
+           console.log('[Audio Input] stopRecording called but not currently recording or recorder not init.');
+           setIsRecording(false); // Ensure state is consistent
        }
     };
     // --------------------------------------
@@ -1251,6 +1351,7 @@ export default function App() {
           isRecording={isRecording}
           onStartRecording={startRecording}
           onStopRecording={stopRecording}
+          isModelSpeaking={isModelSpeaking} // Pass speaking state
         />
       )}
 
@@ -1621,7 +1722,7 @@ function LivePopup({
     connectionStatus, messages, currentVoice, voices, onVoiceChange, audioError,
     liveModality, onModalityChange, liveSystemInstruction, onSystemInstructionChange,
     onClose, onStartSession, onEndSession, onSendMessage,
-    isRecording, onStartRecording, onStopRecording // Mic handlers
+    isRecording, onStartRecording, onStopRecording, isModelSpeaking // Receive isModelSpeaking
 }) {
   const [inputText, setInputText] = useState('');
   const messagesEndRef = useRef(null);
@@ -1683,12 +1784,13 @@ function LivePopup({
         className="w-full max-w-2xl h-full max-h-[90vh] sm:max-h-[80vh] bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-lg shadow-xl flex flex-col"
         onClick={e => e.stopPropagation()}
       >
-        {/* Header */}
-        <div className="flex justify-between items-center mb-4 flex-shrink-0">
+        {/* Header - Reverted Pulse, Restored Status */}
+        <div className="flex justify-between items-center mb-4 flex-shrink-0"> {/* Restored mb-4 */}
           <h2 className="text-xl font-bold flex items-center gap-2">
             <MessageSquare className="h-5 w-5 text-green-600 dark:text-green-400" />
             Apsara Live
           </h2>
+          {/* Show only Connection Status */}
           <div className="text-sm font-medium">{getStatusIndicator()}</div>
           <button onClick={onClose} className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors group">
             <X className="h-5 w-5 transition-transform duration-150 ease-in-out group-hover:scale-110" />
@@ -1696,16 +1798,17 @@ function LivePopup({
         </div>
         
         {/* Message Display Area */}
-        <div className="flex-1 overflow-y-auto mb-4 space-y-3 pr-2 border rounded-md p-3 bg-gray-50 dark:bg-gray-900/50 custom-scrollbar">
+        <div className="flex-1 overflow-y-auto mb-4 space-y-3 pr-2 border rounded-md p-3 bg-gray-50 dark:bg-gray-900/50 custom-scrollbar relative"> {/* Added relative positioning */}
            {/* Display Placeholder if no messages and disconnected */}
            {messages.length === 0 && !isSessionActive && (
              <div className="text-center text-gray-500 dark:text-gray-400 p-4">
                  Configure settings below and click "Start Session".
              </div>
            )}
+           {/* Map over messages passed as props */}
            {messages.map((msg) => (
              <div
-               key={msg.id}
+               key={msg.id} // Use unique ID from message state
                className={`flex ${
                  msg.role === 'user' ? 'justify-end' : 'justify-start'
                }`}
@@ -1718,14 +1821,26 @@ function LivePopup({
                      ? 'bg-white dark:bg-gray-700 shadow-sm border border-gray-200 dark:border-gray-600'
                      : msg.role === 'system'
                      ? 'bg-gray-200 dark:bg-gray-600 italic text-gray-600 dark:text-gray-300'
-                     : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300'
+                     : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300' // Error role
                  }`}
                >
-                 {renderMessageContent(msg)} {/* Use helper to render */}
+                 {renderMessageContent(msg)}
                </div>
              </div>
            ))}
-           <div ref={messagesEndRef} />
+           <div ref={messagesEndRef} /> {/* Scroll target */}
+
+           {/* Audio Pulse Area (Positioned at the bottom of the message area) */}
+           {isModelSpeaking && (
+             <div className="sticky bottom-0 left-0 right-0 flex justify-center items-center p-2 bg-gradient-to-t from-gray-50 dark:from-gray-900/50 via-gray-50/80 dark:via-gray-900/40 to-transparent pointer-events-none"> {/* Gradient fade */}
+               <div className="flex items-center gap-1.5 px-3 py-1 bg-white/80 dark:bg-gray-800/80 backdrop-blur-sm rounded-full shadow">
+                 <div className="w-1.5 h-3 bg-blue-500 rounded-full animate-pulse-audio delay-75"></div>
+                 <div className="w-1.5 h-4 bg-blue-500 rounded-full animate-pulse-audio delay-150"></div>
+                 <div className="w-1.5 h-3 bg-blue-500 rounded-full animate-pulse-audio delay-300"></div>
+                 <span className="text-xs text-gray-600 dark:text-gray-400 ml-1.5">Speaking...</span>
+               </div>
+             </div>
+           )}
         </div>
 
         {/* Controls Area */}
@@ -1802,12 +1917,14 @@ function LivePopup({
                 <div className="flex items-center gap-2">
                   {/* Microphone Button */}
                   <button
-                    onClick={isRecording ? onStopRecording : onStartRecording}
+                    onClick={() => {
+                        if (isRecording) onStopRecording(); else onStartRecording();
+                    }}
                     className={`p-2 rounded-full transition-colors group ${
-                      isRecording
-                        ? 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 hover:bg-red-200 dark:hover:bg-red-800/50 animate-pulse'
-                        : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600'
-                    }`}
+                       isRecording
+                         ? 'bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 hover:bg-red-200 dark:hover:bg-red-800/50 animate-pulse'
+                         : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600'
+                     }`}
                     title={isRecording ? 'Stop Recording' : 'Start Recording (Sends audio live)'}
                   >
                     {isRecording ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5 transition-transform group-hover:scale-110" />}

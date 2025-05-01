@@ -67,6 +67,19 @@
    .dark .custom-scrollbar {
      scrollbar-color: theme('colors.gray.500') theme('colors.gray.700');
    }
+
+  /* Simple pulse animation for Tailwind */
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scaleY(1); }
+    50% { opacity: .6; transform: scaleY(0.7); }
+  }
+  .animate-pulse-audio { /* Renamed class for clarity */
+    animation: pulse 1.2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+  /* Add delays for the individual bars */
+  .animate-pulse-audio.delay-75 { animation-delay: 75ms; }
+  .animate-pulse-audio.delay-150 { animation-delay: 150ms; }
+  .animate-pulse-audio.delay-300 { animation-delay: 300ms; }
 }
 
 /* Ensure body takes full height for layout */
