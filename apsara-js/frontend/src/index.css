@@ -82,6 +82,13 @@
   .animate-pulse-audio.delay-300 { animation-delay: 300ms; }
 }
 
+/* Add transition to sidebar background */
+@layer components {
+  aside {
+    @apply transition-colors duration-300 ease-in-out; /* Add smooth background color transition */
+  }
+}
+
 /* Ensure body takes full height for layout */
 html, body, #root {
   height: 100%;
