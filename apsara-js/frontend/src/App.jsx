@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { BellRing, FileUp, Menu, Mic, Moon, Send, Settings, Sun, User, X, MessageSquare, UploadCloud, AudioLines, Cog, Trash2, MicOff, BrainCircuit, Image as ImageIcon, BookOpen, Link as LinkIcon } from 'lucide-react';
+import { BellRing, FileUp, Menu, Mic, Moon, Send, Settings, Sun, User, X, MessageSquare, UploadCloud, AudioLines, Cog, Trash2, MicOff, BrainCircuit, Image as ImageIcon, BookOpen, Link as LinkIcon, UserIcon } from 'lucide-react';
 
 const BACKEND_URL = 'http://localhost:9000';
 
@@ -1229,7 +1229,7 @@ export default function App() {
                 >
                  {/* Keep icon visible */}
                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-gray-200 to-gray-300 dark:from-gray-600 dark:to-gray-700 flex items-center justify-center ring-1 ring-inset ring-gray-300 dark:ring-gray-600 flex-shrink-0 transition-colors group-hover/footer:ring-indigo-500"> 
-                   <LinkIcon className="h-4 w-4 transition-transform group-hover/footer:scale-110" />
+                   <User className="h-4 w-4 transition-transform group-hover/footer:scale-110 " />
               </div>
                  {/* Text fades in/out */}
                  <div className={`flex flex-col transition-opacity duration-300 lg:opacity-0 ${sidebarLocked ? 'lg:opacity-100' : 'group-hover:lg:opacity-100'}`}>
@@ -1323,8 +1323,8 @@ export default function App() {
             <ChatWindow convo={convos.find(c => c.id === activeConvoId)} />
           ) : (
             <div className="h-full flex flex-col items-center justify-center text-center text-gray-500 dark:text-gray-400 px-4">
-              <div className="mb-6 w-20 h-20 rounded-full bg-gradient-to-br from-indigo-100 to-purple-100 dark:from-indigo-900/40 dark:to-purple-900/40 flex items-center justify-center ring-4 ring-white/50 dark:ring-white/10 shadow-lg">
-                <BellRing className="h-10 w-10 text-indigo-500 dark:text-indigo-400" />
+              <div className="">
+                {/* <BellRing className="h-10 w-10 text-indigo-500 dark:text-indigo-400" /> */}
               </div>
               {/* Added shimmer animation class */}
               <h3 className="text-3xl font-bold mb-3 animate-shimmer">
