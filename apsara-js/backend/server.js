@@ -554,45 +554,55 @@ async function handleLiveConnection(ws, req) {
     ws.on('message', async (data, isBinary) => {
        const currentSession = sessions.get(ws);
        const currentSessionId = currentSession?.conn?.id?.substring(0, 8) ?? 'N/A';
-       if (!currentSession) {
-             console.warn("[Live Backend] Received message from client WS, but no associated Google session found. Closing WS.");
+
+       if (!currentSession || !currentSession.conn) {
+             console.warn(`[Live Backend] Received message from client WS <${currentSessionId}>, but no associated Google session/connection found. Closing WS.`);
              try { ws.close(1011, "Session lost"); } catch(e){}
              return;
         }
 
+        // --- REMOVED Check for Google WebSocket State BEFORE Sending ---
+        // The SDK's send methods should handle this internally or throw.
+        // if (currentSession.conn.readyState !== WebSocket.OPEN) {
+        //     console.warn(`[Live Backend] Received ${isBinary ? 'BINARY' : 'TEXT'} from client <${currentSessionId}>, but Google WS state is ${currentSession.conn.readyState}. Ignoring.`);
+        //     return;
+        // }
+        // -------------------------------------------------------------
+
         try {
           if (isBinary) {
-              // Received audio data (Buffer) from Client -> Send to Google via sendRealtimeInput
-              console.log(`[Live Backend] Received BINARY data from client <${currentSessionId}>. Size: ${data.length}. Sending via sendRealtimeInput.`);
-              // Ensure the model/config expects audio input (should match requestedModality check)
-              // Note: The underlying API might handle this even if response modality is TEXT,
-              // but it's good practice to align. Let's assume AUDIO modality implies audio input capability.
-              if (requestedModality === Modality.AUDIO) { // Check if audio input is expected
-                  // The 'data' here is likely a Buffer from ws library
-                  await currentSession.sendRealtimeInput({ media: data });
-              } else {
-                  console.warn(`[Live Backend] Received audio data from client <${currentSessionId}>, but modality is TEXT. Ignoring.`);
-              }
+            // console.log(`[Live Backend] Received BINARY data from client <${currentSessionId}>. Type: ${typeof data}, IsBuffer: ${data instanceof Buffer}, Size: ${data.length}. Attempting sendRealtimeInput.`); // Verbose log
 
+            // --- Ensure we use the standard SDK call ---
+            await currentSession.sendRealtimeInput({ media: data }); // Pass the raw buffer/blob
+            // -------------------------------------------
+
+            // console.log(`[Live Backend] Sent BINARY data via sendRealtimeInput for <${currentSessionId}>.`); // Verbose log
           } else {
-              // Received text data (string) from Client -> Send to Google
               const textData = data.toString();
-              console.log(`[Live Backend] Received TEXT from client <${currentSessionId}>: "${textData.substring(0, 100)}${textData.length > 100 ? '...' : ''}". Sending via sendClientContent.`);
-              // Use sendClientContent for text input to Google
+              // console.log(`[Live Backend] Received TEXT from client <${currentSessionId}>: "${textData.substring(0, 100)}${textData.length > 100 ? '...' : ''}". Attempting sendClientContent.`); // Verbose log
               await currentSession.sendClientContent({
                   turns: [{ role: 'user', parts: [{ text: textData }] }],
-                  turnComplete: true // Assume each text message is a complete turn
+                  turnComplete: true
               });
+              // console.log(`[Live Backend] Sent TEXT data via sendClientContent for <${currentSessionId}>.`); // Verbose log
           }
         } catch(e){
-            console.error(`[Live Backend] Error processing client ${isBinary ? 'BINARY' : 'TEXT'} message or sending to Google <${currentSessionId}>:`, e);
+            console.error(`[Live Backend] Error processing/sending client ${isBinary ? 'BINARY' : 'TEXT'} message to Google <${currentSessionId}>:`, e);
+            // Add a check here to see if the error indicates a closed state
+            if (e.message?.toLowerCase().includes('websocket is not open') || e.message?.toLowerCase().includes('socket closed')) {
+                console.warn(`[Live Backend] Send failed because Google WS was closed. State likely closed during send.`);
+                 // Optionally close the client connection if it's not already closing
+                 if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
+                    ws.close(1011, "Backend connection error");
+                 }
+            }
+            // Forward error to client only if the client WS is still open
             try {
                  if (ws.readyState === WebSocket.OPEN) {
-                    ws.send(JSON.stringify({ event: 'error', message: `Backend error processing your message: ${e.message || 'Unknown processing error'}` }));
+                    ws.send(JSON.stringify({ event: 'error', message: `Backend error sending message: ${e.message || 'Unknown processing error'}` }));
                  }
-            } catch (wsErr) {
-                 console.error(`[Live Backend] Failed to send processing error <${currentSessionId}> to client WS:`, wsErr);
-            }
+            } catch (wsErr) { console.error(`[Live Backend] Failed to send processing error <${currentSessionId}> to client WS:`, wsErr); }
         }
     });
 
