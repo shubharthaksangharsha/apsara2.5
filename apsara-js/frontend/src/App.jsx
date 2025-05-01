@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { BellRing, FileUp, Menu, Mic, Moon, Send, Settings, Sun, User, X, MessageSquare, UploadCloud, AudioLines, Cog, Trash2, MicOff, BrainCircuit, Image as ImageIcon, BookOpen } from 'lucide-react';
+import { BellRing, FileUp, Menu, Mic, Moon, Send, Settings, Sun, User, X, MessageSquare, UploadCloud, AudioLines, Cog, Trash2, MicOff, BrainCircuit, Image as ImageIcon, BookOpen, Link as LinkIcon } from 'lucide-react';
 
 const BACKEND_URL = 'http://localhost:9000';
 
@@ -139,6 +139,7 @@ export default function App() {
   // Live Settings Panel state
   const [liveSettingsOpen, setLiveSettingsOpen] = useState(false); // REMOVED - No longer needed as separate panel
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [sidebarLocked, setSidebarLocked] = useState(false); // <-- Add this state
   const [liveSystemInstruction, setLiveSystemInstruction] = useState('You are a helpful assistant.'); // State for live system prompt
 
   // Determine if system instruction is applicable for the current model
@@ -156,15 +157,20 @@ export default function App() {
   // Add effect to default sidebar open state based on screen size initially
   useEffect(() => {
     const checkSize = () => {
-      if (window.innerWidth >= 1024) { // lg breakpoint
-        setIsSidebarOpen(true);
+      const isLargeScreen = window.innerWidth >= 1024;
+      if (isLargeScreen) {
+        // Large screens: Start unlocked, visually collapsed state handled by width/classes
+        setIsSidebarOpen(true); // Keep it technically "open" for layout flow
+        setSidebarLocked(false); 
       } else {
+        // Small screens: Start closed and unlocked
         setIsSidebarOpen(false);
+        setSidebarLocked(false); 
       }
     };
-    checkSize(); // Check on initial load
-    window.addEventListener('resize', checkSize); // Adjust on resize
-    return () => window.removeEventListener('resize', checkSize); // Cleanup
+    checkSize(); 
+    window.addEventListener('resize', checkSize); 
+    return () => window.removeEventListener('resize', checkSize); 
   }, []);
 
   // --- Lifted Live Session State ---
@@ -1048,13 +1054,30 @@ export default function App() {
     };
     // --------------------------------------
 
-  // Function to close sidebar, can be used by overlay or close button
-  const closeSidebar = () => setIsSidebarOpen(false);
+  // Function to close sidebar, only if not locked
+  const closeSidebar = () => {
+     // Only applicable for small screens via overlay click
+     if (window.innerWidth < 1024) {
+         setIsSidebarOpen(false);
+     }
+  };
+
+  // --- Modified onClick for the *sidebar's* hamburger ---
+  const handleSidebarHamburgerClick = () => {
+    if (window.innerWidth < 1024) {
+        setIsSidebarOpen(prev => !prev); 
+    } else {
+        // On large screens, this button only toggles lock
+        setSidebarLocked(prev => !prev);
+        setIsSidebarOpen(true); // Ensure it's visually open when locking
+    }
+  };
+  // --- End Modified onClick ---
 
   return (
     <div className="relative flex h-screen bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-gray-200 font-sans overflow-hidden">
-      {/* Sidebar Overlay */}
-      {isSidebarOpen && !liveSettingsOpen && !settingsOpen && (
+      {/* Sidebar Overlay - Only for small screens */}
+      {isSidebarOpen && window.innerWidth < 1024 && ( 
         <div
            onClick={closeSidebar}
            className="fixed inset-0 bg-black bg-opacity-30 z-30 lg:hidden"
@@ -1064,148 +1087,197 @@ export default function App() {
 
       {/* Sidebar */}
       <aside
-        className={`absolute lg:relative inset-y-0 left-0 w-64 bg-white dark:bg-gray-800 shadow-lg flex flex-col h-full z-40
-                   transform transition-transform duration-300 ease-in-out
-                   ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}
+        className={`relative inset-y-0 left-0 bg-white dark:bg-gray-800 shadow-lg flex flex-col h-full z-40 
+                   transition-all duration-500 ease-in-out group 
+                   ${isSidebarOpen ? 'w-64' : 'w-0 -translate-x-full'} 
+                   lg:translate-x-0 
+                   ${sidebarLocked ? 'lg:w-64' : 'lg:w-20 hover:lg:w-64'} 
+                   `}
       >
-         {/* Close button */}
-         <button
-           onClick={closeSidebar}
-           className="absolute top-3 right-3 p-1 rounded-full text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 lg:hidden transition-colors group"
-           aria-label="Close sidebar"
-         >
-           <X className="h-5 w-5 transition-transform duration-150 ease-in-out group-hover:scale-110" />
-         </button>
+        <div className="flex flex-col h-full overflow-y-auto overflow-x-hidden custom-scrollbar"> 
+           
+           {/* Sidebar Hamburger/Lock Button */}
+           {/* --- ADD hidden lg:flex to hide on mobile --- */}
+           <div className="hidden lg:flex flex-shrink-0 px-3 pt-3 pb-2"> 
+              <button
+                onClick={handleSidebarHamburgerClick} 
+                className={`p-2 rounded-md text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-indigo-500 dark:hover:text-indigo-400 transition-all duration-150 ease-in-out ${sidebarLocked && window.innerWidth >= 1024 ? 'bg-indigo-100 dark:bg-indigo-900/30' : ''}`}
+                aria-label={window.innerWidth < 1024 ? (isSidebarOpen ? "Close Menu" : "Open Menu") : (sidebarLocked ? "Unlock Sidebar" : "Lock Sidebar")} 
+              >
+                <Menu className="h-5 w-5" />
+              </button>
+           </div>
 
-        {/* App Title */}
-        <div className="p-4 text-xl font-semibold bg-gradient-to-r from-indigo-600 to-purple-600 text-white flex items-center gap-2 shadow-md">
-          <BellRing className="h-5 w-5" />
-          <span>Apsara 2.5</span>
+           {/* Animated App Title */}
+           <div className="flex items-center gap-2 px-4 py-2 flex-shrink-0 overflow-hidden"> 
+                {/* Apply visibility logic to Bell Icon */}
+                {/* <BellRing className={`h-6 w-6 text-indigo-500 dark:text-indigo-400 flex-shrink-0 transition-opacity duration-300 lg:opacity-0 ${sidebarLocked ? 'lg:opacity-100' : 'group-hover:lg:opacity-100'}`}/> */}
+                {/* --- End Bell Icon --- */}
+                <span 
+                    className={`text-lg font-semibold whitespace-nowrap animate-shimmer transition-opacity duration-300 lg:opacity-0 ${sidebarLocked ? 'lg:opacity-100' : 'group-hover:lg:opacity-100'}`}
+                    style={{ animationDuration: '3s' }} 
+                >
+                    Apsara 2.5
+                </span>
         </div>
         
-        {/* New Chat Button */}
-        <button
-          className="flex items-center justify-center gap-2 mx-4 my-3 p-2 bg-indigo-500 text-white rounded-lg hover:bg-indigo-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all duration-150 ease-in-out group shadow hover:shadow-md"
-          onClick={() => {
-            const id = Date.now().toString();
-            setConvos([{ id, title: 'New Chat', messages: [] }, ...convos]);
-            setActiveConvoId(id);
-            if (window.innerWidth < 1024) closeSidebar();
-          }}
-        >
-          <span className="text-lg transition-transform duration-150 ease-in-out group-hover:scale-110">+</span> New Chat
-        </button>
+           {/* New Chat Button Container */}
+           {/* --- Adjusted padding/margin, ensure full width in parent --- */}
+           <div className="flex-shrink-0 px-4 py-2"> 
+             <button
+               // --- Apply conditional justification ---
+               className={`flex items-center w-full gap-2 px-3 py-2 bg-indigo-500 text-white rounded-lg hover:bg-indigo-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all duration-300 ease-in-out shadow hover:shadow-md 
+                          ${sidebarLocked ? 'lg:justify-start' : 'lg:justify-center group-hover:lg:justify-start'} `} // Center icon when collapsed on lg
+               onClick={() => {
+                 const id = Date.now().toString();
+                 setConvos([{ id, title: 'New Chat', messages: [] }, ...convos]);
+                 setActiveConvoId(id);
+                      // Close sidebar only if on small screen and currently open
+                      if (window.innerWidth < 1024 && isSidebarOpen) setIsSidebarOpen(false);
+                      // Ensure sidebar is locked open if user clicks "New Chat" while unlocked on large screen? (Optional)
+                      // if (window.innerWidth >= 1024 && !sidebarLocked) setSidebarLocked(true); 
+               }}
+             >
+               <span className="text-lg flex-shrink-0">+</span> 
+               {/* Text fades in/out - added w-0 when hidden on lg */}
+               <span className={`transition-opacity duration-300 whitespace-nowrap 
+                          ${sidebarLocked ? 'lg:opacity-100' : 'lg:opacity-0 lg:w-0 group-hover:lg:opacity-100 group-hover:lg:w-auto'} `}>
+                  New Chat
+               </span>
+             </button>
+           </div>
         
-        {/* Conversations List */}
-        <div className="flex-1 overflow-y-auto px-2 custom-scrollbar"> {/* Added custom-scrollbar */}
-           <div className="my-0 flex justify-between items-center px-2 py-2 sticky top-0 bg-white dark:bg-gray-800 z-10"> {/* Sticky header */}
-             <div className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+           {/* Conversations List - Wrapped header and list for visibility control */}
+           {/* --- Container for header + list, content fades/clips --- */}
+           <div className={`flex-1 px-2 overflow-hidden transition-opacity duration-300 lg:opacity-0 ${sidebarLocked ? 'lg:opacity-100' : 'group-hover:lg:opacity-100'}`}> {/* Use opacity for fade */}
+             <div className="my-0 flex justify-between items-center px-2 py-2 sticky top-0 bg-white dark:bg-gray-800 z-10"> 
+               <div className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
             Conversations
              </div>
              {convos.length > 0 && (
                 <button
                     onClick={() => {
-                      if (confirm('Are you sure you want to delete all conversations? This cannot be undone.')) {
+                        // --- FIX: Moved state updates inside confirm block ---
+                        if (confirm('Are you sure you want to delete all conversations? This cannot be undone.')) {
                         setConvos([]);
                         setActiveConvoId(null);
                       }
                     }}
-                    className="flex items-center gap-1 text-xs text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 transition-colors group"
+                      className="flex items-center gap-1 text-xs text-red-500 hover:text-red-700 dark:text-red-400 dark:hover:text-red-300 transition-colors" // Removed group class as it's not needed here
                     title="Delete all conversations"
                   >
-                     <Trash2 className="h-3 w-3 transition-transform duration-150 ease-in-out group-hover:scale-110" />
-                     <span>Delete All</span>
+                       <Trash2 className="h-3 w-3" />
+                       <span>Delete All</span>
                  </button>
                )}
           </div>
-          <ul className="space-y-1 pb-2"> {/* Added padding-bottom */}
+             <ul className="space-y-1 pb-2"> 
           {convos.map(c => (
           <li
             key={c.id}
-            // Improved styling and group for hover effect
-            className={`px-3 py-2 rounded-md cursor-pointer transition-all duration-150 ease-in-out flex justify-between items-center group ${
+                 // --- Added relative ---
+                 className={`relative px-3 py-2 rounded-md cursor-pointer transition-all duration-150 ease-in-out flex justify-between items-center group ${
               c.id === activeConvoId 
-                ? 'bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 font-medium shadow-sm'
-                : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700/60 hover:text-gray-900 dark:hover:text-gray-100'
+                     ? 'bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300 font-medium shadow-sm'
+                     : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700/60 hover:text-gray-900 dark:hover:text-gray-100'
             }`}
           >
             <div 
-                  className="flex items-center flex-1 min-w-0 mr-2" // Added margin-right
+                       className="flex items-center flex-1 min-w-0 mr-2" // Keep click handler for selecting convo
                   onClick={() => {
                       setActiveConvoId(c.id);
-                      if (window.innerWidth < 1024) closeSidebar();
+                         if (window.innerWidth < 1024) closeSidebar();
                   }}
                 >
-                 {/* Icon indicator for active chat */}
-                 <div className={`w-2 h-2 rounded-full mr-2 flex-shrink-0 transition-colors ${c.id === activeConvoId ? 'bg-indigo-500' : 'bg-gray-400 dark:bg-gray-600 group-hover:bg-indigo-400'}`}></div>
+                      {/* Icon indicator */}
+                      <div className={`w-2 h-2 rounded-full mr-2 flex-shrink-0 transition-colors ${c.id === activeConvoId ? 'bg-indigo-500' : 'bg-gray-400 dark:bg-gray-600 group-hover:bg-indigo-400'}`}></div>
               <div className="truncate text-sm">{c.title}</div>
             </div>
             <button 
               onClick={(e) => {
-                    e.stopPropagation();
-                    if (confirm(`Delete chat "${c.title}"?`)) {
+                         e.stopPropagation(); // Prevent triggering li's onClick
+                         // --- FIX: Added confirmation ---
+                         if (confirm(`Delete chat "${c.title || 'Untitled'}"?`)) { 
                 setConvos(prev => prev.filter(convo => convo.id !== c.id));
                     if (activeConvoId === c.id) {
                        const remainingConvos = convos.filter(convo => convo.id !== c.id);
-                       setActiveConvoId(remainingConvos.length > 0 ? remainingConvos[0].id : null);
-                        }
+                             // Select the next available convo or null if none left
+                             const currentIndex = convos.findIndex(convo => convo.id === c.id);
+                             const nextIndex = currentIndex > 0 ? currentIndex - 1 : 0; // Go to previous or first
+                             setActiveConvoId(remainingConvos.length > 0 ? remainingConvos[nextIndex]?.id ?? remainingConvos[0]?.id : null);
+                           }
                     }
                   }}
-                  // Control visibility and add animation
-                  className="p-1 text-gray-500 hover:text-red-500 dark:text-gray-400 dark:hover:text-red-400 flex-shrink-0 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-all duration-150 ease-in-out hover:scale-110 focus:outline-none focus:ring-1 focus:ring-red-500 rounded-full"
+                       // --- Ensure visibility classes are correct ---
+                       className="p-1 text-gray-500 hover:text-red-500 dark:text-gray-400 dark:hover:text-red-400 flex-shrink-0 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-all duration-150 ease-in-out hover:scale-110 focus:outline-none focus:ring-1 focus:ring-red-500 rounded-full"
               title="Delete conversation"
             >
-              <Trash2 className="h-4 w-4" />
+                   <Trash2 className="h-4 w-4" />
             </button>
           </li>
         ))}
           </ul>
         </div>
         
-        {/* User info */}
-        <div className="mt-auto border-t border-gray-200 dark:border-gray-700 p-4">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-200 to-purple-200 dark:from-indigo-700 dark:to-purple-700 flex items-center justify-center ring-1 ring-inset ring-gray-300 dark:ring-gray-600">
-                <User className="h-4 w-4 text-indigo-700 dark:text-indigo-200" />
+           {/* --- UPDATED: Footer Credit --- */}
+           <div className="flex-shrink-0 mt-auto border-t border-gray-200 dark:border-gray-700 p-4">
+               <a 
+                  href="https://shubharthaksangharsha.github.io/" // Your link
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-2 group/footer text-gray-600 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-300"
+                >
+                 {/* Keep icon visible */}
+                 <div className="w-8 h-8 rounded-full bg-gradient-to-br from-gray-200 to-gray-300 dark:from-gray-600 dark:to-gray-700 flex items-center justify-center ring-1 ring-inset ring-gray-300 dark:ring-gray-600 flex-shrink-0 transition-colors group-hover/footer:ring-indigo-500"> 
+                   <LinkIcon className="h-4 w-4 transition-transform group-hover/footer:scale-110" />
               </div>
-              <span className="text-sm font-medium">shubharthak</span>
+                 {/* Text fades in/out */}
+                 <div className={`flex flex-col transition-opacity duration-300 lg:opacity-0 ${sidebarLocked ? 'lg:opacity-100' : 'group-hover:lg:opacity-100'}`}>
+                     <span className="text-xs whitespace-nowrap">Developed by</span>
+                     <span className="text-sm font-medium whitespace-nowrap">Shubharthak</span>
           </div>
+                </a>
         </div>
+        </div> {/* End content container */}
       </aside>
 
       {/* Main content */}
-      <main className="flex-1 flex flex-col overflow-hidden transition-all duration-300 ease-in-out bg-gray-100 dark:bg-gray-900"> {/* Ensure main bg color */}
-        {/* Header */}
+      <main className="flex-1 flex flex-col overflow-hidden transition-all duration-500 ease-in-out bg-gray-100 dark:bg-gray-900"> {/* Ensure main bg color */}
+        {/* Header - Remove hamburger, adjust model selector position */}
         <header className="bg-white dark:bg-gray-800 shadow-sm z-10 py-2 px-4 flex-shrink-0 border-b border-gray-200 dark:border-gray-700/50">
           <div className="flex items-center justify-between">
-             {/* Hamburger Menu Button */}
+             {/* --- NEW: Mobile Hamburger Button (in Header) --- */}
              <button
-               onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-               className="p-2 rounded-md text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-indigo-500 dark:hover:text-indigo-400 transition-all duration-150 ease-in-out lg:hidden group"
-               aria-label="Toggle sidebar"
+                onClick={() => setIsSidebarOpen(true)} // Only opens sidebar
+                className="p-2 rounded-md text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-indigo-500 dark:hover:text-indigo-400 lg:hidden" // Visible only below lg breakpoint
+                aria-label="Open Menu"
              >
-               <Menu className="h-5 w-5 transition-transform duration-150 ease-in-out group-hover:scale-110" />
+                <Menu className="h-5 w-5" />
              </button>
+             {/* --- End Mobile Hamburger Button --- */}
 
-             {/* Spacer */}
-             <div className="hidden lg:block w-8"></div>
-
-            {/* Model Select */}
-            <div className="flex items-center space-x-4 flex-shrink min-w-0"> {/* Allow shrinking */}
-              <div className="flex items-center flex-shrink min-w-0 mx-2">
-                <label htmlFor="modelSelect" className="text-sm font-medium mr-2 flex-shrink-0 text-gray-600 dark:text-gray-400">Model:</label>
+            {/* Model Select - Remove label, center alignment might need adjustment */}
+            <div className="flex items-center flex-shrink min-w-0 lg:ml-0 ml-2"> {/* Add ml-2 for spacing on mobile */}
+                {/* Removed label */}
+                <div className="relative flex-shrink min-w-0">
                 <select
                   id="modelSelect"
-                  className="text-sm border border-gray-300 dark:border-gray-600 rounded-md p-1 bg-white dark:bg-gray-700 truncate focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
+                    // Added font-medium, adjusted padding slightly
+                    className="text-sm font-medium rounded-md py-1.5 pl-3 pr-8 bg-gray-100 dark:bg-gray-700/50 hover:bg-gray-200 dark:hover:bg-gray-600/60 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 appearance-none truncate cursor-pointer transition-colors" 
                   value={currentModel}
                   onChange={e => setCurrentModel(e.target.value)}
+                    title={models.find(m => m.id === currentModel)?.name || currentModel} 
                 >
                   {models.map(m => (
-                    <option key={m.id} value={m.id}>
+                      <option key={m.id} value={m.id} title={m.name}>
                       {m.name}
                     </option>
                   ))}
                 </select>
+                  {/* Custom Arrow Indicator */}
+                  <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-500 dark:text-gray-400">
+                    <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/></svg>
+                  </div>
               </div>
             </div>
             
