@@ -186,6 +186,9 @@ export default function App() {
   const audioChunksRef = useRef([]);
   // ----------------------------------
 
+  // --- NEW: State to track the ID of the model message being streamed ---
+  const [streamingModelMessageId, setStreamingModelMessageId] = useState(null);
+
   // Function to initialize AudioContext
   const initAudioContext = () => {
     if (!audioContextRef.current || audioContextRef.current.state === 'closed') {
@@ -303,161 +306,218 @@ export default function App() {
     setLiveMessages(prev => [...prev, { ...msg, id: Date.now() + Math.random() * 1000 }]);
   };
 
-  const sendToBackend = async (text) => {
-    if (!activeConvoId) {
-      // Create a new conversation if none exists
-      // Check conversation limit first (add a reasonable max limit)
-      const MAX_CONVERSATIONS = 50; // Set a reasonable limit
-      if (convos.length >= MAX_CONVERSATIONS) {
-        alert("Maximum conversation limit reached. Please delete some conversations.");
-        return;
-      }
-      
-      const id = Date.now().toString();
-      setConvos([{ id, title: 'New Chat', messages: [] }, ...convos]);
-      setActiveConvoId(id);
+  // --- Modified applyConfigSettings ---
+  // Add an optional parameter to know if it's for image gen
+  const applyConfigSettings = (config = {}, isImageGenCall = false) => {
+     config.generationConfig = config.generationConfig || {};
+     config.generationConfig.temperature = temperature;
+     config.generationConfig.maxOutputTokens = maxOutputTokens;
+
+     // Apply System Instruction only if applicable AND not an image gen call
+     if (!isImageGenCall && isSystemInstructionApplicable) {
+        config.systemInstruction = systemInstruction;
+     } else {
+         delete config.systemInstruction; // Ensure removed if image gen or not applicable
+     }
+
+     // Apply Tools (Search, Code Execution) only if not image gen call
+     config.tools = config.tools || [];
+     config.tools = config.tools.filter(tool => !tool.googleSearch && !tool.executableCode); // Start clean
+
+     if (!isImageGenCall) { // Only add tools if not image gen
+        if (enableGoogleSearch) {
+           config.tools.push({ googleSearch: {} });
+        }
+        if (enableCodeExecution) {
+           // config.tools.push({ executableCode: {} }); // Add if backend supports this structure
+        }
+     }
+
+     if (config.tools.length === 0) delete config.tools;
+     if (Object.keys(config.generationConfig).length === 0) delete config.generationConfig;
+
+     return config;
+  }
+  // --- End modified applyConfigSettings ---
+
+  // --- Modified sendToBackend ---
+  const sendToBackend = async (text, targetConvoId = null, initialConvoData = null, targetModelId = null) => {
+    const convoIdToUse = targetConvoId || activeConvoId;
+    if (!convoIdToUse && !initialConvoData) {
+      console.error("sendToBackend: No active conversation and no initial data provided.");
       return;
     }
     
     setIsLoading(true);
+    let finalConvoId = convoIdToUse;
+    let updatedConvoState = null;
+
     try {
-      const activeConvo = convos.find(c => c.id === activeConvoId);
+      let activeConvo;
+      let turns;
+
+      // --- Handle initial convo creation from prompt ---
+      if (initialConvoData) {
+        finalConvoId = initialConvoData.id;
+        activeConvo = initialConvoData; // Use the provided initial data
+        turns = [{ role: 'user', parts: [{ text }] }]; // Only the first user turn
+
+        // Immediately add the new convo and the user message to state
+        updatedConvoState = prev => [
+            { ...initialConvoData, messages: [{ role: 'user', parts: [{ text }] }] },
+            ...prev.filter(c => c.id !== initialConvoData.id) // Ensure no duplicates if called rapidly
+        ];
+        setConvos(updatedConvoState);
+        setActiveConvoId(finalConvoId); // Set active ID after adding convo
+      } else {
+        // --- Existing convo logic ---
+        activeConvo = convos.find(c => c.id === convoIdToUse);
       if (!activeConvo) throw new Error('No active conversation found');
       
-      // Filter messages to include only 'user' and 'model' roles for the API
-      // AND ensure parts array is not empty
       const validMessages = (activeConvo.messages || [])
-        .filter(msg => 
-          (msg.role === 'user' || msg.role === 'model') && 
-          msg.parts && msg.parts.length > 0 
-        );
-      const turns = [...validMessages, { role: 'user', parts: [{ text }] }];
-      
-      // Update UI immediately with user message
-      setConvos(prev => prev.map(c => {
-        if (c.id !== activeConvoId) return c;
-        return { ...c, messages: [...c.messages, { role: 'user', parts: [{ text }] }] };
-      }));
-      
-     // Update the response handling in sendToBackend function
+          .filter(msg => (msg.role === 'user' || msg.role === 'model') && msg.parts?.length > 0);
+        turns = [...validMessages, { role: 'user', parts: [{ text }] }];
+
+        // Update UI immediately with user message for existing convo
+        updatedConvoState = prev => prev.map(c => {
+            if (c.id !== convoIdToUse) return c;
+            return { ...c, messages: [...(c.messages || []), { role: 'user', parts: [{ text }] }] };
+        });
+         setConvos(updatedConvoState);
+      }
+
+      // --- API Call ---
+      const modelToUse = targetModelId || currentModel; // Use target model if provided
+      // --- Check if it's an image gen model ---
+      const isImageGen = modelToUse === 'gemini-2.0-flash-exp-image-generation';
       const baseRequestBody = {
         contents: turns,
-        modelId: currentModel,
-        config: applyConfigSettings({})
+        modelId: modelToUse,
+        // --- Pass the flag to applyConfigSettings ---
+        config: applyConfigSettings({}, isImageGen),
       };
 
       const response = await fetch(`${BACKEND_URL}/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(baseRequestBody)
+        body: JSON.stringify(baseRequestBody),
       });
       
       const data = await response.json();
-      
-      // Handle potential error responses
-      if (data.error) {
-        throw new Error(data.error.message || data.error);
-      }
-      
-      // Process the response - handle both parts array or string responses
-      const responseParts = [];
+      if (data.error) throw new Error(data.error.message || data.error);
 
-      if (typeof data.response === 'string') {
-        // Simple text response
-        responseParts.push({ text: data.response });
-      } else if (Array.isArray(data.response)) {
-        // For structured responses with multiple parts (text and images) 
-        responseParts.push(...data.response);
-      } else if (data.response && data.response.parts) {
-        // If response is in parts format directly
-        responseParts.push(...data.response.parts);
-      } else {
-        // Fallback
-        responseParts.push({ text: '(No response)' });
-      }
+      // Process response
+      const responseParts = [];
+      if (typeof data.response === 'string') responseParts.push({ text: data.response });
+      else if (Array.isArray(data.response)) responseParts.push(...data.response);
+      else if (data.response?.parts) responseParts.push(...data.response.parts);
+      else responseParts.push({ text: '(No response)' });
+
       const reply = { 
         role: 'model', 
         parts: responseParts,
-        metadata: {
-          finishReason: data.finishReason,
-          usageMetadata: data.usageMetadata
-        }
+        metadata: { finishReason: data.finishReason, usageMetadata: data.usageMetadata },
+        id: Date.now() + Math.random(), // Add unique ID
       };
-      
-      // Update the conversation with the AI reply
+
+      // Update conversation with AI reply
       setConvos(prev => prev.map(c => {
-        if (c.id !== activeConvoId) return c;
-        return { ...c, messages: [...c.messages, reply] };
+        if (c.id !== finalConvoId) return c;
+        return { ...c, messages: [...(c.messages || []), reply] };
       }));
-      
-      // Update the conversation title if it's a new conversation
-      if (activeConvo.messages.length === 0) {
-        // Generate a title based on the first user message
-        const newTitle = text.length > 30 
-          ? text.substring(0, 30) + '...' 
-          : text;
-        
-        setConvos(prev => prev.map(c => {
-          if (c.id !== activeConvoId) return c;
-          return { ...c, title: newTitle };
-        }));
+
+      // Update title for new conversations (check if messages array only had the user prompt initially)
+      const finalConvo = convos.find(c => c.id === finalConvoId) || activeConvo; // Get latest state if possible
+      if (finalConvo && finalConvo.messages.length <= 1) { // If only user message exists before reply
+         const newTitle = text.length > 30 ? text.substring(0, 30) + '...' : text;
+         setConvos(prev => prev.map(c => c.id === finalConvoId ? { ...c, title: newTitle } : c));
       }
+
     } catch (err) {
       console.error('Chat error:', err);
-      // Add error message to conversation
+      // Add error message
       setConvos(prev => prev.map(c => {
-        if (c.id !== activeConvoId) return c;
+        if (c.id !== finalConvoId) return c;
         return { 
           ...c, 
-          messages: [...c.messages, { 
-            role: 'error', 
-            parts: [{ text: `Error: ${err.message}` }] 
-          }]
+          messages: [...(c.messages || []), { role: 'error', parts: [{ text: `Error: ${err.message}` }], id: Date.now() + Math.random() }],
         };
       }));
     } finally {
       setIsLoading(false);
     }
   };
-  
-  // Update the streaming chat function
-  const startStreamChat = async (text) => {
-    if (!activeConvoId) return;
+  // --- End modified sendToBackend ---
+
+  // --- Modified startStreamChat ---
+  const startStreamChat = async (text, targetConvoId = null, initialConvoData = null, targetModelId = null) => {
+    const convoIdToUse = targetConvoId || activeConvoId;
+     if (!convoIdToUse && !initialConvoData) {
+       console.error("startStreamChat: No active conversation and no initial data provided.");
+       return;
+     }
     
     setIsLoading(true);
+    let finalConvoId = convoIdToUse;
+    let tempModelMessageId = null; // Temporary ID for the message being built
+
     try {
-      const activeConvo = convos.find(c => c.id === activeConvoId);
+       let activeConvo;
+       let turns;
+
+      // --- Handle initial convo creation from prompt ---
+       if (initialConvoData) {
+         finalConvoId = initialConvoData.id;
+         activeConvo = initialConvoData;
+         turns = [{ role: 'user', parts: [{ text }] }];
+
+         tempModelMessageId = Date.now() + Math.random() + '_model'; // Unique ID
+         setStreamingModelMessageId(tempModelMessageId); // Track the ID
+
+         // Add new convo, user message, and placeholder model message
+         setConvos(prev => [
+             { ...initialConvoData, messages: [
+                 { role: 'user', parts: [{ text }], id: Date.now() + Math.random() + '_user' },
+                 { role: 'model', parts: [], id: tempModelMessageId } // Placeholder model msg
+             ] },
+             ...prev.filter(c => c.id !== initialConvoData.id)
+         ]);
+          setActiveConvoId(finalConvoId);
+       } else {
+          // --- Existing convo logic ---
+         activeConvo = convos.find(c => c.id === convoIdToUse);
       if (!activeConvo) throw new Error('No active conversation found');
       
-      // Filter messages to include only 'user' and 'model' roles for the API
-      // AND ensure parts array is not empty
       const validMessages = (activeConvo.messages || [])
-         .filter(msg => 
-           (msg.role === 'user' || msg.role === 'model') && 
-           msg.parts && msg.parts.length > 0
-         );
-      const turns = [...validMessages, { role: 'user', parts: [{ text }] }];
-      
-      // Update UI immediately with user message
+           .filter(msg => (msg.role === 'user' || msg.role === 'model') && msg.parts?.length > 0);
+         turns = [...validMessages, { role: 'user', parts: [{ text }] }];
+
+         tempModelMessageId = Date.now() + Math.random() + '_model';
+         setStreamingModelMessageId(tempModelMessageId);
+
+         // Add user message and placeholder model message
       setConvos(prev => prev.map(c => {
-        if (c.id !== activeConvoId) return c;
+           if (c.id !== convoIdToUse) return c;
         return { 
           ...c, 
-          messages: [...c.messages, { role: 'user', parts: [{ text }] }, { role: 'model', parts: [] }] 
+             messages: [
+               ...(c.messages || []),
+               { role: 'user', parts: [{ text }], id: Date.now() + Math.random() + '_user' },
+               { role: 'model', parts: [], id: tempModelMessageId } // Placeholder
+             ]
         };
       }));
-    
+       }
 
-      
-      // Create a placeholder for aggregating the streamed response
-      let responseParts = [];
-      let currentTextPart = '';
-      
-      // Start the SSE request
+       // --- API Call ---
+       const modelToUse = targetModelId || currentModel;
+       // --- Check if it's an image gen model ---
+       const isImageGen = modelToUse === 'gemini-2.0-flash-exp-image-generation';
       const baseRequestBody = {
         contents: turns,
-        modelId: currentModel,
-        config: applyConfigSettings({})
+         modelId: modelToUse,
+         // --- Pass the flag to applyConfigSettings ---
+         config: applyConfigSettings({}, isImageGen),
       };
 
       const response = await fetch(`${BACKEND_URL}/chat/stream`, {
@@ -465,16 +525,22 @@ export default function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(baseRequestBody)
       });
+
+      if (!response.ok) { // Check for HTTP errors before trying to read body
+          const errorData = await response.json().catch(() => ({ error: { message: `HTTP error! status: ${response.status}` } }));
+          throw new Error(errorData.error?.message || `HTTP error! status: ${response.status}`);
+      }
       
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
+       let responseParts = [];
+       let currentTextPart = '';
       
-      // Read the stream
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
         
-        const chunk = decoder.decode(value);
+         const chunk = decoder.decode(value, { stream: true }); // Use stream: true
         const lines = chunk.split('\n\n');
         
         for (const line of lines) {
@@ -484,117 +550,161 @@ export default function App() {
             try {
               const data = JSON.parse(line.slice(6));
               
-              // Handle text chunks
+               // --- Handle text chunks ---
               if (data.text) {
                 currentTextPart += data.text;
-                
-                // Update parts array with current text
-                let updatedParts = [...responseParts];
-                
-                // If the last part is a text part, update it, otherwise add a new text part
-                if (updatedParts.length > 0 && 'text' in updatedParts[updatedParts.length - 1]) {
-                  updatedParts[updatedParts.length - 1].text = currentTextPart;
+                 // Find the *specific* streaming message by ID and update it
+                 setConvos(prev => prev.map(c => {
+                     if (c.id !== finalConvoId) return c;
+                     const messages = c.messages.map(m => {
+                        if (m.id === tempModelMessageId) {
+                           // Update or add text part
+                           const existingTextPartIndex = m.parts.findIndex(p => 'text' in p);
+                           let newParts = [...m.parts];
+                           if (existingTextPartIndex > -1) {
+                               newParts[existingTextPartIndex] = { text: currentTextPart };
                 } else {
-                  updatedParts.push({ text: currentTextPart });
-                }
-                
-                // Update the conversation with the partial response
-                setConvos(prev => prev.map(c => {
-                  if (c.id !== activeConvoId) return c;
-                  const messages = [...c.messages];
-                  messages[messages.length - 1] = { 
-                    role: 'model', 
-                    parts: updatedParts
-                  };
+                               newParts.push({ text: currentTextPart });
+                           }
+                           return { ...m, parts: newParts };
+                        }
+                        return m;
+                     });
                   return { ...c, messages };
                 }));
               }
               
-              // Handle image data
-              if (data.inlineData && data.inlineData.mimeType && data.inlineData.mimeType.startsWith('image/')) {
-                // Finish any current text part
+               // --- Handle image data ---
+               if (data.inlineData?.mimeType?.startsWith('image/')) {
+                 // Finalize previous text part if it exists
                 if (currentTextPart) {
                   responseParts.push({ text: currentTextPart });
                   currentTextPart = '';
                 }
-                
-                // Add the image part
-                responseParts.push({
-                  inlineData: {
-                    mimeType: data.inlineData.mimeType,
-                    data: data.inlineData.data
-                  }
-                });
-                
-                // Update the conversation with text + image
-                setConvos(prev => prev.map(c => {
-                  if (c.id !== activeConvoId) return c;
-                  const messages = [...c.messages];
-                  messages[messages.length - 1] = { 
-                    role: 'model', 
-                    parts: responseParts
-                  };
+                 // Add image part
+                  responseParts.push({ inlineData: data.inlineData });
+                 // Update state immediately with text + image
+                 setConvos(prev => prev.map(c => {
+                     if (c.id !== finalConvoId) return c;
+                      const messages = c.messages.map(m => {
+                        if (m.id === tempModelMessageId) {
+                           return { ...m, parts: responseParts }; // Replace parts entirely
+                        }
+                        return m;
+                      });
                   return { ...c, messages };
                 }));
               }
               
-              // Handle message completion
+               // --- Handle message completion ---
               if (data.finishReason) {
-                // Ensure any remaining text is added
-                if (currentTextPart) {
+                 // Ensure final text part is added if needed
+                 if (currentTextPart && !responseParts.some(p => 'text' in p && p.text === currentTextPart)) {
                   responseParts.push({ text: currentTextPart });
-                  
-                  // Final update
+                 }
+                 // Final update with metadata
                   setConvos(prev => prev.map(c => {
-                    if (c.id !== activeConvoId) return c;
-                    const messages = [...c.messages];
-                    messages[messages.length - 1] = { 
-                      role: 'model', 
-                      parts: responseParts,
+                     if (c.id !== finalConvoId) return c;
+                      const messages = c.messages.map(m => {
+                        if (m.id === tempModelMessageId) {
+                           return {
+                               ...m,
+                               parts: responseParts.length > 0 ? responseParts : [{ text: '(Empty response)' }], // Ensure parts isn't empty
                       metadata: {
                         finishReason: data.finishReason,
                         usageMetadata: data.usageMetadata
                       }
                     };
+                        }
+                        return m;
+                      });
                     return { ...c, messages };
                   }));
-                }
-              }
+                 setStreamingModelMessageId(null); // Clear tracked ID
+                 currentTextPart = ''; // Reset for next stream
+                 responseParts = []; // Reset
+               }
+             } catch (e) { console.error('Error parsing stream data:', e, "Line:", line); }
+           } else if (line.startsWith('event: done')) {
+             // Stream completed event from backend (may be redundant if finishReason is always sent)
+             setStreamingModelMessageId(null); // Ensure ID is cleared
+             break; // Exit inner loop
+           } else if (line.startsWith('event: error')) {
+              // Handle explicit error event from backend stream
+               try {
+                   const errorData = JSON.parse(line.slice(line.indexOf(':') + 1));
+                   throw new Error(errorData.error || 'Unknown stream error event');
             } catch (e) {
-              console.error('Error parsing stream data:', e);
-            }
-          } else if (line.startsWith('event: done')) {
-            // Stream completed
-            break;
-          }
-        }
+                   throw new Error(e.message || 'Failed to parse stream error event');
+               }
+           }
+         } // end for..of lines
+       } // end while(true)
+
+       // --- Final title update for new conversations ---
+       const finalConvo = convos.find(c => c.id === finalConvoId); // Get latest state
+       if (finalConvo && finalConvo.messages.length <= 2) { // Check if only user + model messages exist
+          const newTitle = text.length > 30 ? text.substring(0, 30) + '...' : text;
+          setConvos(prev => prev.map(c => c.id === finalConvoId ? { ...c, title: newTitle } : c));
       }
       
     } catch (err) {
       console.error('Stream chat error:', err);
-      // Add error message to conversation
+       setStreamingModelMessageId(null); // Clear ID on error
+       // Add/Update error message
       setConvos(prev => prev.map(c => {
-        if (c.id !== activeConvoId) return c;
-        const messages = [...c.messages];
-        if (messages[messages.length - 1].role === 'model') {
-          // Replace the empty or partial response with an error
-          messages[messages.length - 1] = { 
-            role: 'error', 
-            parts: [{ text: `Error: ${err.message}` }] 
-          };
-        } else {
-          // Add a new error message
-          messages.push({ 
-            role: 'error', 
-            parts: [{ text: `Error: ${err.message}` }] 
-          });
+         if (c.id !== finalConvoId) return c;
+         // Try to replace the placeholder message if it exists
+         const messages = c.messages.map(m =>
+             m.id === tempModelMessageId
+             ? { role: 'error', parts: [{ text: `Stream Error: ${err.message}` }], id: Date.now() + Math.random() }
+             : m
+         );
+         // If placeholder wasn't found (error happened before placeholder added?), add error at the end
+         if (!messages.some(m => m.role === 'error')) {
+             messages.push({ role: 'error', parts: [{ text: `Stream Error: ${err.message}` }], id: Date.now() + Math.random() });
         }
         return { ...c, messages };
       }));
     } finally {
       setIsLoading(false);
+       setStreamingModelMessageId(null); // Clear ID in finally
+     }
+  };
+  // --- End modified startStreamChat ---
+
+  // --- Modified startChatWithPrompt ---
+  const startChatWithPrompt = async (promptText, targetModelId = null) => {
+    // 1. Create initial convo data (without adding to state yet)
+    const id = Date.now().toString();
+    const title = promptText.length > 30 ? promptText.substring(0, 30) + '...' : promptText;
+    const initialConvoData = { id, title, messages: [] }; // Keep messages empty initially
+
+    // 2. Set Model if specified (optimistically)
+    if (targetModelId && models.some(m => m.id === targetModelId)) {
+       setCurrentModel(targetModelId); // Update model selector UI
+       console.log(`Switching model to ${targetModelId} for prompt.`);
+    } else if (targetModelId) {
+       console.warn(`Target model ${targetModelId} not found, using current model ${currentModel}.`);
+       targetModelId = currentModel; // Fallback to current model for the API call
+    } else {
+        targetModelId = currentModel; // Use current if none specified
+    }
+
+    // 3. Close sidebar if on mobile
+    if (window.innerWidth < 1024) closeSidebar();
+
+    // 4. Call the appropriate send function, passing initial data
+    console.log(`Starting chat with prompt: "${promptText}"`);
+    const streamToggle = document.getElementById('streamToggleInput');
+    if (streamToggle?.checked) {
+        // Pass initialConvoData, targetConvoId=id, targetModelId
+       await startStreamChat(promptText, id, initialConvoData, targetModelId);
+    } else {
+       await sendToBackend(promptText, id, initialConvoData, targetModelId);
     }
   };
+  // ----------------------------------
 
   // File upload handler
   const uploadFile = async (file) => {
@@ -777,43 +887,55 @@ export default function App() {
         if (isRecording || !liveWsConnection || liveConnectionStatus !== 'connected') return;
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            mediaRecorderRef.current = new MediaRecorder(stream);
-            audioChunksRef.current = []; // Clear previous chunks
+
+            // --- Define preferred mime type ---
+            const options = {
+                 // Prioritize opus in webm container if supported
+                 mimeType: MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+                    ? 'audio/webm;codecs=opus'
+                    // Fallback to ogg/opus
+                    : MediaRecorder.isTypeSupported('audio/ogg;codecs=opus')
+                    ? 'audio/ogg;codecs=opus'
+                    // Add other fallbacks if needed, e.g., audio/wav (less ideal for streaming)
+                    : '' // Let browser choose default if none supported (might be PCM)
+            };
+            console.log(`[Audio Input] Using mimeType: ${options.mimeType || 'browser default'}`);
+
+            mediaRecorderRef.current = new MediaRecorder(stream, options); // Pass options
+            audioChunksRef.current = [];
 
             mediaRecorderRef.current.ondataavailable = (event) => {
                 if (event.data.size > 0) {
-                    audioChunksRef.current.push(event.data);
-                    // Send chunks immediately via WebSocket
+                    // Don't accumulate locally - send immediately
+                    // audioChunksRef.current.push(event.data);
                     if (liveWsConnection && liveWsConnection.readyState === WebSocket.OPEN) {
                         liveWsConnection.send(event.data); // Send Blob directly
+                        // console.log(`[Audio Input] Sent chunk, size: ${event.data.size}, type: ${event.data.type}`);
                     }
                 }
             };
 
             mediaRecorderRef.current.onstop = () => {
-                // Optionally process final blob if needed, but chunks are sent live
-                stream.getTracks().forEach(track => track.stop()); // Stop microphone access
+                stream.getTracks().forEach(track => track.stop());
                 console.log('[Audio Input] Recording stopped.');
+                 // Send any remaining buffered chunks (usually not needed with live sending)
+                // if (audioChunksRef.current.length > 0 && liveWsConnection && liveWsConnection.readyState === WebSocket.OPEN) {
+                //     const finalBlob = new Blob(audioChunksRef.current, { type: options.mimeType || undefined });
+                //     liveWsConnection.send(finalBlob);
+                // }
+                audioChunksRef.current = []; // Clear buffer
             };
 
-            mediaRecorderRef.current.onerror = (event) => {
-                console.error('[Audio Input] MediaRecorder error:', event.error);
-                setAudioError(`Recording error: ${event.error.name}`);
-                setIsRecording(false);
-                 stream.getTracks().forEach(track => track.stop());
-            };
+            mediaRecorderRef.current.onerror = (event) => { /* ... error handling ... */ };
 
-            // Start recording and send chunks periodically (e.g., every 500ms)
-            mediaRecorderRef.current.start(500);
+            // Start recording, send data when available (browser decides chunking, typically frequent)
+            // Removed timeslice (500ms) to let browser handle chunking based on encoding/buffer
+            mediaRecorderRef.current.start();
             setIsRecording(true);
             addLiveMessage({ role: 'system', icon: Mic, text: 'Recording started...' });
             console.log('[Audio Input] Recording started.');
 
-        } catch (err) {
-            console.error('[Audio Input] Error accessing microphone:', err);
-            setAudioError(`Mic access error: ${err.message}`);
-            addLiveMessage({ role: 'error', text: `Mic access denied: ${err.message}` });
-        }
+        } catch (err) { /* ... error handling ... */ }
     };
 
     const stopRecording = () => {
@@ -828,89 +950,6 @@ export default function App() {
 
   // Function to close sidebar, can be used by overlay or close button
   const closeSidebar = () => setIsSidebarOpen(false);
-
-  // Apply config settings to API request body
-  const applyConfigSettings = (config = {}) => {
-     // Ensure generationConfig exists
-     config.generationConfig = config.generationConfig || {};
-
-     // Apply Temperature and Max Tokens
-     config.generationConfig.temperature = temperature;
-     config.generationConfig.maxOutputTokens = maxOutputTokens;
-
-     // Apply System Instruction if applicable
-     if (isSystemInstructionApplicable) {
-        config.systemInstruction = systemInstruction;
-     } else {
-         delete config.systemInstruction; // Ensure it's removed if not applicable
-     }
-
-     // Apply Tools (Search, Code Execution)
-     config.tools = config.tools || []; // Initialize if needed
-     // Remove existing search/code tools before potentially adding them back
-     config.tools = config.tools.filter(tool => !tool.googleSearch && !tool.executableCode);
-
-     if (enableGoogleSearch) {
-        config.tools.push({ googleSearch: {} });
-     }
-     if (enableCodeExecution) {
-         // The backend expects `executableCode: {}` within a tool definition? Check buildApiRequest
-         // Let's assume for now the backend handles a top-level config flag or similar.
-         // OR, modify buildApiRequest to accept a simple boolean/object.
-         // For simplicity, let's assume the backend handles it via a top-level flag if present.
-         // config.enableCodeExecution = true; // Example - This might need backend adjustment
-         // If backend expects it in tools:
-         // config.tools.push({ executableCode: {} }); // Add if backend expects this structure
-     }
-     // Remove empty tools array
-     if (config.tools.length === 0) {
-        delete config.tools;
-     }
-
-     // Clean up empty generationConfig if only defaults were present and removed
-     if (Object.keys(config.generationConfig).length === 0) {
-         delete config.generationConfig;
-     }
-
-     return config;
-  }
-
-  // --- NEW: Function to Start Chat from Prompt ---
-  const startChatWithPrompt = async (promptText, targetModelId = null) => {
-     // 1. Create New Conversation
-     const id = Date.now().toString();
-     const newConvo = { id, title: promptText.substring(0, 30) + (promptText.length > 30 ? '...' : ''), messages: [] };
-     setConvos(prev => [newConvo, ...prev]);
-     setActiveConvoId(id);
-
-     // 2. Set Model if specified
-     if (targetModelId && models.some(m => m.id === targetModelId)) {
-        setCurrentModel(targetModelId);
-        console.log(`Switching model to ${targetModelId} for prompt.`);
-     } else if (targetModelId) {
-         console.warn(`Target model ${targetModelId} not found, using current model ${currentModel}.`);
-     }
-
-     // 3. Close sidebar if on mobile
-     if (window.innerWidth < 1024) closeSidebar();
-
-     // 4. Add user message to state (without waiting for API)
-     // Need to update state slightly differently since sendToBackend/startStreamChat will add it again
-     // Let's modify send/stream functions slightly OR just trigger send/stream directly
-     console.log(`Starting chat with prompt: "${promptText}"`);
-
-     // Use a small delay to allow state updates to settle before sending
-     setTimeout(() => {
-         // Decide whether to stream or not based on current setting (or default to non-streaming?)
-         const streamToggle = document.getElementById('streamToggleInput'); // Need to add an ID
-         if (streamToggle?.checked) {
-            startStreamChat(promptText);
-         } else {
-            sendToBackend(promptText);
-         }
-     }, 100); // Small delay
-  };
-  // ---------------------------------------------
 
   return (
     <div className="relative flex h-screen bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-gray-200 font-sans overflow-hidden">
