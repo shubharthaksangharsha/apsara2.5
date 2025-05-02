@@ -256,30 +256,85 @@ app.post('/chat', async (req,res)=>{
   }
 });
 
-app.post('/chat/stream', async (req,res)=>{
-  const modelId=req.body.modelId||'gemini-2.0-flash';
-  try {
-    res.writeHead(200, { 'Content-Type':'text/event-stream' });
-    // Simplified: forward SSE from SDK
-    const apiRequest=buildApiRequest(req.body);
-    const stream=await ai.models.generateContentStream(apiRequest);
-    let agg="";
-    for await (const chunk of stream) {
-      if (chunk.text) {
-        agg+=chunk.text;
-        res.write(`data: ${JSON.stringify({ text:chunk.text, safety:chunk.candidates[0].safetyRatings })}\n\n`);
-      }
-      if (chunk.functionCalls) res.write(`event: function_call\ndata: ${JSON.stringify({ functionCalls:chunk.functionCalls })}\n\n`);
-      if (chunk.candidates[0].groundingMetadata) res.write(`event: grounding\ndata: ${JSON.stringify(chunk.candidates[0].groundingMetadata)}\n\n`);
+app.post('/chat/stream', async (req, res) => {
+    const modelId = req.body.modelId || 'gemini-2.0-flash';
+    try {
+        res.writeHead(200, {
+            'Content-Type': 'text/event-stream',
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive',
+        });
+
+        const apiRequest = buildApiRequest(req.body);
+        const stream = await ai.models.generateContentStream(apiRequest);
+
+        // Iterate through the stream chunks
+        for await (const chunk of stream) {
+            // --- UPDATED: Process parts within the chunk ---
+            const candidate = chunk.candidates?.[0];
+            if (!candidate) continue; // Skip if no candidate
+
+            // Process parts if they exist
+            if (candidate.content?.parts) {
+                for (const part of candidate.content.parts) {
+                    if (part.text) {
+                        // Send text part
+                        res.write(`data: ${JSON.stringify({ text: part.text })}\n\n`);
+                    } else if (part.inlineData) {
+                        // Send inlineData part (e.g., image)
+                        res.write(`data: ${JSON.stringify({ inlineData: part.inlineData })}\n\n`);
+                    }
+                    // Add handling for other part types if needed (e.g., functionCall, executableCode)
+                }
+            }
+            // --- End Updated Part Processing ---
+
+            // Send function calls if present (may be separate from parts in some chunks)
+            if (chunk.functionCalls) {
+                 // Note: The frontend needs logic to handle this event if function calling is used with streaming
+                res.write(`event: function_call\ndata: ${JSON.stringify({ functionCalls: chunk.functionCalls })}\n\n`);
+            }
+
+            // Send grounding metadata if present
+            if (candidate.groundingMetadata) {
+                 // Note: Frontend might need logic for this event
+                res.write(`event: grounding\ndata: ${JSON.stringify(candidate.groundingMetadata)}\n\n`);
+            }
+
+            // Check for finish reason (often comes in the last chunk)
+            if (candidate.finishReason && candidate.finishReason !== 'FINISH_REASON_UNSPECIFIED') {
+                 // Send final metadata including usage
+                 const finalData = {
+                    finishReason: candidate.finishReason,
+                    usageMetadata: chunk.usageMetadata, // Usage metadata usually comes with the last chunk
+                    // Include safety ratings if needed
+                    safetyRatings: candidate.safetyRatings 
+                 };
+                 res.write(`data: ${JSON.stringify(finalData)}\n\n`);
+            }
+        }
+
+        // Signal stream completion explicitly
+        res.write(`event: done\ndata: ${JSON.stringify({ message: "Stream ended" })}\n\n`);
+        res.end();
+
+    } catch (e) {
+        console.error("Error in /chat/stream:", e);
+        // Try to send an error event if headers not fully sent
+        if (!res.writableEnded) {
+            try {
+                res.write(`event: error\ndata: ${JSON.stringify({ error: e.message || 'Unknown stream error' })}\n\n`);
+                res.end();
+            } catch (writeError) {
+                console.error("Error sending stream error event:", writeError);
+                res.end(); // Force end if even error writing fails
+            }
+        }
+        // If headers weren't even sent, we can send a normal HTTP error
+        else if (!res.headersSent) {
+             res.status(500).json({ error: e.message });
+        }
     }
-    // final
-    res.write(`event: done\ndata: ${JSON.stringify({ response:agg })}\n\n`);
-    res.end();
-  } catch (e) {
-    console.error(e);
-    if (!res.headersSent) res.status(500).json({ error:e.message });
-    else { res.write(`event:error\ndata:${JSON.stringify({error:e.message})}\n\n`); res.end(); }
-  }
 });
 
 app.post('/chat/function-result', async (req,res)=>{
@@ -369,8 +424,8 @@ async function handleLiveConnection(ws, req) {
            requestedModality = Modality.AUDIO;
            console.log("[Live Backend] Requested Modality: AUDIO");
        } else { // Default to TEXT if not AUDIO or missing
-           requestedModality = Modality.TEXT;
-           console.log("[Live Backend] Requested Modality: TEXT");
+            requestedModality = Modality.TEXT;
+            console.log("[Live Backend] Requested Modality: TEXT");
        }
        // --------------------------
 
@@ -468,7 +523,7 @@ async function handleLiveConnection(ws, req) {
                     if (evt.serverContent?.modelTurn?.parts?.some(p => p.inlineData)) {
                         console.log(`[Live Backend] Google <${sessionIdShort}> 'onmessage' [${messageType}]: Received chunk with media data.`);
                     } else {
-                        console.log(`[Live Backend] Google <${sessionIdShort}> 'onmessage' [${messageType}]:`, JSON.stringify(evt).substring(0, 150) + "...");
+                    console.log(`[Live Backend] Google <${sessionIdShort}> 'onmessage' [${messageType}]:`, JSON.stringify(evt).substring(0, 150) + "...");
                     }
 
 
@@ -528,7 +583,7 @@ async function handleLiveConnection(ws, req) {
                  ws.close(1011, "Backend connection error to Google");
              }
          } catch(e){ console.error("[Live Backend] Error handling SDK connection error:", e); }
-         return;
+        return;
     }
 
     // ... session validation checks ...
