@@ -258,7 +258,7 @@ app.post('/chat', async (req,res)=>{
 
 app.post('/chat/stream', async (req, res) => {
     const modelId = req.body.modelId || 'gemini-2.0-flash';
-    try {
+  try {
         res.writeHead(200, {
             'Content-Type': 'text/event-stream',
             'Cache-Control': 'no-cache',
@@ -269,7 +269,7 @@ app.post('/chat/stream', async (req, res) => {
         const stream = await ai.models.generateContentStream(apiRequest);
 
         // Iterate through the stream chunks
-        for await (const chunk of stream) {
+    for await (const chunk of stream) {
             // --- UPDATED: Process parts within the chunk ---
             const candidate = chunk.candidates?.[0];
             if (!candidate) continue; // Skip if no candidate
@@ -283,7 +283,7 @@ app.post('/chat/stream', async (req, res) => {
                     } else if (part.inlineData) {
                         // Send inlineData part (e.g., image)
                         res.write(`data: ${JSON.stringify({ inlineData: part.inlineData })}\n\n`);
-                    }
+      }
                     // Add handling for other part types if needed (e.g., functionCall, executableCode)
                 }
             }
@@ -311,14 +311,14 @@ app.post('/chat/stream', async (req, res) => {
                     safetyRatings: candidate.safetyRatings 
                  };
                  res.write(`data: ${JSON.stringify(finalData)}\n\n`);
-            }
+    }
         }
 
         // Signal stream completion explicitly
         res.write(`event: done\ndata: ${JSON.stringify({ message: "Stream ended" })}\n\n`);
-        res.end();
+    res.end();
 
-    } catch (e) {
+  } catch (e) {
         console.error("Error in /chat/stream:", e);
         // Try to send an error event if headers not fully sent
         if (!res.writableEnded) {
@@ -334,7 +334,7 @@ app.post('/chat/stream', async (req, res) => {
         else if (!res.headersSent) {
              res.status(500).json({ error: e.message });
         }
-    }
+  }
 });
 
 app.post('/chat/function-result', async (req,res)=>{
