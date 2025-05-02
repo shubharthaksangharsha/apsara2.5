@@ -553,142 +553,176 @@ export default function App() {
       
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
-       let responseParts = [];
-       let currentTextPart = '';
+      // --- NEW: Buffer for incomplete lines ---
+      let lineBuffer = ''; 
+      // --- End New Buffer ---
       
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
         
-         const chunk = decoder.decode(value, { stream: true }); // Use stream: true
-        const lines = chunk.split('\n\n');
+        // Append new chunk to buffer
+        lineBuffer += decoder.decode(value, { stream: true }); 
+
+        // --- UPDATED: Process buffer line by line ---
+        let lines = lineBuffer.split('\n\n');
         
-        for (const line of lines) {
+        // Keep the last potentially incomplete line in the buffer
+        lineBuffer = lines.pop() || ''; 
+
+        for (const line of lines) { // Process only complete lines
           if (!line.trim()) continue;
           
+          // --- Process 'data:' events ---
           if (line.startsWith('data: ')) {
+            const jsonData = line.slice(6);
             try {
-              const data = JSON.parse(line.slice(6));
+              const data = JSON.parse(jsonData); // Try parsing the complete line data
               
-               // --- Handle text chunks ---
-              if (data.text) {
-                currentTextPart += data.text;
-                 // Find the *specific* streaming message by ID and update it
-                 setConvos(prev => prev.map(c => {
-                     if (c.id !== finalConvoId) return c;
-                     const messages = c.messages.map(m => {
-                        if (m.id === tempModelMessageId) {
-                           // Update or add text part
-                           const existingTextPartIndex = m.parts.findIndex(p => 'text' in p);
-                           let newParts = [...m.parts];
-                           if (existingTextPartIndex > -1) {
-                               newParts[existingTextPartIndex] = { text: currentTextPart };
-                } else {
-                               newParts.push({ text: currentTextPart });
-                }
-                           return { ...m, parts: newParts };
-                        }
-                        return m;
-                     });
-                  return { ...c, messages };
-                }));
-              }
-              
-               // --- Handle image data ---
-               if (data.inlineData?.mimeType?.startsWith('image/')) {
-                 // Finalize previous text part if it exists
-                if (currentTextPart) {
-                  responseParts.push({ text: currentTextPart });
-                  currentTextPart = '';
-                }
-                 // Add image part
-                  responseParts.push({ inlineData: data.inlineData });
-                 // Update state immediately with text + image
-                setConvos(prev => prev.map(c => {
-                     if (c.id !== finalConvoId) return c;
-                      const messages = c.messages.map(m => {
-                        if (m.id === tempModelMessageId) {
-                           return { ...m, parts: responseParts }; // Replace parts entirely
-                        }
-                        return m;
+              // --- Handle parsed data (text, image, finishReason) ---
+              // (Logic from previous step for updating convos state based on data.text, data.inlineData, data.finishReason goes here)
+              if (data.text || (data.inlineData && data.inlineData.mimeType?.startsWith('image/'))) {
+                   setConvos(prevConvos => prevConvos.map(c => { 
+                      if (c.id !== finalConvoId) return c;
+                      const updatedMessages = c.messages.map(m => {
+                          if (m.id === tempModelMessageId) {
+                              let currentParts = m.parts ? [...m.parts] : []; 
+                              if (data.text) {
+                                  const lastPartIndex = currentParts.length - 1;
+                                  if (lastPartIndex >= 0 && typeof currentParts[lastPartIndex] === 'object' && 'text' in currentParts[lastPartIndex]) {
+                                      currentParts[lastPartIndex] = { ...currentParts[lastPartIndex], text: currentParts[lastPartIndex].text + data.text };
+                                  } else {
+                                      currentParts.push({ text: data.text });
+                                  }
+                              }
+                              if (data.inlineData && data.inlineData.mimeType?.startsWith('image/')) {
+                                  currentParts.push({ inlineData: data.inlineData });
+                              }
+                              return { ...m, parts: currentParts };
+                          }
+                          return m; 
                       });
-                  return { ...c, messages };
-                }));
-              }
-              
-               // --- Handle message completion ---
-              if (data.finishReason) {
-                 // Ensure final text part is added if needed
-                 if (currentTextPart && !responseParts.some(p => 'text' in p && p.text === currentTextPart)) {
-                  responseParts.push({ text: currentTextPart });
-                 }
-                 // Final update with metadata
-                  setConvos(prev => prev.map(c => {
-                     if (c.id !== finalConvoId) return c;
-                      const messages = c.messages.map(m => {
-                        if (m.id === tempModelMessageId) {
-                           return {
-                               ...m,
-                               parts: responseParts.length > 0 ? responseParts : [{ text: '(Empty response)' }], // Ensure parts isn't empty
-                      metadata: {
-                        finishReason: data.finishReason,
-                        usageMetadata: data.usageMetadata
-                      }
-                    };
-                        }
-                        return m;
-                      });
-                    return { ...c, messages };
+                      return { ...c, messages: updatedMessages };
                   }));
-                 setStreamingModelMessageId(null); // Clear tracked ID
-                 currentTextPart = ''; // Reset for next stream
-                 responseParts = []; // Reset
-                }
-             } catch (e) { console.error('Error parsing stream data:', e, "Line:", line); }
-           } else if (line.startsWith('event: done')) {
-             // Stream completed event from backend (may be redundant if finishReason is always sent)
-             setStreamingModelMessageId(null); // Ensure ID is cleared
-             break; // Exit inner loop
-           } else if (line.startsWith('event: error')) {
-              // Handle explicit error event from backend stream
-               try {
-                   const errorData = JSON.parse(line.slice(line.indexOf(':') + 1));
-                   throw new Error(errorData.error || 'Unknown stream error event');
-            } catch (e) {
-                   throw new Error(e.message || 'Failed to parse stream error event');
-            }
-           }
-         } // end for..of lines
-       } // end while(true)
+              }
+              
+              if (data.finishReason) {
+                 setConvos(prevConvos => prevConvos.map(c => { 
+                    if (c.id !== finalConvoId) return c;
+                     let messageFinalized = false;
+                     const finalMessages = c.messages.map(m => {
+                       if (m.id === tempModelMessageId) {
+                           messageFinalized = true;
+                          const finalParts = m.parts && m.parts.length > 0 ? m.parts : [{ text: '(Empty or No Response)' }]; 
+                          return {
+                             ...m,
+                             parts: finalParts, 
+                             metadata: {
+                               finishReason: data.finishReason,
+                               usageMetadata: data.usageMetadata // Assume usage comes with finishReason chunk
+                             }
+                           };
+                       }
+                       return m;
+                     });
+                     if (!messageFinalized) {
+                        console.error("Streaming completion event: Couldn't find message with ID", tempModelMessageId, "to finalize.");
+                     }
+                     let finalTitle = c.title;
+                     const userPrompt = turns.find(turn => turn.role === 'user');
+                     const userPromptText = userPrompt?.parts?.[0]?.text;
+                     if (c.title === 'New Chat' && userPromptText) {
+                         finalTitle = userPromptText.length > 30 ? userPromptText.substring(0, 30) + '...' : userPromptText;
+                     }
+                   return { ...c, title: finalTitle, messages: finalMessages };
+                 }));
+                 setStreamingModelMessageId(null); 
+              }
+             // --- End handling parsed data ---
 
-       // --- Final title update for new conversations ---
-       const finalConvo = convos.find(c => c.id === finalConvoId); // Get latest state
-       if (finalConvo && finalConvo.messages.length <= 2) { // Check if only user + model messages exist
-          const newTitle = text.length > 30 ? text.substring(0, 30) + '...' : text;
-          setConvos(prev => prev.map(c => c.id === finalConvoId ? { ...c, title: newTitle } : c));
-      }
+            } catch (e) { 
+              // --- Log the specific line that failed ---
+              console.error('Error parsing stream data:', e, "Problematic JSON data:", jsonData); 
+              // Continue processing next lines, don't crash the loop
+            }
+          } 
+          // --- Process 'event:' lines (done, error, etc.) ---
+          else if (line.startsWith('event: done')) {
+             // (Keep existing logic for event: done)
+             setConvos(prevConvos => prevConvos.map(c => { 
+                if (c.id === finalConvoId && c.title === 'New Chat') {
+                     const userPrompt = turns.find(turn => turn.role === 'user');
+                     const userPromptText = userPrompt?.parts?.[0]?.text;
+                    if (userPromptText) {
+                       const newTitle = userPromptText.length > 30 ? userPromptText.substring(0, 30) + '...' : userPromptText;
+                       return { ...c, title: newTitle };
+                    }
+                }
+                return c;
+             }));
+             setStreamingModelMessageId(null);
+             break; // Exit the inner line processing loop (though outer loop should also terminate)
+          } else if (line.startsWith('event: error')) {
+              // (Keep existing logic for event: error)
+               setStreamingModelMessageId(null);
+               try {
+                   const errorPayload = line.slice(line.indexOf(':') + 1);
+                   const errorData = JSON.parse(errorPayload);
+                   throw new Error(errorData.error || 'Unknown stream error event');
+               } catch (e) {
+                   throw new Error(e.message || 'Failed to parse stream error event');
+               }
+          }
+        } // --- End for...of lines ---
+      } // --- End while(true) ---
       
+      // Add a final check for any remaining data in the buffer after the loop finishes
+      // This might contain the very last 'finishReason' data if it wasn't followed by \n\n
+      if (lineBuffer.startsWith('data: ')) {
+           const jsonData = lineBuffer.slice(6);
+           try {
+                const data = JSON.parse(jsonData);
+                if (data.finishReason) {
+                    // Apply final metadata update logic one last time
+                    setConvos(prevConvos => prevConvos.map(c => {
+                        if (c.id !== finalConvoId) return c;
+                        const finalMessages = c.messages.map(m => {
+                          if (m.id === tempModelMessageId) {
+                             const finalParts = m.parts && m.parts.length > 0 ? m.parts : [{ text: '(Empty or No Response)' }];
+                             return { ...m, parts: finalParts, metadata: { finishReason: data.finishReason, usageMetadata: data.usageMetadata } };
+                          } return m; });
+                        let finalTitle = c.title;
+                        const userPrompt = turns.find(turn => turn.role === 'user');
+                        const userPromptText = userPrompt?.parts?.[0]?.text;
+                        if (c.title === 'New Chat' && userPromptText) { finalTitle = userPromptText.length > 30 ? userPromptText.substring(0, 30) + '...' : userPromptText; }
+                        return { ...c, title: finalTitle, messages: finalMessages };
+                   }));
+                   setStreamingModelMessageId(null);
+                }
+           } catch (e) {
+               console.error('Error parsing final buffer data:', e, "Final buffer data:", jsonData);
+           }
+      }
+
+
     } catch (err) {
-      console.error('Stream chat error:', err);
-       setStreamingModelMessageId(null); // Clear ID on error
-       // Add/Update error message
-      setConvos(prev => prev.map(c => {
-         if (c.id !== finalConvoId) return c;
-         // Try to replace the placeholder message if it exists
-         const messages = c.messages.map(m =>
-             m.id === tempModelMessageId
-             ? { role: 'error', parts: [{ text: `Stream Error: ${err.message}` }], id: Date.now() + Math.random() }
-             : m
-         );
-         // If placeholder wasn't found (error happened before placeholder added?), add error at the end
-         if (!messages.some(m => m.role === 'error')) {
-             messages.push({ role: 'error', parts: [{ text: `Stream Error: ${err.message}` }], id: Date.now() + Math.random() });
-        }
-        return { ...c, messages };
-      }));
+       // (Keep existing catch block logic)
+       console.error('Stream chat error:', err);
+       setConvos(prevConvos => prevConvos.map(c => { 
+          if (c.id !== finalConvoId) return c;
+          let messageFound = false;
+          const messagesWithError = c.messages.map(m => {
+             if (m.id === tempModelMessageId) {
+                 messageFound = true;
+                 return { role: 'error', parts: [{ text: `Stream Error: ${err.message}` }], id: tempModelMessageId + '_error' }; 
+             } return m; });
+          if (!messageFound) { messagesWithError.push({ role: 'error', parts: [{ text: `Stream Error: ${err.message}` }], id: Date.now() + Math.random() + '_error' }); }
+          return { ...c, messages: messagesWithError };
+       }));
+       setStreamingModelMessageId(null); 
     } finally {
       setIsLoading(false);
-       setStreamingModelMessageId(null); // Clear ID in finally
+       setStreamingModelMessageId(null); // Ensure ID is always cleared
     }
   };
   // --- End modified startStreamChat ---
@@ -1099,13 +1133,13 @@ export default function App() {
            {/* Sidebar Hamburger/Lock Button */}
            {/* --- ADD hidden lg:flex to hide on mobile --- */}
            <div className="hidden lg:flex flex-shrink-0 px-3 pt-3 pb-2"> 
-              <button
+         <button
                 onClick={handleSidebarHamburgerClick} 
                 className={`p-2 rounded-md text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-indigo-500 dark:hover:text-indigo-400 transition-all duration-150 ease-in-out ${sidebarLocked && window.innerWidth >= 1024 ? 'bg-indigo-100 dark:bg-indigo-900/30' : ''}`}
                 aria-label={window.innerWidth < 1024 ? (isSidebarOpen ? "Close Menu" : "Open Menu") : (sidebarLocked ? "Unlock Sidebar" : "Lock Sidebar")} 
               >
                 <Menu className="h-5 w-5" />
-              </button>
+         </button>
            </div>
 
            {/* Animated App Title */}
@@ -1124,14 +1158,14 @@ export default function App() {
            {/* New Chat Button Container */}
            {/* --- Adjusted padding/margin, ensure full width in parent --- */}
            <div className="flex-shrink-0 px-4 py-2"> 
-             <button
+        <button
                // --- Apply conditional justification ---
                className={`flex items-center w-full gap-2 px-3 py-2 bg-indigo-500 text-white rounded-lg hover:bg-indigo-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all duration-300 ease-in-out shadow hover:shadow-md 
                           ${sidebarLocked ? 'lg:justify-start' : 'lg:justify-center group-hover:lg:justify-start'} `} // Center icon when collapsed on lg
-               onClick={() => {
-                 const id = Date.now().toString();
-                 setConvos([{ id, title: 'New Chat', messages: [] }, ...convos]);
-                 setActiveConvoId(id);
+          onClick={() => {
+            const id = Date.now().toString();
+            setConvos([{ id, title: 'New Chat', messages: [] }, ...convos]);
+            setActiveConvoId(id);
                       // Close sidebar only if on small screen and currently open
                       if (window.innerWidth < 1024 && isSidebarOpen) setIsSidebarOpen(false);
                       // Ensure sidebar is locked open if user clicks "New Chat" while unlocked on large screen? (Optional)
@@ -1144,7 +1178,7 @@ export default function App() {
                           ${sidebarLocked ? 'lg:opacity-100' : 'lg:opacity-0 lg:w-0 group-hover:lg:opacity-100 group-hover:lg:w-auto'} `}>
                   New Chat
                </span>
-             </button>
+        </button>
            </div>
         
            {/* Conversations List - Wrapped header and list for visibility control */}
@@ -1227,18 +1261,27 @@ export default function App() {
                   rel="noopener noreferrer"
                   className="flex items-center gap-2 group/footer text-gray-600 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-300"
                 >
-                 {/* Keep icon visible */}
-                 <div className="w-8 h-8 rounded-full bg-gradient-to-br from-gray-200 to-gray-300 dark:from-gray-600 dark:to-gray-700 flex items-center justify-center ring-1 ring-inset ring-gray-300 dark:ring-gray-600 flex-shrink-0 transition-colors group-hover/footer:ring-indigo-500"> 
-                   <User className="h-4 w-4 transition-transform group-hover/footer:scale-110 " />
-              </div>
+                 {/* --- Add shimmer style to container, apply gradient to icon --- */}
+                 <div 
+                  className="w-8 h-8 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center ring-1 ring-inset ring-gray-300 dark:ring-gray-600 flex-shrink-0 transition-colors group-hover/footer:ring-indigo-500 animate-shimmer relative overflow-hidden" // Added relative + overflow-hidden for shimmer mask
+                  style={{ 
+                      animationDuration: '3s',
+                      '--shimmer-color': 'rgba(255,255,255,0.1)', // Lighter shimmer for dark bg
+                      '--shimmer-color-dark': 'rgba(0,0,0,0.1)'   // Darker shimmer for light bg
+                 }} // Removed 'as React.CSSProperties'
+                 > 
+                   <UserIcon 
+                     className="h-4 w-4 transition-transform group-hover/footer:scale-110 bg-clip-text text-transparent bg-gradient-to-r from-pink-500 via-purple-500 to-indigo-500" // Gradient text colors
+                   /> 
+                 </div>
                  {/* Text fades in/out */}
                  <div className={`flex flex-col transition-opacity duration-300 lg:opacity-0 ${sidebarLocked ? 'lg:opacity-100' : 'group-hover:lg:opacity-100'}`}>
                      <span className="text-xs whitespace-nowrap">Developed by</span>
                      <span className="text-sm font-medium whitespace-nowrap">Shubharthak</span>
-          </div>
+                 </div>
                 </a>
-        </div>
-        </div> {/* End content container */}
+           </div>
+        </div> {/* End aside's flex container */}
       </aside>
 
       {/* Main content */}
@@ -1454,7 +1497,7 @@ function ChatWindow({ convo }) {
     <div className="max-w-3xl mx-auto w-full space-y-6">
       {convo.messages.map((msg, idx) => (
         <div
-          key={idx}
+          key={msg.id || idx} // Use message ID if available, fallback to index
           className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
         >
           <div
@@ -1468,29 +1511,39 @@ function ChatWindow({ convo }) {
                 : 'bg-white dark:bg-gray-800 shadow-sm border border-gray-200 dark:border-gray-700'
             }`}
           >
+            {/* --- UPDATED: Part Rendering Logic --- */}
             {msg.parts.map((part, i) => {
-              // Handle different part types
+              // Explicitly check for text part
               if (part.text) {
+                // Render text with preserved whitespace
                 return (
-                  <div key={i} className="whitespace-pre-wrap">
+                  <div key={`${msg.id || idx}-text-${i}`} className="whitespace-pre-wrap">
                     {part.text}
                   </div>
                 );
-              } else if (part.inlineData && part.inlineData.mimeType && part.inlineData.mimeType.startsWith('image/')) {
-                // Display image content
+              } 
+              // Explicitly check for image part
+              else if (part.inlineData?.mimeType?.startsWith('image/')) {
+                // Render image using inlineData
                 return (
-                  <div key={i} className="my-2">
+                  <div key={`${msg.id || idx}-img-${i}`} className="my-2"> {/* Added margin */}
                     <img 
                       src={`data:${part.inlineData.mimeType};base64,${part.inlineData.data}`}
-                      alt="Generated image"
-                      className="max-w-full rounded-md"
+                      alt="Generated content" // More generic alt text
+                      className="max-w-full h-auto rounded-md" // Ensure responsiveness
                     />
                   </div>
                 );
-              } else {
-                return null;
+              } 
+              // Handle other potential part types here if needed in the future
+              // else if (part.functionCall) { ... } 
+              else {
+                // Optionally log unexpected part structures
+                // console.warn("Unhandled message part:", part);
+                return null; // Render nothing for unknown parts
               }
             })}
+             {/* --- End Updated Part Rendering Logic --- */}
           </div>
         </div>
       ))}
