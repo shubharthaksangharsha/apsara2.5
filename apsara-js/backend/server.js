@@ -54,7 +54,7 @@ const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
 // --- In‐memory state & config ---
 const availableModels = [
-  { id: "gemini-2.5-pro-preview-03-25", name: "Gemini 2.5 Pro Preview" },
+  { id: "gemini-2.5-pro-exp-03-25", name: "Gemini 2.5 Pro Exp" },
   { id: "gemini-2.5-flash-preview-04-17", name: "Gemini 2.5 Flash Preview" },
   { id: "gemini-2.0-flash", name: "Gemini 2.0 Flash" },
   { id: "gemini-2.0-flash-exp-image-generation", name: "Gemini 2.0 Flash (Image Gen)" },

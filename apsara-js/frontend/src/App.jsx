@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { BellRing, FileUp, Menu, Mic, Moon, Send, Settings, Sun, User, X, MessageSquare, UploadCloud, AudioLines, Cog, Trash2, MicOff, BrainCircuit, Image as ImageIcon, BookOpen, Link as LinkIcon, UserIcon } from 'lucide-react';
+import { BellRing, FileUp, Menu, Mic, Moon, Send, Settings, Sun, User, X, MessageSquare, UploadCloud, AudioLines, Cog, Trash2, MicOff, BrainCircuit, Image as ImageIcon, BookOpen, Link as LinkIcon, UserIcon, Code, Sparkles, Plane, UtensilsCrossed, History, Film, PenTool, Globe, FileText, Lightbulb, Target, Search } from 'lucide-react';
 
 // Import the new components
 import Sidebar from './components/Sidebar';
@@ -9,6 +9,7 @@ import ChatWindow from './components/ChatWindow';
 import MessageInput from './components/MessageInput';
 import SettingsPanel from './components/SettingsPanel';
 import LivePopup from './components/LivePopup';
+import EmptyChatContent from './components/EmptyChatContent'; // Import the new component
 import FileUploadPopup from './components/FileUploadPopup';
 
 // Import the custom hook
@@ -27,17 +28,38 @@ const MAX_STORAGE_BYTES = MAX_LOCALSTORAGE_SIZE_MB * BYTES_PER_MB;
 
 // Define suggested prompts with optional target models
 const suggestedPrompts = [
-  { text: "Explain quantum computing simply", icon: BrainCircuit },
-  { text: "Write a Python script for web scraping", icon: BrainCircuit, modelId: "gemini-2.5-pro-exp-03-25" }, // Example specific model
-  { text: "Create a recipe for vegan lasagna", icon: BookOpen },
-  { text: "Generate an image of a futuristic cityscape at sunset", icon: ImageIcon, modelId: "gemini-2.0-flash-exp-image-generation" },
-  { text: "Summarize the theory of relativity", icon: BookOpen },
-  { text: "Plan a 5-day itinerary for Tokyo", icon: BookOpen },
-  { text: "Generate an image of a cat wearing sunglasses", icon: ImageIcon, modelId: "gemini-2.0-flash-exp-image-generation" },
-  { text: "Debug this Javascript code snippet:\n```javascript\nfunction greet(name) {\n console.log(Hello, + name)\n}\n```", icon: BrainCircuit, modelId: "gemini-2.5-pro-preview-03-25" },
-];
+  // Technical & Coding (Using Pro for complexity/accuracy)
+  { text: "Explain the concept of closures in JavaScript", icon: BrainCircuit, modelId: "gemini-2.5-pro-exp-03-25"},
+  { text: "Write a Python function to find prime numbers up to N", icon: Code, modelId: "gemini-2.5-pro-exp-03-25" },
+  { text: "Debug this SQL query:\nSELECT user, COUNT(*) FROM orders GROUP BY product;", icon: Code, modelId: "gemini-2.5-pro-exp-03-25" },
+  { text: "What are the main differences between React and Vue?", icon: BrainCircuit },
 
-// Main App component
+  // Creative & Writing (Using Flash for speed/versatility)
+  { text: "Write a short poem about a rainy day", icon: PenTool, modelId: "gemini-1.5-flash" },
+  { text: "Generate a marketing slogan for a new coffee shop", icon: Sparkles, modelId: "gemini-1.5-flash" },
+  { text: "Write a short story about a space explorer finding a new planet", icon: BookOpen, modelId: "gemini-1.5-flash" },
+
+  // Image Generation (Using 2.0 Flash Image variant)
+  { text: "Generate an image of a futuristic cityscape at sunset", icon: ImageIcon, modelId: "gemini-2.0-flash-exp-image-generation" },
+  { text: "Generate an image of a cat wearing sunglasses", icon: ImageIcon, modelId: "gemini-2.0-flash-exp-image-generation" },
+
+  // Planning & Practical (Using Flash)
+  { text: "Create a recipe for vegan lasagna", icon: UtensilsCrossed, modelId: "gemini-1.5-flash" },
+  { text: "Plan a 3-day weekend trip to London", icon: Plane, modelId: "gemini-1.5-flash" },
+  { text: "Suggest some fun team-building activities for a remote team", icon: Sparkles, modelId: "gemini-1.5-flash" },
+  { text: "Draft an email asking for a project extension", icon: FileText, modelId: "gemini-1.5-flash" },
+
+  // Knowledge & Explanation (Mix based on potential complexity)
+  { text: "Provide tips for improving public speaking skills", icon: BookOpen, modelId: "gemini-1.5-flash" },
+  { text: "Explain the concept of blockchain technology simply", icon: Globe, modelId: "gemini-1.5-flash" },
+  { text: "Summarize the main events of World War II", icon: History, modelId: "gemini-2.5-pro-exp-03-25" },
+  { text: "What is the plot of the movie 'Inception'?", icon: Film, modelId: "gemini-1.5-flash" },
+  { text: "Give me ideas for a challenging programming project", icon: Lightbulb, modelId: "gemini-1.5-flash"},
+  { text: "What are some effective SEO strategies for 2024?", icon: Target, modelId: "gemini-2.5-pro-exp-03-25"},
+  { text: "Search for recent news about AI developments", icon: Search, modelId: "gemini-1.5-flash"},
+];
+            
+// Main App component                                                                                                            
 export default function App() {
   // Theme - Use the custom hook
   const [darkMode, setDarkMode] = useTheme();
@@ -277,16 +299,31 @@ export default function App() {
         />
         
         {/* Chat Messages Area */}
-        <div className="flex-1 overflow-y-auto p-4 bg-gray-100 dark:bg-gray-900 custom-scrollbar"> {/* Added custom-scrollbar */}
-          {activeConvoId && convos.find(c => c.id === activeConvoId) ? (
-            <ChatWindow convo={convos.find(c => c.id === activeConvoId)} />
-          ) : (
-            // Welcome Screen - Use Imported Component
+        <div className="flex-1 flex flex-col overflow-y-auto p-4 pb-0 bg-gray-100 dark:bg-gray-900 custom-scrollbar"> {/* Added flex flex-col */}
+          {!activeConvoId ? (
+            // No active chat: Show full Welcome Screen
             <WelcomeScreen
+              allPrompts={suggestedPrompts} // Pass the full list
               onStartChatWithPrompt={startChatWithPrompt}
-              suggestedPrompts={suggestedPrompts}
               onStartNewChat={handleStartNewChat}
             />
+          ) : (
+            // Active chat exists: Check for messages
+            (() => {
+              const activeConvo = convos.find(c => c.id === activeConvoId);
+              if (activeConvo && activeConvo.messages && activeConvo.messages.length > 0) {
+                // Ensure ChatWindow doesn't cause remounts if its key changes unnecessarily
+                return <ChatWindow key={activeConvoId} convo={activeConvo} />; 
+              } else {
+                // Active chat but NO messages yet: Show EmptyChatContent
+                // Pass the *same* props as WelcomeScreen gets for prompts
+                return <EmptyChatContent 
+                           key={`empty-${activeConvoId}`} // Add a key here too
+                           allPrompts={suggestedPrompts} 
+                           onStartChatWithPrompt={startChatWithPrompt} 
+                       />;
+              }
+            })()
           )}
         </div>
         
