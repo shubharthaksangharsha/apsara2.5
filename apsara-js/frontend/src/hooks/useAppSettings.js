@@ -1,35 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
+import { getModelCapabilities } from '../utils/modelCapabilities'; // Import the utility
 
 const BACKEND_URL = 'http://localhost:9000'; // Consider moving to a config file
-
-// Helper function to check model capabilities based on the provided list and docs
-const getModelCapabilities = (modelId) => {
-  if (!modelId) return { supportsSearch: false, supportsSystemInstruction: true, supportsCodeExecution: false };
-
-  // Define capabilities based on the user's list and previous documentation
-  switch (modelId) {
-    case "gemini-2.5-pro-exp-03-25":
-      return { supportsSearch: true, supportsSystemInstruction: true, supportsCodeExecution: true };
-    case "gemini-2.5-flash-preview-04-17":
-      return { supportsSearch: true, supportsSystemInstruction: true, supportsCodeExecution: true }; // Assuming code execution based on 2.5 family
-    case "gemini-2.0-flash":
-        return { supportsSearch: true, supportsSystemInstruction: true, supportsCodeExecution: true }; // Assuming code execution based on 2.0 family
-    case "gemini-2.0-flash-exp-image-generation": // Same underlying model
-      return { supportsSearch: false, supportsSystemInstruction: false, supportsCodeExecution: false }; // Flash models often don't use system instruction directly
-    case "imagen-3.0-generate-002":
-      return { supportsSearch: false, supportsSystemInstruction: false, supportsCodeExecution: false }; // Image only
-    case "gemini-1.5-pro":
-      // Docs didn't explicitly list Search Grounding for 1.5 Pro, unlike 2.5 Pro. System Instruction is supported.
-      return { supportsSearch: false, supportsSystemInstruction: true, supportsCodeExecution: true };
-    case "gemini-1.5-flash":
-      return { supportsSearch: false, supportsSystemInstruction: true, supportsCodeExecution: true };
-    case "gemini-1.5-flash-8b":
-      return { supportsSearch: false, supportsSystemInstruction: true, supportsCodeExecution: true }; // Assuming code exec based on 1.5 family
-    default:
-      // Default fallback: assume no search, yes system instruction, no code exec
-      return { supportsSearch: false, supportsSystemInstruction: true, supportsCodeExecution: false };
-  }
-};
 
 export function useAppSettings(initialSystemInstruction) {
   // --- State Initialization ---
