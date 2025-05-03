@@ -427,6 +427,7 @@ async function handleLiveConnection(ws, req) {
    let requestedVoice = availableVoices[0];
    let requestedRealtimeConfig = {};
    let requestedSystemInstruction = null;
+   let requestedResumeHandle = null; // For session resumption
 
    try {
        const parsedUrl = parse(req.url, true);
@@ -478,6 +479,12 @@ async function handleLiveConnection(ws, req) {
             console.log("[Live Backend] Automatic activity detection (VAD) DISABLED via query param.");
        }
 
+       // --- Session Resumption Handle Parsing ---
+       if (parsedUrl.query.resumeHandle) {
+           requestedResumeHandle = parsedUrl.query.resumeHandle.toString();
+           console.log("[Live Backend] Attempting session resumption with handle.");
+       }
+
    } catch (e) {
        console.error('[Live Backend] Error parsing query parameters:', e);
        try { ws.close(1003, "Invalid URL parameters"); } catch(e){}
@@ -503,6 +510,10 @@ async function handleLiveConnection(ws, req) {
        // Add systemInstruction if provided
        ...(requestedSystemInstruction && {
            systemInstruction: { role: 'system', parts: [{ text: requestedSystemInstruction }] }
+       }),
+       // Add sessionResumption config if handle provided or always enable transparent?
+       ...(requestedResumeHandle && {
+           sessionResumption: { handle: requestedResumeHandle, transparent: true } // Assuming transparent is desired
        })
    };
 
@@ -549,6 +560,11 @@ async function handleLiveConnection(ws, req) {
                          }
                     } catch (sendError) {
                          console.error(`[Live Backend] Error forwarding Google message [${messageType}] <${sessionIdShort}> to client WebSocket:`, sendError);
+                    }
+
+                    // --- Forward Session Resumption Updates ---
+                    if (evt.sessionResumptionUpdate) {
+                        console.log(`[Live Backend] Forwarding sessionResumptionUpdate to client <${sessionIdShort}>.`);
                     }
                 },
                  onerror: e => {
@@ -627,25 +643,46 @@ async function handleLiveConnection(ws, req) {
        if (!currentSession) {
          console.warn(`[Live Backend] Received message from client (ID: N/A - session not found) with no active session.`);
          ws.close(1011, 'No active session found');
-         return;
-       }
+             return;
+        }
+       console.log(message)
+       // --- Differentiate between Binary (Audio) and Text messages ---
+       if (message instanceof Buffer) {
+           console.log(`[Live Backend] Received BINARY data (Audio PCM) from client (Session: ${currentSessionId}). Size: ${message.length}. Attempting sendRealtimeInput.`);
+           try {
+               // Attempt to decode as UTF-8 text first
+               const textData = message.toString('utf8');
+               let parsedMessage;
+               try {
+                   parsedMessage = JSON.parse(textData);
+               } catch (e) {
+                   // JSON parse failed, assume it's raw audio PCM
+                   console.log(`[Live Backend] Received BINARY data (Audio PCM assumed) from client (Session: ${currentSessionId}). Size: ${message.length}. Attempting sendRealtimeInput.`);
+                   const base64Pcm = message.toString('base64');
+                   await currentSession.sendRealtimeInput({ audio: { data: base64Pcm, mimeType: 'audio/pcm' } });
+                   console.log(`[Live Backend] Sent Audio PCM data via sendRealtimeInput for <${currentSessionId}>.`);
+                   return; // Exit early after handling audio
+               }
 
-       console.log(`[Live Backend] Received BINARY data from client (Session: ${currentSessionId}). Type: object, IsBuffer: true, Size: ${message.length}. Attempting sendRealtimeInput.`);
-       try {
-         // The incoming Buffer *is* raw Int16 PCM data from the frontend ScriptProcessor
-         const base64Pcm = message.toString('base64');
-
-         // --- Send as L16 PCM @ 16kHz ---
-         // This MIME type accurately describes the raw PCM data being sent.
-        //  await currentSession.sendRealtimeInput({ audio: { data: base64Pcm, mimeType: 'audio/l16;rate=16000' } });
-         // Alternative if the above fails: try just 'audio/pcm' - assumes 16k default? Less likely.
-         await currentSession.sendRealtimeInput({ audio: { data: base64Pcm, mimeType: 'audio/pcm' } });
-
-         console.log(`[Live Backend] Sent BINARY data via sendRealtimeInput for <${currentSessionId}>.`);
-       } catch (error) {
-         console.error(`[Live Backend] Error processing/sending client BINARY message to Google <${currentSessionId}>:`, error);
-         // Consider closing ws here on error? ws.close(1011, "Backend processing error");
-       }
+               // If JSON parse succeeded, check if it's our text structure
+               if (parsedMessage && parsedMessage.type === 'text' && parsedMessage.text) {
+                   console.log(`[Live Backend] Received TEXT data (as Buffer) from client (Session: ${currentSessionId}). Attempting sendClientContent.`);
+                   await currentSession.sendClientContent({ turns: [{ role: 'user', parts: [{ text: parsedMessage.text }] }] });
+                   console.log(`[Live Backend] Sent Text data via sendClientContent for <${currentSessionId}>.`);
+               } else {
+                   // Parsed JSON but not the expected structure - treat as unknown/error or potentially audio? For now, log warning.
+                   console.warn(`[Live Backend] Received Buffer containing unexpected JSON structure:`, textData);
+               }
+           } catch (error) {
+               console.error(`[Live Backend] Error processing client BUFFER message <${currentSessionId}>:`, error);
+           }
+       } else if (typeof message === 'string') { // Keep this block for robustness, though seems unlikely to be hit now
+            console.warn(`[Live Backend] Received message as STRING unexpectedly (expected Buffer). Content: ${message.substring(0, 100)}...`);
+           // Optionally, try to process it as text here too, similar to the buffer logic.
+           // For now, just log a warning.
+        } else {
+             console.warn(`[Live Backend] Received unexpected message type from client (Session: ${currentSessionId}): ${typeof message}`);
+        }
     });
 
     // --- Client WebSocket Close Handler ---
