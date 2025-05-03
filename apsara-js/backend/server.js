@@ -234,7 +234,9 @@ app.post('/chat', async (req,res)=>{
     }
     // Default Gemini
     const apiRequest=buildApiRequest(req.body);
+    console.log(`[POST /chat] Request to Google API (Model: ${modelId}):`, JSON.stringify(apiRequest, null, 2));
     const result=await ai.models.generateContent(apiRequest);
+    console.log(`[POST /chat] Response from Google API:`, JSON.stringify(result, null, 2));
     const c=result.candidates[0];
     if (['SAFETY','RECITATION'].includes(c.finishReason)) return res.status(400).json({});
     if (result.functionCalls?.length) return res.json({ functionCalls:result.functionCalls });
@@ -266,6 +268,7 @@ app.post('/chat/stream', async (req, res) => {
         });
 
         const apiRequest = buildApiRequest(req.body);
+        console.log(`[POST /chat/stream] Request to Google API (Model: ${modelId}):`, JSON.stringify(apiRequest, null, 2));
         const stream = await ai.models.generateContentStream(apiRequest);
 
         // Iterate through the stream chunks
@@ -281,10 +284,16 @@ app.post('/chat/stream', async (req, res) => {
                         // Send text part
                         res.write(`data: ${JSON.stringify({ text: part.text })}\n\n`);
                     } else if (part.inlineData) {
-                        // Send inlineData part (e.g., image)
+                        // Send inlineData part (e.g., generated image from code execution)
                         res.write(`data: ${JSON.stringify({ inlineData: part.inlineData })}\n\n`);
-      }
-                    // Add handling for other part types if needed (e.g., functionCall, executableCode)
+                    } else if (part.executableCode) {
+                        // Send executableCode part
+                        res.write(`data: ${JSON.stringify({ executableCode: part.executableCode })}\n\n`);
+                    } else if (part.codeExecutionResult) {
+                        // Send codeExecutionResult part
+                        res.write(`data: ${JSON.stringify({ codeExecutionResult: part.codeExecutionResult })}\n\n`);
+                    }
+                    // NOTE: We are not explicitly handling part.thought here, assuming it's not needed for display
                 }
             }
             // --- End Updated Part Processing ---

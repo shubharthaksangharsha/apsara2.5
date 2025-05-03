@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Settings, X } from 'lucide-react';
+import { Settings, X, Search, Code } from 'lucide-react';
+import { Switch } from '@headlessui/react';
 
 export default function SettingsPanel({
   // Model Info (Passed down)
@@ -17,6 +18,8 @@ export default function SettingsPanel({
   onEnableGoogleSearchChange,
   enableCodeExecution,
   onEnableCodeExecutionChange,
+  isSearchSupported,
+  isCodeExecutionSupported,
 
   // Panel Visibility
   isOpen,
@@ -58,6 +61,22 @@ export default function SettingsPanel({
     }
   };
 
+  // --- Interactivity Handlers for Toggles ---
+  const handleSearchToggle = (newValue) => {
+    onEnableGoogleSearchChange(newValue);
+    // If turning search ON, turn code execution OFF
+    if (newValue) {
+      onEnableCodeExecutionChange(false);
+    }
+  };
+
+  const handleCodeExecToggle = (newValue) => {
+    onEnableCodeExecutionChange(newValue);
+    // If turning code execution ON, turn search OFF
+    if (newValue) {
+      onEnableGoogleSearchChange(false);
+    }
+  };
 
   const handleOverlayClick = (e) => {
     if (e.target === e.currentTarget) {
@@ -157,30 +176,64 @@ export default function SettingsPanel({
           </div>
 
           {/* Google Search Toggle */}
-          <div className="flex items-center justify-between">
-            <label htmlFor="googleSearch" className="text-sm font-medium">
-              Enable Google Search (Grounding)
-            </label>
-            <label className="inline-flex items-center cursor-pointer">
-              <input
-                id="googleSearch"
-                type="checkbox"
-                checked={enableGoogleSearch}
-                onChange={(e) => onEnableGoogleSearchChange(e.target.checked)}
-                className="sr-only peer"
-                disabled={!isSystemInstructionApplicable} // Disable if sys instruct not applicable, as tools often tied to it
-                aria-disabled={!isSystemInstructionApplicable}
-              />
-              <div className={`relative w-11 h-6 bg-gray-200 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-indigo-600 ${!isSystemInstructionApplicable ? 'cursor-not-allowed opacity-50' : ''}`}></div>
-            </label>
-          </div>
-          <p className={`text-xs text-gray-500 dark:text-gray-400 -mt-3 ${!isSystemInstructionApplicable ? 'opacity-50' : ''}`}>
-            {!isSystemInstructionApplicable ? "Tools not applicable for this model." : "Allows the model to search Google. Requires backend support."}
-          </p>
+          <Switch.Group as="div" className="flex items-center justify-between py-3">
+            <span className="flex flex-grow flex-col">
+              <Switch.Label
+                as="span"
+                className={`text-sm font-medium leading-6 text-gray-900 dark:text-gray-100 ${!isSearchSupported || (enableCodeExecution && isCodeExecutionSupported) ? 'opacity-50' : ''}`}
+                passive>
+                Enable Google Search
+              </Switch.Label>
+              <Switch.Description as="span" className={`text-xs text-gray-500 dark:text-gray-400 ${!isSearchSupported || (enableCodeExecution && isCodeExecutionSupported) ? 'opacity-50' : ''}`}>
+                {isSearchSupported
+                  ? "Allows the model to search the web for current info."
+                  : "Search not supported by this model."
+                }
+              </Switch.Description>
+            </span>
+            <Switch
+              checked={enableGoogleSearch && isSearchSupported}
+              onChange={handleSearchToggle}
+              disabled={!isSearchSupported || (enableCodeExecution && isCodeExecutionSupported)}
+              className={`relative inline-flex h-6 w-11 flex-shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:ring-offset-2 dark:focus:ring-offset-gray-800 ${!isSearchSupported || (enableCodeExecution && isCodeExecutionSupported) ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'} ${enableGoogleSearch && isSearchSupported ? 'bg-indigo-600' : 'bg-gray-200 dark:bg-gray-700'}`}
+            >
+              <span className="absolute inset-0 h-full w-full flex items-center justify-center transition-opacity">
+                 <Search className={`h-3 w-3 text-indigo-600 ${enableGoogleSearch && isSearchSupported ? 'opacity-100 duration-200 ease-in' : 'opacity-0 duration-100 ease-out'}`} />
+                 <X className={`h-3 w-3 text-gray-400 dark:text-gray-500 ${enableGoogleSearch && isSearchSupported ? 'opacity-0 duration-100 ease-out' : 'opacity-100 duration-200 ease-in'}`} />
+              </span>
+              <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white dark:bg-gray-300 shadow ring-0 transition duration-200 ease-in-out ${enableGoogleSearch && isSearchSupported ? 'translate-x-5' : 'translate-x-0'}`} />
+            </Switch>
+          </Switch.Group>
 
-          {/* Code Execution Toggle Placeholder */}
-          {/* ... */}
-
+          {/* Code Execution Toggle */}
+          <Switch.Group as="div" className="flex items-center justify-between py-3">
+            <span className="flex flex-grow flex-col">
+              <Switch.Label
+                as="span"
+                className={`text-sm font-medium leading-6 text-gray-900 dark:text-gray-100 ${!isCodeExecutionSupported || (enableGoogleSearch && isSearchSupported) ? 'opacity-50' : ''}`}
+                passive>
+                Enable Code Execution
+              </Switch.Label>
+              <Switch.Description as="span" className={`text-xs text-gray-500 dark:text-gray-400 ${!isCodeExecutionSupported || (enableGoogleSearch && isSearchSupported) ? 'opacity-50' : ''}`}>
+                {isCodeExecutionSupported
+                  ? "Allows the model to execute code (e.g., Python)."
+                  : "Code execution not supported by this model."
+                }
+              </Switch.Description>
+            </span>
+            <Switch
+              checked={enableCodeExecution && isCodeExecutionSupported}
+              onChange={handleCodeExecToggle}
+              disabled={!isCodeExecutionSupported || (enableGoogleSearch && isSearchSupported)}
+              className={`relative inline-flex h-6 w-11 flex-shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:ring-offset-2 dark:focus:ring-offset-gray-800 ${!isCodeExecutionSupported || (enableGoogleSearch && isSearchSupported) ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'} ${enableCodeExecution && isCodeExecutionSupported ? 'bg-indigo-600' : 'bg-gray-200 dark:bg-gray-700'}`}
+            >
+              <span className="absolute inset-0 h-full w-full flex items-center justify-center transition-opacity">
+                    <Code className={`h-3 w-3 text-indigo-600 ${enableCodeExecution && isCodeExecutionSupported ? 'opacity-100 duration-200 ease-in' : 'opacity-0 duration-100 ease-out'}`} />
+                    <X className={`h-3 w-3 text-gray-400 dark:text-gray-500 ${enableCodeExecution && isCodeExecutionSupported ? 'opacity-0 duration-100 ease-out' : 'opacity-100 duration-200 ease-in'}`} />
+              </span>
+              <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white dark:bg-gray-300 shadow ring-0 transition duration-200 ease-in-out ${enableCodeExecution && isCodeExecutionSupported ? 'translate-x-5' : 'translate-x-0'}`} />
+            </Switch>
+          </Switch.Group>
         </div>
 
         {/* Footer Buttons */}

@@ -91,6 +91,8 @@ export default function App() {
     enableGoogleSearch, setEnableGoogleSearch,
     enableCodeExecution, setEnableCodeExecution,
     isSystemInstructionApplicable,
+    isSearchSupportedByModel,
+    isCodeExecutionSupportedByModel,
   } = useAppSettings(initialSystemInstruction ?? 'You are a helpful assistant.'); // Pass fetched instruction
 
   const {
@@ -350,6 +352,8 @@ export default function App() {
           maxOutputTokens={maxOutputTokens}
           enableGoogleSearch={enableGoogleSearch}
           enableCodeExecution={enableCodeExecution}
+          isSearchSupported={isSearchSupportedByModel}
+          isCodeExecutionSupported={isCodeExecutionSupportedByModel}
           onTemperatureChange={setTemperature}
           onMaxOutputTokensChange={setMaxOutputTokens}
           onEnableGoogleSearchChange={setEnableGoogleSearch}
