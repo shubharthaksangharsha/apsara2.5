@@ -19,10 +19,14 @@ export function useLiveSession({ currentVoice }) {
   const [isModelSpeaking, setIsModelSpeaking] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [audioError, setAudioError] = useState(null);
+  const [inputSampleRate] = useState(16000); // Target input sample rate for PCM
 
   // Refs
   const liveWsConnection = useRef(null);
-  const audioContextRef = useRef(null);
+  const audioContextRef = useRef(null); // For Playback (24kHz)
+  const audioInputContextRef = useRef(null); // For Recording (16kHz)
+  const scriptProcessorNodeRef = useRef(null); // For PCM capture
+  const mediaStreamSourceRef = useRef(null); // Mic stream source
   const audioQueueRef = useRef([]);
   const isPlayingAudioRef = useRef(false);
   const mediaRecorderRef = useRef(null);
@@ -56,21 +60,33 @@ export function useLiveSession({ currentVoice }) {
   }, []);
 
   // --- Memoized Audio Context Management ---
-  const initAudioContext = useCallback(() => {
+  const initAudioContexts = useCallback(() => {
      if (!audioContextRef.current || audioContextRef.current.state === 'closed') {
         try {
+            // Playback context remains 24kHz based on typical model output
             audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 24000 });
-            console.log('[Audio] AudioContext initialized:', audioContextRef.current.state);
+            console.log('[Audio Playback] Context initialized (24kHz):', audioContextRef.current.state);
             setAudioError(null);
          } catch (e) {
-            console.error("[Audio] Error creating AudioContext:", e);
+            console.error("[Audio Playback] Error creating Context:", e);
             setAudioError("Could not initialize audio playback.");
             audioContextRef.current = null;
         }
      }
-  }, []);
+     // Initialize separate Input context at 16kHz
+     if (!audioInputContextRef.current || audioInputContextRef.current.state === 'closed') {
+       try {
+           audioInputContextRef.current = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: inputSampleRate });
+           console.log(`[Audio Input] Context initialized (${inputSampleRate}Hz):`, audioInputContextRef.current.state);
+       } catch (e) {
+           console.error(`[Audio Input] Error creating ${inputSampleRate}Hz Context:`, e);
+           setAudioError(`Could not initialize ${inputSampleRate}Hz audio input.`);
+           audioInputContextRef.current = null;
+       }
+     }
+  }, [inputSampleRate]); // Depends on the target sample rate
 
-  const closeAudioContext = useCallback(() => {
+  const closeAudioContexts = useCallback(() => {
     if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
       audioContextRef.current.close().catch(e => console.error('[Audio] Error closing AudioContext:', e));
       console.log('[Audio] AudioContext closed.');
@@ -78,6 +94,17 @@ export function useLiveSession({ currentVoice }) {
     audioContextRef.current = null;
     audioQueueRef.current = [];
     isPlayingAudioRef.current = false;
+
+    // Close input context and nodes
+    if (audioInputContextRef.current && audioInputContextRef.current.state !== 'closed') {
+      audioInputContextRef.current.close().catch(e => console.error('[Audio Input] Error closing context:', e));
+      console.log('[Audio Input] Context closed.');
+    }
+    audioInputContextRef.current = null;
+    scriptProcessorNodeRef.current?.disconnect();
+    scriptProcessorNodeRef.current = null;
+    mediaStreamSourceRef.current?.disconnect();
+    mediaStreamSourceRef.current = null;
   }, []);
 
   // --- Memoized Audio Playback ---
@@ -106,21 +133,44 @@ export function useLiveSession({ currentVoice }) {
      isPlayingAudioRef.current = false;
    }, []); // decodePcm16ToFloat32 is stable
 
+   // Function to stop current playback and clear queue
+   const stopAndClearAudio = useCallback(() => {
+        if (isPlayingAudioRef.current && audioContextRef.current && audioContextRef.current.state === 'running') {
+            const source = audioContextRef.current.createBufferSource(); // Dummy source needed for stop in some envs?
+            try {
+                 // Attempt to stop the actual source if reference exists (might not be reliable across browsers)
+                 // A more robust way is often just letting the queue empty after clearing.
+            } catch (e) { console.warn("Error trying to explicitly stop audio source:", e); }
+        }
+        audioQueueRef.current = []; // Clear the queue
+        isPlayingAudioRef.current = false; // Mark as not playing
+        setIsModelSpeaking(false); // Update UI state
+   }, []);
+
    // --- Memoized Recording Logic ---
    const stopRecordingInternal = useCallback(() => {
         if (mediaRecorderRef.current && isRecording) {
-            console.log('[Audio Input] Stopping MediaRecorder internally.');
+            // This block might become unused if fully switching to ScriptProcessor
+            console.log('[Audio Input] Stopping MediaRecorder (if active).');
             addLiveMessage({ role: 'system', text: 'Recording stopped.' });
             try { mediaRecorderRef.current.stop(); }
             catch (e) { console.error("[Audio Input] Error stopping recorder:", e); }
             // onstop handles track cleanup
-        } else if (mediaRecorderRef.current?.stream) {
+        } else if (isRecording && scriptProcessorNodeRef.current) {
+            console.log('[Audio Input] Stopping PCM Recording internally.');
+            addLiveMessage({ role: 'system', text: 'Recording stopped.' });
+            scriptProcessorNodeRef.current?.disconnect(); // Disconnect processor
+            scriptProcessorNodeRef.current = null;
+            mediaStreamSourceRef.current?.disconnect(); // Disconnect source
+            mediaStreamSourceRef.current?.mediaStream?.getTracks().forEach(track => track.stop()); // Stop mic tracks
+            mediaStreamSourceRef.current = null;
+        } else if (mediaStreamSourceRef.current?.mediaStream) { // Failsafe if state is weird
             // Ensure stream tracks stopped if state somehow got out of sync
-            mediaRecorderRef.current.stream.getTracks().forEach(track => track.stop());
+            mediaStreamSourceRef.current.mediaStream.getTracks().forEach(track => track.stop());
         }
         setIsRecording(false); // Ensure state is false
         mediaRecorderRef.current = null; // Clean up ref
-   }, [isRecording, addLiveMessage]); // Depends on isRecording state and addLiveMessage callback
+   }, [isRecording, addLiveMessage]);
 
    const startRecordingInternal = useCallback(async () => {
         const ws = liveWsConnection.current;
@@ -128,21 +178,41 @@ export function useLiveSession({ currentVoice }) {
             console.warn(`Cannot start recording. State: isRecording=${isRecording}, ws=${ws?.readyState}, status=${liveConnectionStatus}`);
             return;
         }
-        addLiveMessage({ role: 'system', text: 'Starting recording...' });
+        // Ensure input audio context is ready
+        if (!audioInputContextRef.current || audioInputContextRef.current.state !== 'running') {
+            console.error("Audio input context not ready for PCM capture.");
+            addLiveMessage({ role: 'error', text: 'Audio input context not ready.' });
+            // Attempt to resume it (might require user interaction)
+            try { await audioInputContextRef.current?.resume(); } catch (e) {}
+            if (audioInputContextRef.current?.state !== 'running') return; // Exit if still not running
+        }
+
+        addLiveMessage({ role: 'system', text: 'Starting recording (PCM)...' });
         try {
             const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
             addLiveMessage({ role: 'system', text: 'Mic access granted.' });
-            const options = { mimeType: MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : '' };
-            if (!options.mimeType) addLiveMessage({ role: 'error', text: 'Opus codec not supported.' });
+            mediaStreamSourceRef.current = audioInputContextRef.current.createMediaStreamSource(stream);
 
-            const recorder = new MediaRecorder(stream, options);
-            mediaRecorderRef.current = recorder; // Store ref
+            const bufferSize = 4096; // Common buffer size, power of 2
+            scriptProcessorNodeRef.current = audioInputContextRef.current.createScriptProcessor(bufferSize, 1, 1); // 1 input, 1 output channel
 
-            recorder.ondataavailable = (event) => {
-                if (event.data.size > 0 && ws?.readyState === WebSocket.OPEN) {
-                    try { ws.send(event.data); }
-                    catch (sendErr) {
-                        console.error("[Audio Input] Error sending chunk:", sendErr);
+            scriptProcessorNodeRef.current.onaudioprocess = (audioProcessingEvent) => {
+                const inputBuffer = audioProcessingEvent.inputBuffer;
+                const inputData = inputBuffer.getChannelData(0); // Float32 array
+
+                // Convert Float32 to Int16 PCM
+                const pcm16Data = new Int16Array(inputData.length);
+                for (let i = 0; i < inputData.length; i++) {
+                    let sample = Math.max(-1, Math.min(1, inputData[i])); // Clamp
+                    pcm16Data[i] = sample < 0 ? sample * 0x8000 : sample * 0x7FFF; // Scale to Int16 range
+                }
+
+                if (ws?.readyState === WebSocket.OPEN) {
+                    try {
+                        // Send the raw PCM data (ArrayBuffer)
+                        ws.send(pcm16Data.buffer);
+                    } catch (sendErr) {
+                        console.error("[Audio Input] Error sending PCM chunk:", sendErr);
                         addLiveMessage({ role: 'error', text: `Send error: ${sendErr.message}` });
                         stopRecordingInternal(); // Stop on send error
                     }
@@ -151,20 +221,15 @@ export function useLiveSession({ currentVoice }) {
                      stopRecordingInternal();
                 }
             };
-            recorder.onstop = () => {
-                stream.getTracks().forEach(track => track.stop());
-                console.log('[Audio Input] MediaRecorder stopped.');
-                // Don't set isRecording false here, let stopRecordingInternal handle it
-            };
-            recorder.onerror = (event) => {
-                console.error('[Audio Input] MediaRecorder error:', event.error);
-                addLiveMessage({ role: 'error', text: `Recorder error: ${event.error.name}` });
-                setIsRecording(false); // Update state on error
-            };
 
-            recorder.start(250);
+            // Connect the graph: Mic Source -> Script Processor -> Output Destination
+            // The connection to destination is necessary for the processor to run in some browsers
+            mediaStreamSourceRef.current.connect(scriptProcessorNodeRef.current);
+            scriptProcessorNodeRef.current.connect(audioInputContextRef.current.destination);
+
             setIsRecording(true);
-            addLiveMessage({ role: 'system', text: 'Recording active.' });
+            addLiveMessage({ role: 'system', text: `Recording active (PCM @ ${inputSampleRate}Hz).` });
+
         } catch (err) {
             console.error('[Audio Input] Error starting recording:', err);
             let errorText = `Mic error: ${err.message}`;
@@ -173,7 +238,7 @@ export function useLiveSession({ currentVoice }) {
             addLiveMessage({ role: 'error', text: errorText });
             setIsRecording(false);
         }
-   }, [isRecording, liveConnectionStatus, addLiveMessage, stopRecordingInternal]); // Depends on state and other callbacks
+   }, [isRecording, liveConnectionStatus, addLiveMessage, stopRecordingInternal, inputSampleRate]);
 
   // --- Memoized WebSocket Logic ---
   const setupLiveConnection = useCallback(() => {
@@ -269,7 +334,7 @@ export function useLiveSession({ currentVoice }) {
                               isAudioChunk = true;
                               if (liveModality === 'AUDIO') {
                                    if (!isModelSpeaking) setIsModelSpeaking(true);
-                                   if (!audioContextRef.current) initAudioContext();
+                                   if (!audioContextRef.current) initAudioContexts(); // Use the plural init
                                    if (audioContextRef.current?.state === 'running') {
                                         try { const bs = window.atob(part.inlineData.data); const len = bs.length; const bytes = new Uint8Array(len); for (let i = 0; i < len; i++) bytes[i] = bs.charCodeAt(i); audioQueueRef.current.push(bytes.buffer); playAudioQueue(); }
                                         catch (e) { console.error("[Audio] Decode/Queue Error:", e); setAudioError("Audio processing error."); }
@@ -288,6 +353,12 @@ export function useLiveSession({ currentVoice }) {
                  if (data.serverContent.turnComplete || data.serverContent.generationComplete) {
                       console.log("🏁 [Live WS] Turn/Generation Complete detected.");
                       turnOrGenComplete = true;
+                 }
+
+                 // --- Handle Interruption ---
+                 if (data.serverContent.interrupted) {
+                    console.log("🛑 [Live WS] Interruption detected! Stopping playback.");
+                    stopAndClearAudio(); // Stop playback and clear queue
                  }
 
             } // end if data.serverContent
@@ -328,20 +399,19 @@ export function useLiveSession({ currentVoice }) {
       console.log(`[Live WS] Connection closed. Code: ${event.code}, Clean: ${event.wasClean}, Reason: ${event.reason}`);
       setLiveConnectionStatus(prev => prev === 'error' ? 'error' : 'disconnected');
       if (!event.wasClean && event.code !== 1000) { addLiveMessage({ role: 'system', text: `Connection lost (Code: ${event.code}).` }); }
-      else if (event.code === 1000) { addLiveMessage({ role: 'system', text: 'Live session ended.' }); }
       liveWsConnection.current = null; // Clear the ref
-      closeAudioContext();
+      closeAudioContexts(); // Close both contexts
       if (isRecording) stopRecordingInternal();
       setIsModelSpeaking(false); liveStreamingTextRef.current = ''; liveStreamingMsgIdRef.current = null;
     };
-  }, [ liveModality, currentVoice, liveSystemInstruction, addLiveMessage, updateLiveMessage, initAudioContext, playAudioQueue, closeAudioContext, isRecording, stopRecordingInternal]); // Stable callbacks
+  }, [ liveModality, currentVoice, liveSystemInstruction, addLiveMessage, updateLiveMessage, initAudioContexts, playAudioQueue, closeAudioContexts, isRecording, stopRecordingInternal]); // Adjusted dependencies
 
   // --- Memoized Public Handlers ---
   const startLiveSession = useCallback(() => {
       // **Simplified start:** Directly call setup. The setup function now handles closing existing connections.
-      if (liveModality === 'AUDIO') initAudioContext();
+      if (liveModality === 'AUDIO') initAudioContexts(); // Ensure both contexts are ready
       setupLiveConnection();
-  }, [liveModality, initAudioContext, setupLiveConnection]);
+  }, [liveModality, initAudioContexts, setupLiveConnection]);
 
   const endLiveSession = useCallback(() => {
     if (liveWsConnection.current) {
@@ -351,11 +421,11 @@ export function useLiveSession({ currentVoice }) {
     } else {
         // Already closed or never started, ensure clean state
         setLiveConnectionStatus('disconnected');
-        closeAudioContext();
+        closeAudioContexts(); // Close both
         setIsModelSpeaking(false);
         if(isRecording) stopRecordingInternal(); // Ensure recording state is reset
     }
-  }, [addLiveMessage, closeAudioContext, isRecording, stopRecordingInternal]); // Dependencies
+  }, [addLiveMessage, closeAudioContexts, isRecording, stopRecordingInternal]); // Adjusted dependency
 
   const sendLiveMessageText = useCallback((text) => {
     const ws = liveWsConnection.current;
@@ -384,9 +454,9 @@ export function useLiveSession({ currentVoice }) {
               liveWsConnection.current.close(1000, "Component unmounting");
               liveWsConnection.current = null; // Clear ref on unmount
           }
-          closeAudioContext(); // Close audio context on unmount
+          closeAudioContexts(); // Close both audio contexts on unmount
       };
-  }, [closeAudioContext]); // Depend only on stable closeAudioContext
+  }, [closeAudioContexts]); // Adjusted dependency
 
   return {
     // State

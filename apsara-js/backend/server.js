@@ -7,14 +7,16 @@ import http from 'http';
 import dotenv from 'dotenv';
 import { WebSocketServer, WebSocket } from 'ws';
 import multer from 'multer';
+import genai from '@google/genai';
 import {
   GoogleGenAI,
   HarmCategory,
   HarmBlockThreshold,
   FunctionCallingConfigMode,
   Modality,
-  DynamicRetrievalConfigMode
+  DynamicRetrievalConfigMode,
 } from '@google/genai';
+const { Blob: BlobGoogle } = genai;
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { parse } from 'url';
@@ -618,59 +620,32 @@ async function handleLiveConnection(ws, req) {
 
 
     // --- Client WebSocket Message Handler ---
-    ws.on('message', async (data, isBinary) => {
-       const currentSession = sessions.get(ws);
-       const currentSessionId = currentSession?.conn?.id?.substring(0, 8) ?? 'N/A';
+    ws.on('message', async (message) => {
+       const currentSession = sessions.get(ws); // Get session using the client ws object
+       const currentSessionId = currentSession?.conn?.id?.substring(0, 8) ?? 'N/A'; // Get Google session ID (shortened)
 
-       if (!currentSession || !currentSession.conn) {
-             console.warn(`[Live Backend] Received message from client WS <${currentSessionId}>, but no associated Google session/connection found. Closing WS.`);
-             try { ws.close(1011, "Session lost"); } catch(e){}
-             return;
-        }
+       if (!currentSession) {
+         console.warn(`[Live Backend] Received message from client (ID: N/A - session not found) with no active session.`);
+         ws.close(1011, 'No active session found');
+         return;
+       }
 
-        // --- REMOVED Check for Google WebSocket State BEFORE Sending ---
-        // The SDK's send methods should handle this internally or throw.
-        // if (currentSession.conn.readyState !== WebSocket.OPEN) {
-        //     console.warn(`[Live Backend] Received ${isBinary ? 'BINARY' : 'TEXT'} from client <${currentSessionId}>, but Google WS state is ${currentSession.conn.readyState}. Ignoring.`);
-        //     return;
-        // }
-        // -------------------------------------------------------------
+       console.log(`[Live Backend] Received BINARY data from client (Session: ${currentSessionId}). Type: object, IsBuffer: true, Size: ${message.length}. Attempting sendRealtimeInput.`);
+       try {
+         // The incoming Buffer *is* raw Int16 PCM data from the frontend ScriptProcessor
+         const base64Pcm = message.toString('base64');
 
-        try {
-          if (isBinary) {
-            // console.log(`[Live Backend] Received BINARY data from client <${currentSessionId}>. Type: ${typeof data}, IsBuffer: ${data instanceof Buffer}, Size: ${data.length}. Attempting sendRealtimeInput.`); // Verbose log
+         // --- Send as L16 PCM @ 16kHz ---
+         // This MIME type accurately describes the raw PCM data being sent.
+        //  await currentSession.sendRealtimeInput({ audio: { data: base64Pcm, mimeType: 'audio/l16;rate=16000' } });
+         // Alternative if the above fails: try just 'audio/pcm' - assumes 16k default? Less likely.
+         await currentSession.sendRealtimeInput({ audio: { data: base64Pcm, mimeType: 'audio/pcm' } });
 
-            // --- Ensure we use the standard SDK call ---
-            await currentSession.sendRealtimeInput({ media: data }); // Pass the raw buffer/blob
-            // -------------------------------------------
-
-            // console.log(`[Live Backend] Sent BINARY data via sendRealtimeInput for <${currentSessionId}>.`); // Verbose log
-          } else {
-              const textData = data.toString();
-              // console.log(`[Live Backend] Received TEXT from client <${currentSessionId}>: "${textData.substring(0, 100)}${textData.length > 100 ? '...' : ''}". Attempting sendClientContent.`); // Verbose log
-              await currentSession.sendClientContent({
-                  turns: [{ role: 'user', parts: [{ text: textData }] }],
-                  turnComplete: true
-              });
-              // console.log(`[Live Backend] Sent TEXT data via sendClientContent for <${currentSessionId}>.`); // Verbose log
-          }
-        } catch(e){
-            console.error(`[Live Backend] Error processing/sending client ${isBinary ? 'BINARY' : 'TEXT'} message to Google <${currentSessionId}>:`, e);
-            // Add a check here to see if the error indicates a closed state
-            if (e.message?.toLowerCase().includes('websocket is not open') || e.message?.toLowerCase().includes('socket closed')) {
-                console.warn(`[Live Backend] Send failed because Google WS was closed. State likely closed during send.`);
-                 // Optionally close the client connection if it's not already closing
-                 if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
-                    ws.close(1011, "Backend connection error");
-                 }
-            }
-            // Forward error to client only if the client WS is still open
-            try {
-                 if (ws.readyState === WebSocket.OPEN) {
-                    ws.send(JSON.stringify({ event: 'error', message: `Backend error sending message: ${e.message || 'Unknown processing error'}` }));
-                 }
-            } catch (wsErr) { console.error(`[Live Backend] Failed to send processing error <${currentSessionId}> to client WS:`, wsErr); }
-        }
+         console.log(`[Live Backend] Sent BINARY data via sendRealtimeInput for <${currentSessionId}>.`);
+       } catch (error) {
+         console.error(`[Live Backend] Error processing/sending client BINARY message to Google <${currentSessionId}>:`, error);
+         // Consider closing ws here on error? ws.close(1011, "Backend processing error");
+       }
     });
 
     // --- Client WebSocket Close Handler ---
