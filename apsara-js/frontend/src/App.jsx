@@ -56,7 +56,7 @@ const suggestedPrompts = [
   { text: "What is the plot of the movie 'Inception'?", icon: Film, modelId: "gemini-1.5-flash" },
   { text: "Give me ideas for a challenging programming project", icon: Lightbulb, modelId: "gemini-1.5-flash"},
   { text: "What are some effective SEO strategies for 2024?", icon: Target, modelId: "gemini-2.5-pro-exp-03-25"},
-  { text: "Search for recent news about AI developments", icon: Search, modelId: "gemini-1.5-flash"},
+  { text: "Search for recent news about AI developments", icon: Search, modelId: "gemini-2.0-flash"},
 ];
             
 // Main App component                                                                                                            
