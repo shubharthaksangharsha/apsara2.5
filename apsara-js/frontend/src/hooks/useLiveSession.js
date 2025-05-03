@@ -32,6 +32,7 @@ export function useLiveSession({ currentVoice }) {
   const mediaRecorderRef = useRef(null);
   const liveStreamingTextRef = useRef('');
   const liveStreamingMsgIdRef = useRef(null);
+  const sessionResumeHandleRef = useRef(null); // Ref to store the handle
 
   // --- Memoized Utility Functions ---
   const addLiveMessage = useCallback((msg) => {
@@ -174,6 +175,7 @@ export function useLiveSession({ currentVoice }) {
 
    const startRecordingInternal = useCallback(async () => {
         const ws = liveWsConnection.current;
+        // Allow recording regardless of modality, just check connection state
         if (isRecording || !ws || ws.readyState !== WebSocket.OPEN || liveConnectionStatus !== 'connected') {
             console.warn(`Cannot start recording. State: isRecording=${isRecording}, ws=${ws?.readyState}, status=${liveConnectionStatus}`);
             return;
@@ -258,6 +260,7 @@ export function useLiveSession({ currentVoice }) {
     const params = new URLSearchParams({ modalities: liveModality });
     if (liveModality === 'AUDIO' && currentVoice) params.append('voice', currentVoice);
     if (liveSystemInstruction?.trim()) params.append('systemInstruction', liveSystemInstruction.trim());
+    if (sessionResumeHandleRef.current) params.append('resumeHandle', sessionResumeHandleRef.current); // Add handle if exists
     const wsUrl = `${protocol}//${window.location.host}/live?${params.toString()}`;
 
     console.log(`[Live Setup] Connecting: ${wsUrl}`);
@@ -370,6 +373,14 @@ export function useLiveSession({ currentVoice }) {
                  console.log("🔧 [Live WS] Processing 'serverToolCall'.");
                  addLiveMessage({ role: 'system', text: `Tool call: ${data.serverToolCall.functionCalls?.[0]?.name || '?'}` });
             }
+            // --- Store Session Resumption Handle ---
+            else if (data.sessionResumptionUpdate) {
+                 console.log("💾 [Live WS] Processing 'sessionResumptionUpdate'.");
+                 if (data.sessionResumptionUpdate.newHandle) {
+                     sessionResumeHandleRef.current = data.sessionResumptionUpdate.newHandle;
+                     console.log("[Live WS] Stored new session resume handle.");
+                 }
+            }
             // --- Catch Unhandled Structures ---
             else if (!data.event) { // Only warn if it's not one of the handled 'event' types
                 console.warn('[Live WS] Received unhandled message structure:', data);
@@ -409,7 +420,8 @@ export function useLiveSession({ currentVoice }) {
   // --- Memoized Public Handlers ---
   const startLiveSession = useCallback(() => {
       // **Simplified start:** Directly call setup. The setup function now handles closing existing connections.
-      if (liveModality === 'AUDIO') initAudioContexts(); // Ensure both contexts are ready
+      // Always initialize contexts regardless of modality selected for output
+      initAudioContexts();
       setupLiveConnection();
   }, [liveModality, initAudioContexts, setupLiveConnection]);
 
@@ -433,8 +445,9 @@ export function useLiveSession({ currentVoice }) {
         console.warn("Cannot send live message, WS not ready or text empty."); return;
     }
     try {
-        liveStreamingMsgIdRef.current = null; liveStreamingTextRef.current = ''; // Reset stream tracker
-        ws.send(text);
+        // Send as a structured message for backend differentiation
+        const messagePayload = JSON.stringify({ type: 'text', text: text.trim() });
+        ws.send(messagePayload);
         addLiveMessage({ role: 'user', text: text });
     } catch (e) {
         console.error('[Live WS] Send Error:', e); addLiveMessage({ role: 'error', text: `Send error: ${e.message}`});
@@ -442,7 +455,16 @@ export function useLiveSession({ currentVoice }) {
   }, [addLiveMessage]);
 
   // Expose stable recording controls
-  const startRecording = useCallback(() => startRecordingInternal(), [startRecordingInternal]);
+  const startRecording = useCallback(async () => {
+        // Attempt to resume context on user interaction (clicking record)
+        if (audioInputContextRef.current && audioInputContextRef.current.state === 'suspended') {
+             console.log("[Audio Input] Attempting to resume context before starting recording...");
+             try { await audioInputContextRef.current.resume(); }
+             catch (e) { console.error("[Audio Input] Failed to resume context on record click:", e); }
+        }
+        await startRecordingInternal(); // Now call the internal function
+  }, [startRecordingInternal]);
+
   const stopRecording = useCallback(() => stopRecordingInternal(), [stopRecordingInternal]);
 
   // --- Cleanup Effect ---
