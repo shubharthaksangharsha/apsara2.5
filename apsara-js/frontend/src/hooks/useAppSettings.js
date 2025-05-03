@@ -1,69 +1,154 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 
 const BACKEND_URL = 'http://localhost:9000'; // Consider moving to a config file
 
-export function useAppSettings(initialSystemInstruction = 'You are a helpful assistant.') {
-  const [currentModel, setCurrentModel] = useState('gemini-2.0-flash');
-  const [currentVoice, setCurrentVoice] = useState('Puck'); // Default voice
-  const [systemInstruction, setSystemInstruction] = useState(initialSystemInstruction);
-  const [temperature, setTemperature] = useState(0.7);
-  const [maxOutputTokens, setMaxOutputTokens] = useState(8192);
-  const [enableGoogleSearch, setEnableGoogleSearch] = useState(false);
-  const [enableCodeExecution, setEnableCodeExecution] = useState(false); // Placeholder
+// Helper function to check model capabilities based on the provided list and docs
+const getModelCapabilities = (modelId) => {
+  if (!modelId) return { supportsSearch: false, supportsSystemInstruction: true, supportsCodeExecution: false };
 
-  // Update system instruction state if the initial prop changes (e.g., fetched async)
+  // Define capabilities based on the user's list and previous documentation
+  switch (modelId) {
+    case "gemini-2.5-pro-exp-03-25":
+      return { supportsSearch: true, supportsSystemInstruction: true, supportsCodeExecution: true };
+    case "gemini-2.5-flash-preview-04-17":
+      return { supportsSearch: true, supportsSystemInstruction: true, supportsCodeExecution: true }; // Assuming code execution based on 2.5 family
+    case "gemini-2.0-flash":
+        return { supportsSearch: true, supportsSystemInstruction: true, supportsCodeExecution: true }; // Assuming code execution based on 2.0 family
+    case "gemini-2.0-flash-exp-image-generation": // Same underlying model
+      return { supportsSearch: false, supportsSystemInstruction: false, supportsCodeExecution: false }; // Flash models often don't use system instruction directly
+    case "imagen-3.0-generate-002":
+      return { supportsSearch: false, supportsSystemInstruction: false, supportsCodeExecution: false }; // Image only
+    case "gemini-1.5-pro":
+      // Docs didn't explicitly list Search Grounding for 1.5 Pro, unlike 2.5 Pro. System Instruction is supported.
+      return { supportsSearch: false, supportsSystemInstruction: true, supportsCodeExecution: true };
+    case "gemini-1.5-flash":
+      return { supportsSearch: false, supportsSystemInstruction: true, supportsCodeExecution: true };
+    case "gemini-1.5-flash-8b":
+      return { supportsSearch: false, supportsSystemInstruction: true, supportsCodeExecution: true }; // Assuming code exec based on 1.5 family
+    default:
+      // Default fallback: assume no search, yes system instruction, no code exec
+      return { supportsSearch: false, supportsSystemInstruction: true, supportsCodeExecution: false };
+  }
+};
+
+export function useAppSettings(initialSystemInstruction) {
+  // --- State Initialization ---
+  const [currentModel, setCurrentModel] = useState(() => localStorage.getItem('currentModel') || ''); // Default might come from fetched models later
+  const [currentVoice, setCurrentVoice] = useState(() => localStorage.getItem('currentVoice') || ''); // For TTS if used elsewhere
+  const [systemInstruction, setSystemInstruction] = useState(''); // Initialize empty, set later
+  const [temperature, setTemperature] = useState(() => parseFloat(localStorage.getItem('temperature') || '0.7'));
+  const [maxOutputTokens, setMaxOutputTokens] = useState(() => parseInt(localStorage.getItem('maxOutputTokens') || '8192', 10)); // Default to 8k often safer
+  const [enableGoogleSearch, setEnableGoogleSearch] = useState(false); // Initialize false, enable later based on model/saved state
+  const [enableCodeExecution, setEnableCodeExecution] = useState(false); // Initialize false
+
+  // Store model capabilities
+  const [modelCapabilities, setModelCapabilities] = useState(getModelCapabilities(currentModel));
+
+  // --- Effects to Update State and Capabilities ---
+
+  // Set initial system instruction once fetched
   useEffect(() => {
-    setSystemInstruction(initialSystemInstruction);
+    if (initialSystemInstruction !== null) { // Check if it's fetched
+      setSystemInstruction(initialSystemInstruction);
+    }
   }, [initialSystemInstruction]);
 
-  // Determine if system instruction is applicable based on the current model
-  const isSystemInstructionApplicable = currentModel !== 'gemini-2.0-flash-exp-image-generation';
+  // Update capabilities and dependent settings when model changes
+  useEffect(() => {
+    const capabilities = getModelCapabilities(currentModel);
+    setModelCapabilities(capabilities);
 
-  const handleSystemInstructionSave = async (newInstruction) => {
-    if (isSystemInstructionApplicable && newInstruction !== systemInstruction) {
-      console.log("useAppSettings: Saving system instruction:", newInstruction);
-      try {
-        const sysRes = await fetch(`${BACKEND_URL}/system`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ instruction: newInstruction })
-        });
-        if (!sysRes.ok) {
-          const errData = await sysRes.json().catch(() => ({}));
-          throw new Error(`Failed to save system instruction (Status: ${sysRes.status}) ${errData.error || ''}`);
-        }
-        setSystemInstruction(newInstruction); // Update state on success
-        return true;
-      } catch (err) {
-        console.error('useAppSettings: Error saving system instruction:', err);
-        alert(`Error saving settings: ${err.message}`);
-        return false;
-      }
-    } else if (!isSystemInstructionApplicable) {
-      console.log("useAppSettings: System instruction not applicable, not saving.");
-      return true; // No action needed
+    // Load saved search state only if supported, otherwise force disable
+    const savedSearch = localStorage.getItem('enableGoogleSearch') === 'true';
+    if (capabilities.supportsSearch) {
+      setEnableGoogleSearch(savedSearch);
     } else {
-       console.log("useAppSettings: System instruction unchanged, not saving.");
-       return true; // No action needed
+      setEnableGoogleSearch(false);
     }
-  };
 
+    // Load saved code execution state only if supported, otherwise force disable
+    const savedCodeExec = localStorage.getItem('enableCodeExecution') === 'true';
+     if (capabilities.supportsCodeExecution) {
+       setEnableCodeExecution(savedCodeExec);
+     } else {
+       setEnableCodeExecution(false);
+     }
+
+  }, [currentModel]);
+
+  // --- Persistence Effects ---
+  useEffect(() => {
+    localStorage.setItem('currentModel', currentModel);
+  }, [currentModel]);
+
+  useEffect(() => {
+    localStorage.setItem('currentVoice', currentVoice);
+  }, [currentVoice]);
+
+  useEffect(() => {
+    localStorage.setItem('temperature', temperature.toString());
+  }, [temperature]);
+
+  useEffect(() => {
+    localStorage.setItem('maxOutputTokens', maxOutputTokens.toString());
+  }, [maxOutputTokens]);
+
+  // Persist search setting only if the model supports it AND the setting is true
+  useEffect(() => {
+    if (modelCapabilities.supportsSearch) {
+      localStorage.setItem('enableGoogleSearch', enableGoogleSearch.toString());
+    } else {
+      localStorage.removeItem('enableGoogleSearch'); // Clean up if not supported
+    }
+  }, [enableGoogleSearch, modelCapabilities.supportsSearch]);
+
+  // Persist code execution setting only if the model supports it AND the setting is true
+  useEffect(() => {
+    if (modelCapabilities.supportsCodeExecution) {
+      localStorage.setItem('enableCodeExecution', enableCodeExecution.toString());
+    } else {
+      localStorage.removeItem('enableCodeExecution'); // Clean up if not supported
+    }
+  }, [enableCodeExecution, modelCapabilities.supportsCodeExecution]);
+
+  // --- Handlers ---
+  const handleSystemInstructionSave = useCallback((newInstruction) => {
+    if (modelCapabilities.supportsSystemInstruction) {
+      setSystemInstruction(newInstruction);
+      // TODO: Add backend call here if system instruction needs to be saved server-side
+      // e.g., fetch(`${BACKEND_URL}/system`, { method: 'POST', ... });
+      // For now, it's only saved in local state within the hook instance
+      console.log("System instruction updated (local state):", newInstruction);
+    } else {
+      console.warn("System instructions are not supported by the current model.");
+    }
+  }, [modelCapabilities.supportsSystemInstruction]); // Depend on capability
+
+
+  // --- Return Values ---
   return {
+    // State values
     currentModel,
-    setCurrentModel,
     currentVoice,
-    setCurrentVoice,
     systemInstruction,
-    setSystemInstruction, // Expose setter for direct updates if needed elsewhere (e.g., live prompt)
-    handleSystemInstructionSave,
     temperature,
-    setTemperature,
     maxOutputTokens,
-    setMaxOutputTokens,
     enableGoogleSearch,
-    setEnableGoogleSearch,
     enableCodeExecution,
-    setEnableCodeExecution,
-    isSystemInstructionApplicable,
+
+    // Setters
+    setCurrentModel,
+    setCurrentVoice,
+    setSystemInstruction, // Allow direct setting if needed externally
+    handleSystemInstructionSave, // Preferred way to update + save
+    setTemperature,
+    setMaxOutputTokens,
+    setEnableGoogleSearch, // Need setter for the Switch component
+    setEnableCodeExecution, // Need setter for the Switch component
+
+    // Capability flags
+    isSystemInstructionApplicable: modelCapabilities.supportsSystemInstruction,
+    isSearchSupportedByModel: modelCapabilities.supportsSearch,
+    isCodeExecutionSupportedByModel: modelCapabilities.supportsCodeExecution,
   };
 }

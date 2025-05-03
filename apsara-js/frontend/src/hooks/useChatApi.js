@@ -30,12 +30,25 @@ export function useChatApi({
       delete config.systemInstruction;
     }
 
-    config.tools = config.tools || [];
-    config.tools = config.tools.filter(tool => !tool.googleSearch && !tool.executableCode);
+    // Initialize tools array
+    config.tools = [];
 
-    if (!isImageGenCall) {
-      if (enableGoogleSearch) config.tools.push({ googleSearch: {} });
-      // if (enableCodeExecution) config.tools.push({ executableCode: {} }); // Add if backend supports
+    // Tool configuration - Enforce mutual exclusivity based on priority
+    if (!isImageGenCall) { 
+      if (enableGoogleSearch) {
+        // Priority 1: Google Search - If enabled, this MUST be the only tool
+        config.tools = [{ googleSearch: {} }];
+      } else if (enableCodeExecution) {
+        // Priority 2: Code Execution - If enabled (and search is off), this is the only tool
+        config.tools = [{ codeExecution: {} }];
+      } else {
+        // Priority 3 (Future): Function Calling / Custom Tools
+        // If neither search nor code execution is enabled, other tools *could* be added here.
+        // Example (if you add function calling later):
+        // if (enableFunctionCalling && functionDeclarations?.length > 0) {
+        //    config.tools = [{ functionDeclarations: functionDeclarations }];
+        // }
+      }
     }
 
     if (config.tools.length === 0) delete config.tools;
@@ -102,16 +115,24 @@ export function useChatApi({
          throw new Error(data.error?.message || data.error || `HTTP error! status: ${response.status}`);
       }
 
-      // Process response parts
+      // Process response parts - handle potential structured response
       const responseParts = [];
       if (typeof data.response === 'string') responseParts.push({ text: data.response });
-      else if (Array.isArray(data.response)) responseParts.push(...data.response);
-      else if (data.response?.parts) responseParts.push(...data.response.parts);
+      else if (Array.isArray(data.response)) {
+        // If it's an array, assume it's already an array of parts (like image response)
+        responseParts.push(...data.response);
+      } else if (data.response?.parts && Array.isArray(data.response.parts)) {
+        // If response is an object with a 'parts' array (like streaming chunks consolidated)
+        responseParts.push(...data.response.parts);
+      }
       else responseParts.push({ text: '(No response)' });
 
       const reply = {
         role: 'model',
         parts: responseParts,
+        // Add code execution info to metadata if present at the top level of the backend response
+        ...(data.executableCode && { executableCode: data.executableCode }),
+        ...(data.codeExecutionResult && { codeExecutionResult: data.codeExecutionResult }),
         metadata: { finishReason: data.finishReason, usageMetadata: data.usageMetadata },
         id: Date.now() + Math.random(),
       };
@@ -247,15 +268,16 @@ export function useChatApi({
             try {
               const data = JSON.parse(jsonData);
 
-              // --- Handle Text/Image Parts (Original Logic) ---
-              if (data.text || (data.inlineData && data.inlineData.mimeType?.startsWith('image/'))) {
+              // --- Handle Different Part Types ---
+              if (data.text || data.inlineData || data.executableCode || data.codeExecutionResult) {
                    setConvos(prevConvos => prevConvos.map(c => {
                       if (c.id !== finalConvoId) return c;
                       const updatedMessages = c.messages.map(m => {
                           if (m.id === tempModelMessageId) {
                               let currentParts = m.parts ? [...m.parts] : [];
+
+                              // Handle text - append or add new
                               if (data.text) {
-                                  // Append text to the last text part or add a new one
                                   const lastPartIndex = currentParts.length - 1;
                                   if (lastPartIndex >= 0 && typeof currentParts[lastPartIndex] === 'object' && 'text' in currentParts[lastPartIndex]) {
                                       currentParts[lastPartIndex] = { ...currentParts[lastPartIndex], text: currentParts[lastPartIndex].text + data.text };
@@ -263,9 +285,17 @@ export function useChatApi({
                                       currentParts.push({ text: data.text });
                                   }
                               }
-                              if (data.inlineData && data.inlineData.mimeType?.startsWith('image/')) {
-                                  // Add a new image part
+                              // Handle images (inlineData) - add new
+                              else if (data.inlineData) {
                                   currentParts.push({ inlineData: data.inlineData });
+                              }
+                              // Handle executable code - add new
+                              else if (data.executableCode) {
+                                  currentParts.push({ executableCode: data.executableCode });
+                              }
+                              // Handle code result - add new
+                              else if (data.codeExecutionResult) {
+                                  currentParts.push({ codeExecutionResult: data.codeExecutionResult });
                               }
                               return { ...m, parts: currentParts };
                           }
