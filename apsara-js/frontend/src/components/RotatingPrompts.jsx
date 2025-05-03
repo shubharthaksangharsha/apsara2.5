@@ -65,7 +65,7 @@ export default function RotatingPrompts({ allPrompts = [], onPromptClick }) {
           return (
             <button
               key={`${prompt.text}-${index}`} // Use text + index for potentially non-unique prompts
-              onClick={() => onPromptClick(prompt.text, prompt.modelId)}
+              onClick={() => onPromptClick(prompt.text, prompt.modelId, prompt.toolUsage)}
               className="flex items-center text-left px-4 py-3 bg-white dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/80 rounded-lg text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700/70 transition-all shadow-sm hover:shadow-lg transform hover:-translate-y-1 hover:border-indigo-300 dark:hover:border-indigo-700 group"
             >
               <Icon className="h-5 w-5 mr-3 text-indigo-500 dark:text-indigo-400 flex-shrink-0 transition-transform group-hover:scale-110" />

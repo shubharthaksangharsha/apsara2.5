@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, UploadCloud } from 'lucide-react';
+import { Switch } from '@headlessui/react';
+import { Send, UploadCloud, CornerDownLeft, Loader2, Mic, MicOff, Paperclip, Image as ImageIcon, Text, Zap } from 'lucide-react';
 
-export default function MessageInput({ onSend, onStreamSend, isLoading, disabled, onFileUploadClick }) {
+export default function MessageInput({ onSend, onStreamSend, isLoading, disabled, onFileUploadClick, streamEnabled, onStreamToggleChange }) {
   const [text, setText] = useState('');
   const inputRef = useRef();
   const [useStreaming, setUseStreaming] = useState(false); // Default to false or read from localStorage?
@@ -37,7 +38,7 @@ export default function MessageInput({ onSend, onStreamSend, isLoading, disabled
     setInputRows(1); // Reset rows
     inputRef.current.style.height = 'auto'; // Reset height
 
-    if (useStreaming) {
+    if (streamEnabled) {
       onStreamSend(messageToSend);
     } else {
       onSend(messageToSend);
@@ -77,17 +78,21 @@ export default function MessageInput({ onSend, onStreamSend, isLoading, disabled
             >
               <UploadCloud className="h-5 w-5 transition-transform duration-150 ease-in-out group-hover:scale-110" />
             </button>
-            <label className="flex items-center cursor-pointer group" title="Toggle Streaming Response">
-              <input 
-                id="streamToggleInput" 
-                type="checkbox" 
-                checked={useStreaming} 
-                onChange={() => setUseStreaming(!useStreaming)}
-                className="sr-only peer"
+            <Switch.Group as="div" className="flex items-center ml-2 flex-shrink-0">
+              <Switch
+                checked={streamEnabled}
+                onChange={onStreamToggleChange}
                 disabled={isLoading || disabled}
-              />
-              <div className="relative w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all dark:border-gray-600 peer-checked:bg-indigo-500 group-hover:scale-105"></div>
-            </label>
+                className={`${streamEnabled ? 'bg-indigo-500' : 'bg-gray-300 dark:bg-gray-600'}
+                  relative inline-flex h-[20px] w-[36px] shrink-0 cursor-pointer rounded-full border-2 border-transparent 
+                  transition-colors duration-200 ease-in-out focus:outline-none focus-visible:ring-2 
+                  focus-visible:ring-white/75 disabled:opacity-50 disabled:cursor-not-allowed`}
+              >
+                <span className="sr-only">Toggle Streaming</span>
+                <Zap className={`absolute top-1/2 left-0.5 transform -translate-y-1/2 h-3 w-3 text-yellow-300 transition-opacity ${streamEnabled ? 'opacity-100' : 'opacity-0'}`} />
+                <span className={`pointer-events-none inline-block h-[16px] w-[16px] transform rounded-full bg-white dark:bg-gray-300 shadow-lg ring-0 transition duration-200 ease-in-out ${streamEnabled ? 'translate-x-[16px]' : 'translate-x-0'}`} />
+              </Switch>
+            </Switch.Group>
             <button
               onClick={handleSend}
               disabled={isLoading || disabled || !text.trim()}
@@ -99,7 +104,7 @@ export default function MessageInput({ onSend, onStreamSend, isLoading, disabled
           </div>
         </div>
         <div className="text-xs text-gray-500 dark:text-gray-400 mt-1 text-center hidden sm:block">
-          {useStreaming ? "Streaming mode: Responses appear in real-time." : "Tip: Shift+Enter for a new line."}
+          {streamEnabled ? "Streaming mode: Responses appear in real-time." : "Tip: Shift+Enter for a new line."}
         </div>
       </div>
     </div>

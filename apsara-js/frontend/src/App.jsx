@@ -19,6 +19,7 @@ import { useConversations } from './hooks/useConversations';
 import { useChatApi } from './hooks/useChatApi';
 import { useFileUpload } from './hooks/useFileUpload';
 import { useLiveSession } from './hooks/useLiveSession';
+import { getModelCapabilities } from './utils/modelCapabilities'; // Import capability checker
 
 const BACKEND_URL = 'http://localhost:9000';
 
@@ -26,12 +27,12 @@ const MAX_LOCALSTORAGE_SIZE_MB = 4.5; // Set a limit slightly below 5MB
 const BYTES_PER_MB = 1024 * 1024;
 const MAX_STORAGE_BYTES = MAX_LOCALSTORAGE_SIZE_MB * BYTES_PER_MB;
 
-// Define suggested prompts with optional target models
+// Define suggested prompts with optional target models and tool usage
 const suggestedPrompts = [
-  // Technical & Coding (Using Pro for complexity/accuracy)
+  // Technical & Coding (Using Pro for complexity/accuracy & Code Execution)
   { text: "Explain the concept of closures in JavaScript", icon: BrainCircuit, modelId: "gemini-2.5-pro-exp-03-25"},
-  { text: "Write a Python function to find prime numbers up to N", icon: Code, modelId: "gemini-2.5-pro-exp-03-25" },
-  { text: "Debug this SQL query:\nSELECT user, COUNT(*) FROM orders GROUP BY product;", icon: Code, modelId: "gemini-2.5-pro-exp-03-25" },
+  { text: "Generate and execute Python code to print a random number (1-10)", icon: Code, modelId: "gemini-2.0-flash", toolUsage: 'codeExecution' },
+  { text: "Debug this SQL query:\nSELECT user, COUNT(*) FROM orders GROUP BY product;", icon: Code, modelId: "gemini-2.0-flash", toolUsage: 'codeExecution' },
   { text: "What are the main differences between React and Vue?", icon: BrainCircuit },
 
   // Creative & Writing (Using Flash for speed/versatility)
@@ -50,13 +51,14 @@ const suggestedPrompts = [
   { text: "Draft an email asking for a project extension", icon: FileText, modelId: "gemini-1.5-flash" },
 
   // Knowledge & Explanation (Mix based on potential complexity)
+
   { text: "Provide tips for improving public speaking skills", icon: BookOpen, modelId: "gemini-1.5-flash" },
   { text: "Explain the concept of blockchain technology simply", icon: Globe, modelId: "gemini-1.5-flash" },
   { text: "Summarize the main events of World War II", icon: History, modelId: "gemini-2.5-pro-exp-03-25" },
   { text: "What is the plot of the movie 'Inception'?", icon: Film, modelId: "gemini-1.5-flash" },
   { text: "Give me ideas for a challenging programming project", icon: Lightbulb, modelId: "gemini-1.5-flash"},
-  { text: "What are some effective SEO strategies for 2024?", icon: Target, modelId: "gemini-2.5-pro-exp-03-25"},
-  { text: "Search for recent news about AI developments", icon: Search, modelId: "gemini-2.0-flash"},
+  { text: "Search for recent news about AI developments", icon: Search, modelId: "gemini-2.0-flash", toolUsage: 'googleSearch' },
+  { text: "What is the Current date and time", icon: Search, modelId: "gemini-2.0-flash", toolUsage: 'googleSearch' },
 ];
             
 // Main App component                                                                                                            
@@ -140,6 +142,7 @@ export default function App() {
   const [liveSettingsOpen, setLiveSettingsOpen] = useState(false); // REMOVED - No longer needed as separate panel
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [sidebarLocked, setSidebarLocked] = useState(false); // <-- Add this state
+  const [streamToggleState, setStreamToggleState] = useState(true); // <-- Add state for stream toggle (default true)
 
   // Add effect to default sidebar open state based on screen size initially
   useEffect(() => {
@@ -224,31 +227,56 @@ export default function App() {
   }, [createNewChat, closeSidebar]);
 
   // Handler for suggested prompts
-  const startChatWithPrompt = useCallback(async (promptText, targetModelId = null) => {
+  const startChatWithPrompt = useCallback(async (promptText, targetModelId = null, toolUsage = null) => {
     const id = Date.now().toString();
     const title = promptText.length > 30 ? promptText.substring(0, 30) + '...' : promptText;
     const initialConvoData = { id, title, messages: [] };
 
-    // Optimistically set model if specified
+    let modelToUse = currentModel; // Start with current model
+
+    // Determine the target model and set it if valid
     if (targetModelId && models.some(m => m.id === targetModelId)) {
-      setCurrentModel(targetModelId);
-    } else if (targetModelId) {
-      targetModelId = currentModel; // Fallback if invalid target
-                    } else {
-       targetModelId = currentModel;
+      modelToUse = targetModelId;
+      setCurrentModel(targetModelId); // Update the app state model
+    } else if (targetModelId) { // If target ID provided but invalid
+      console.warn(`Invalid target model ID "${targetModelId}" in suggested prompt. Using current model "${currentModel}".`);
     }
+
+    // Handle Tool Activation based on prompt config and model capabilities
+    const capabilities = getModelCapabilities(modelToUse);
+    let shouldEnableSearch = false; // Determine overrides locally
+    let shouldEnableCodeExec = false;
+    // console.log(`Prompt clicked. Tool usage: ${toolUsage}, Model: ${modelToUse}, Capabilities:`, capabilities); // Debug log
+
+    if (toolUsage === 'googleSearch') {
+      if (capabilities.supportsSearch) {
+        console.log("Activating Google Search for this prompt.");
+        shouldEnableSearch = true;
+        shouldEnableCodeExec = false; // Ensure mutual exclusivity
+      } else {
+        console.warn(`Prompt requested Google Search, but model ${modelToUse} does not support it. Tool not enabled.`);
+      }
+    } else if (toolUsage === 'codeExecution') {
+      if (capabilities.supportsCodeExecution) {
+        console.log("Activating Code Execution for this prompt.");
+        shouldEnableCodeExec = true;
+        shouldEnableSearch = false; // Ensure mutual exclusivity
+      } else {
+        console.warn(`Prompt requested Code Execution, but model ${modelToUse} does not support it. Tool not enabled.`);
+      }
+    } // If toolUsage is null, we don't change the existing toggle states.
+
+    // Update the global state for Settings Panel UI consistency
+    setEnableGoogleSearch(shouldEnableSearch);
+    setEnableCodeExecution(shouldEnableCodeExec);
+    setStreamToggleState(true); // Force stream toggle ON for suggested prompts
 
     if (window.innerWidth < 1024) closeSidebar();
 
-    console.log(`Starting chat with prompt: "${promptText}" (Model: ${targetModelId})`);
-    const streamToggle = document.getElementById('streamToggleInput'); // Check streaming toggle state
-
-    if (streamToggle?.checked) {
-      await startStreamChat(promptText, id, initialConvoData, targetModelId);
-     } else {
-      await sendToBackend(promptText, id, initialConvoData, targetModelId);
-    }
-  }, [models, currentModel, setCurrentModel, closeSidebar, startStreamChat, sendToBackend]); // Dependencies
+    console.log(`Starting STREAM chat with prompt: "${promptText}" (Model: ${modelToUse})`);
+    // ALWAYS use streaming for suggested prompts, regardless of manual toggle
+    await startStreamChat(promptText, id, initialConvoData, modelToUse, shouldEnableSearch, shouldEnableCodeExec); // Pass overrides
+  }, [models, currentModel, setCurrentModel, setEnableGoogleSearch, setEnableCodeExecution, setStreamToggleState, closeSidebar, startStreamChat]); // Added setters to dependencies, removed sendToBackend as it's not used here
 
   // Show loading indicator while initial data is fetched?
   if (dataLoading) {
@@ -336,6 +364,8 @@ export default function App() {
           isLoading={isChatLoading}
           disabled={!activeConvoId}
           onFileUploadClick={() => setFileUploadOpen(true)}
+          streamEnabled={streamToggleState} // Pass state down
+          onStreamToggleChange={setStreamToggleState} // Pass handler down
         />
       </main>
 

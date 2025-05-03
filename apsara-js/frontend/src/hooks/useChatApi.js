@@ -19,10 +19,15 @@ export function useChatApi({
   const [streamingModelMessageId, setStreamingModelMessageId] = useState(null);
 
   // Helper to apply generation/tool config based on current settings
-  const applyConfigSettings = (config = {}, isImageGenCall = false) => {
+  const applyConfigSettings = (config = {}, isImageGenCall = false, overrideEnableSearch = null, overrideEnableCodeExec = null) => {
     config.generationConfig = config.generationConfig || {};
     config.generationConfig.temperature = temperature;
     config.generationConfig.maxOutputTokens = maxOutputTokens;
+
+    // Determine effective tool state: prioritize overrides, then hook state
+    const useSearch = overrideEnableSearch !== null ? overrideEnableSearch : enableGoogleSearch;
+    const useCodeExec = overrideEnableCodeExec !== null ? overrideEnableCodeExec : enableCodeExecution;
+    // console.log("applyConfigSettings - Effective Tools:", { useSearch, useCodeExec }); // Debug log
 
     if (!isImageGenCall && isSystemInstructionApplicable) {
       config.systemInstruction = systemInstruction;
@@ -34,11 +39,11 @@ export function useChatApi({
     config.tools = [];
 
     // Tool configuration - Enforce mutual exclusivity based on priority
-    if (!isImageGenCall) { 
-      if (enableGoogleSearch) {
+    if (!isImageGenCall) {
+      if (useSearch) {
         // Priority 1: Google Search - If enabled, this MUST be the only tool
         config.tools = [{ googleSearch: {} }];
-      } else if (enableCodeExecution) {
+      } else if (useCodeExec) {
         // Priority 2: Code Execution - If enabled (and search is off), this is the only tool
         config.tools = [{ codeExecution: {} }];
       } else {
@@ -168,7 +173,7 @@ export function useChatApi({
     }
   };
 
-  const startStreamChat = async (text, targetConvoId = null, initialConvoData = null, targetModelId = null) => {
+  const startStreamChat = async (text, targetConvoId = null, initialConvoData = null, targetModelId = null, overrideEnableSearch = null, overrideEnableCodeExec = null) => {
     const convoIdToUse = targetConvoId || activeConvoId;
      if (!convoIdToUse && !initialConvoData) {
        console.error("startStreamChat: No active conversation and no initial data provided.");
@@ -233,7 +238,7 @@ export function useChatApi({
       const baseRequestBody = {
         contents: turns,
          modelId: modelToUse,
-         config: applyConfigSettings({}, isImageGen),
+         config: applyConfigSettings({}, isImageGen, overrideEnableSearch, overrideEnableCodeExec),
       };
 
       const response = await fetch(`${BACKEND_URL}/chat/stream`, {

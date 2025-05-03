@@ -239,18 +239,21 @@ app.post('/chat', async (req,res)=>{
     console.log(`[POST /chat] Response from Google API:`, JSON.stringify(result, null, 2));
     const c=result.candidates[0];
     if (['SAFETY','RECITATION'].includes(c.finishReason)) return res.status(400).json({});
-    if (result.functionCalls?.length) return res.json({ functionCalls:result.functionCalls });
-    let responseData=apiRequest.config.responseMimeType==='application/json'
-      ? JSON.parse(result.text||'null').catch? result.text : result.text
-      : result.text;
-    res.json({
-      response:responseData,
-      executableCode:result.executableCode,
-      codeExecutionResult:result.codeExecutionResult,
+    // --- MODIFIED RESPONSE PROCESSING ---
+    // Check if the primary response is within parts (most common case)
+    let finalResponseParts = [];
+    if (c.content?.parts && Array.isArray(c.content.parts)) {
+        finalResponseParts = c.content.parts;
+    } else if (result.text) { // Fallback for simple text responses
+        finalResponseParts.push({ text: result.text });
+    }
+
+    // Return the full parts array structure
+    return res.json({
+      response: finalResponseParts, // Send the array of parts
       usageMetadata:result.usageMetadata,
       finishReason:c.finishReason,
       safetyRatings:c.safetyRatings,
-      groundingMetadata:c.groundingMetadata
     });
   } catch (e) {
     console.error(e);
@@ -292,7 +295,7 @@ app.post('/chat/stream', async (req, res) => {
                     } else if (part.codeExecutionResult) {
                         // Send codeExecutionResult part
                         res.write(`data: ${JSON.stringify({ codeExecutionResult: part.codeExecutionResult })}\n\n`);
-                    }
+      }
                     // NOTE: We are not explicitly handling part.thought here, assuming it's not needed for display
                 }
             }
