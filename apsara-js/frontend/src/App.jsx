@@ -253,7 +253,7 @@ export default function App() {
         console.log("Activating Google Search for this prompt.");
         shouldEnableSearch = true;
         shouldEnableCodeExec = false; // Ensure mutual exclusivity
-      } else {
+                    } else {
         console.warn(`Prompt requested Google Search, but model ${modelToUse} does not support it. Tool not enabled.`);
       }
     } else if (toolUsage === 'codeExecution') {
@@ -261,7 +261,7 @@ export default function App() {
         console.log("Activating Code Execution for this prompt.");
         shouldEnableCodeExec = true;
         shouldEnableSearch = false; // Ensure mutual exclusivity
-      } else {
+     } else {
         console.warn(`Prompt requested Code Execution, but model ${modelToUse} does not support it. Tool not enabled.`);
       }
     } // If toolUsage is null, we don't change the existing toggle states.

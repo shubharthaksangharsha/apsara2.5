@@ -17,6 +17,7 @@
   "dependencies": {
     "@google/genai": "^0.10.0",
     "@google/generative-ai": "^0.17.0",
+    "@types/fluent-ffmpeg": "^2.1.27",
     "connect-mongo": "^5.1.0",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
