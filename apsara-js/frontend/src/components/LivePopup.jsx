@@ -1,20 +1,79 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { MessageSquare, X, Send, Mic, MicOff } from 'lucide-react';
+import { MessageSquare, X, Send, Mic, MicOff, Video, VideoOff } from 'lucide-react';
+import VideoStreamDisplay from './VideoStreamDisplay.jsx'; // Import the video display component
 
 // Helper to render message content with potential icon
 const renderMessageContent = (msg) => {
-  if (msg.icon) {
+  // --- Handle messages with explicit icons (usually system messages) ---
+  if (msg.icon && msg.text) {
     const IconComponent = msg.icon;
     const isSystem = msg.role === 'system';
     return (
       <span className={`flex items-center gap-1.5 ${isSystem ? 'opacity-80 italic' : ''}`}>
         <IconComponent className="h-4 w-4 inline-block opacity-70 flex-shrink-0" />
-        <span>{msg.text}</span>
+        <span>{msg.text}</span> {/* Display text alongside icon */}
       </span>
     );
+  } else if (msg.role === 'model_code' && msg.code) {
+    return (
+      <div className="my-1 p-2 bg-gray-100 dark:bg-gray-900/50 rounded-md overflow-x-auto custom-scrollbar text-xs">
+        <span className="text-gray-500 dark:text-gray-400 block text-xs mb-1">Executable Code ({msg.code.language || 'PYTHON'}):</span>
+        <pre><code className={`language-${msg.code.language?.toLowerCase() || 'python'}`}>
+          {msg.code.code}
+        </code></pre>
+      </div>
+    );
+  } else if (msg.role === 'system_code_result' && msg.result) {
+    const isError = msg.result.outcome !== 'OUTCOME_OK';
+    const borderColor = isError ? 'border-red-500 dark:border-red-400' : 'border-green-500 dark:border-green-400';
+    const bgColor = isError ? 'bg-red-50 dark:bg-red-900/20' : 'bg-green-50 dark:bg-green-900/20';
+    return (
+      <div className={`my-1 p-1.5 border-l-4 ${borderColor} ${bgColor} text-xs`}>
+        <pre className="whitespace-pre-wrap font-mono text-xs">Output ({msg.result.outcome}): {msg.result.output}</pre>
+      </div>
+    );
   }
-  return msg.text;
-}
+
+  // --- Handle messages structured with parts (model/user/function) ---
+  if (Array.isArray(msg.parts)) {
+    return msg.parts.map((part, i) => {
+      if (part.text) {
+        return <div key={`part-text-${i}`} className="whitespace-pre-wrap">{part.text}</div>;
+      } else if (part.inlineData?.mimeType?.startsWith('image/')) {
+        return (
+          <div key={`part-img-${i}`} className="my-2">
+            <img
+              src={`data:${part.inlineData.mimeType};base64,${part.inlineData.data}`}
+              alt="Generated content"
+              className="max-w-full h-auto rounded-md border dark:border-gray-600" // Added border
+            />
+          </div>
+        );
+      } else if (part.executableCode) {
+        return (
+          <div key={`part-code-${i}`} className="my-1 p-2 bg-gray-100 dark:bg-gray-900/50 rounded-md overflow-x-auto custom-scrollbar text-xs">
+            <span className="text-gray-500 dark:text-gray-400 block text-xs mb-1">Executable Code ({part.executableCode.language || 'PYTHON'}):</span>
+            <pre><code className={`language-${part.executableCode.language?.toLowerCase() || 'python'}`}>{part.executableCode.code}</code></pre>
+          </div>
+        );
+      } else if (part.codeExecutionResult) {
+        const isError = part.codeExecutionResult.outcome !== 'OUTCOME_OK';
+        const borderColor = isError ? 'border-red-500 dark:border-red-400' : 'border-green-500 dark:border-green-400';
+        const bgColor = isError ? 'bg-red-50 dark:bg-red-900/20' : 'bg-green-50 dark:bg-green-900/20';
+        return (
+          <div key={`part-coderesult-${i}`} className={`my-1 p-1.5 border-l-4 ${borderColor} ${bgColor} text-xs`}>
+            <pre className="whitespace-pre-wrap font-mono text-xs">Output ({part.codeExecutionResult.outcome}): {part.codeExecutionResult.output}</pre>
+          </div>
+        );
+      } else {
+        return null; // Ignore other part types for now
+      }
+    });
+  }
+
+  // --- Fallback for simple text messages (if parts logic fails or msg has no parts) ---
+  return msg.text || null;
+};
 
 // Helper to get status indicator JSX
 const getStatusIndicator = (connectionStatus) => {
@@ -36,8 +95,11 @@ export default function LivePopup({
   audioError,
   liveModality, 
   liveSystemInstruction, 
+  sessionTimeLeft,
   isRecording, 
   isModelSpeaking, 
+  isStreamingVideo,
+  mediaStream, // Pass the actual MediaStream object
   
   // Handlers from App.jsx
   onVoiceChange, 
@@ -49,6 +111,8 @@ export default function LivePopup({
   onSendMessage,
   onStartRecording, 
   onStopRecording, 
+  onStartVideo,     // Video handlers
+  onStopVideo,
 }) {
   const [inputText, setInputText] = useState('');
   const messagesEndRef = useRef(null);
@@ -101,7 +165,14 @@ export default function LivePopup({
             <MessageSquare className="h-5 w-5 text-green-600 dark:text-green-400" />
             Apsara Live
           </h2>
-          <div className="text-sm font-medium">{getStatusIndicator(connectionStatus)}</div>
+          <div className="flex flex-col items-center text-xs sm:text-sm font-medium">
+            <div>{getStatusIndicator(connectionStatus)}</div>
+            {sessionTimeLeft && connectionStatus === 'connected' && (
+              <div className="text-orange-500 mt-0.5" title="Time before session auto-closes if inactive">
+                  Ends in: {sessionTimeLeft}
+              </div>
+            )}
+          </div>
           <button 
             onClick={onClose} 
             className="p-2 rounded-full text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors group"
@@ -110,6 +181,12 @@ export default function LivePopup({
             <X className="h-5 w-5 transition-transform duration-150 ease-in-out group-hover:scale-110" />
           </button>
         </div>
+        
+        {/* Video Stream Display - Positioned absolutely */}
+        {/* Render it only when streaming and the stream exists */}
+        {isStreamingVideo && mediaStream && (
+            <VideoStreamDisplay videoStream={mediaStream} isWebcamActive={isStreamingVideo} />
+        )}
         
         {/* Message Display Area */}
         <div className="flex-1 overflow-y-auto mb-4 space-y-3 pr-2 border rounded-md p-3 bg-gray-50 dark:bg-gray-900/50 custom-scrollbar relative">
@@ -131,8 +208,10 @@ export default function LivePopup({
                     ? 'bg-white dark:bg-gray-700 shadow-sm border border-gray-200 dark:border-gray-600'
                     : msg.role === 'system'
                     ? 'bg-gray-100 dark:bg-gray-600 italic text-gray-600 dark:text-gray-300' // Adjusted system style
-                    : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300' // Error role
+                    : msg.role === 'error' ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300' // Error role
+                    : 'bg-white dark:bg-gray-700 shadow-sm border border-gray-200 dark:border-gray-600' // Default for model
                 }`}
+                style={ msg.role === 'model_code' || msg.role === 'system_code_result' ? { padding: '0' } : {} }
               >
                 {renderMessageContent(msg)}
               </div>
@@ -224,7 +303,7 @@ export default function LivePopup({
 
           {/* Input Area (Shown when connected) */}
           {connectionStatus === 'connected' && (
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1 sm:gap-2">
               {/* Microphone Button */}
               <button
                 onClick={() => {
@@ -238,6 +317,20 @@ export default function LivePopup({
                 title={isRecording ? 'Stop Recording' : 'Start Recording (Sends audio live)'}
               >
                 {isRecording ? <MicOff className="h-5 w-5" /> : <Mic className="h-5 w-5 transition-transform group-hover:scale-110" />}
+              </button>
+              {/* Video Button */}
+              <button
+                onClick={() => {
+                  if (isStreamingVideo) onStopVideo(); else onStartVideo();
+                }}
+                className={`p-2 rounded-full transition-colors group ${
+                  isStreamingVideo
+                    ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 hover:bg-blue-200 dark:hover:bg-blue-800/50 animate-pulse'
+                    : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600'
+                }`}
+                title={isStreamingVideo ? 'Stop Video Stream' : 'Start Video Stream (Sends snapshots)'}
+              >
+                {isStreamingVideo ? <VideoOff className="h-5 w-5" /> : <Video className="h-5 w-5 transition-transform group-hover:scale-110" />}
               </button>
               {/* Text Input */}
               <div className="relative flex-1">

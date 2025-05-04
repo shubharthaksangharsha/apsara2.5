@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { Mic, AudioLines } from 'lucide-react'; // Import icons
 
 // Helper function to decode PCM audio data
 const decodePcm16ToFloat32 = (arrayBuffer) => {
@@ -18,7 +19,9 @@ export function useLiveSession({ currentVoice }) {
   const [liveSystemInstruction, setLiveSystemInstruction] = useState('You are a helpful assistant.');
   const [isModelSpeaking, setIsModelSpeaking] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
+  const [isStreamingVideo, setIsStreamingVideo] = useState(false); // Video state
   const [audioError, setAudioError] = useState(null);
+  const [sessionTimeLeft, setSessionTimeLeft] = useState(null); // State for timer
   const [inputSampleRate] = useState(16000); // Target input sample rate for PCM
 
   // Refs
@@ -27,6 +30,9 @@ export function useLiveSession({ currentVoice }) {
   const audioInputContextRef = useRef(null); // For Recording (16kHz)
   const scriptProcessorNodeRef = useRef(null); // For PCM capture
   const mediaStreamSourceRef = useRef(null); // Mic stream source
+  const videoStreamRef = useRef(null); // Webcam stream
+  const videoElementRef = useRef(null); // Hidden video element
+  const canvasElementRef = useRef(null); // Canvas for snapshotting
   const audioQueueRef = useRef([]);
   const isPlayingAudioRef = useRef(false);
   const mediaRecorderRef = useRef(null);
@@ -40,25 +46,51 @@ export function useLiveSession({ currentVoice }) {
     setLiveMessages(prev => [...prev, { ...msg, id: msg.id || (Date.now() + Math.random() * 1000), timestamp: Date.now() }]);
   }, []);
 
-  const updateLiveMessage = useCallback((id, newText) => {
+  const updateLiveMessage = useCallback((id, updates) => {
     setLiveMessages(prevMessages => {
-      const messageExists = prevMessages.some(m => m.id === id);
-      if (!messageExists) {
-          console.warn(`❗️ updateLiveMessage: Message with ID ${id} not found in prevMessages! Cannot update.`);
-          return prevMessages; // Return previous state if ID not found
+      const index = prevMessages.findIndex(msg => msg.id === id);
+      if (index === -1) {
+        console.warn(`[Live WS] updateLiveMessage: Message with ID ${id} not found in prevMessages! Cannot update. Updates:`, updates);
+        return prevMessages;
       }
-      console.log(`🔄 Updating message ID ${id}. Current text len: ${prevMessages.find(m => m.id === id)?.text?.length}. New text len: ${newText?.length}`);
-      const updatedMessages = prevMessages.map(m =>
-        m.id === id ? { ...m, text: newText } : m
-      );
-      // Optional: Verify update happened
-      // const updatedText = updatedMessages.find(m => m.id === id)?.text;
-      // if (updatedText !== newText) {
-      //     console.warn(`❗️ Message text for ID ${id} did not update as expected.`);
-      // }
+      const updatedMessages = [...prevMessages];
+      const currentMessage = updatedMessages[index];
+      const existingParts = currentMessage.parts || [];
+
+      if (updates.parts) {
+        updatedMessages[index] = {
+          ...currentMessage,
+          parts: [...existingParts, ...updates.parts],
+          ...Object.fromEntries(Object.entries(updates).filter(([key]) => key !== 'id' && key !== 'parts'))
+        };
+      } else {
+        updatedMessages[index] = {
+          ...currentMessage,
+          ...Object.fromEntries(Object.entries(updates).filter(([key]) => key !== 'id' && key !== 'parts'))
+        };
+      }
       return updatedMessages;
     });
   }, []);
+
+  // --- NEW: Unified Message Update Logic ---
+  // This function handles adding/updating messages with potentially multiple parts
+  const addOrUpdateLiveModelMessagePart = useCallback((part) => {
+      setLiveMessages(prevMessages => {
+          const streamId = liveStreamingMsgIdRef.current;
+          if (!streamId) { // Start new message if no streaming ID exists
+              const newMsgId = Date.now() + Math.random() + '_live_model';
+              liveStreamingMsgIdRef.current = newMsgId;
+              console.log(`✨ Starting new model message (ID: ${newMsgId}) with part:`, part);
+              return [...prevMessages, { role: 'model', parts: [part], id: newMsgId }];
+          } else { // Append part to existing message
+              console.log(`➡️ Appending part to model message (ID: ${streamId}):`, part);
+              return prevMessages.map(m =>
+                  m.id === streamId ? { ...m, parts: [...(m.parts || []), part] } : m
+              );
+          }
+      });
+  }, []); // No dependencies needed here, relies on refs and state setter
 
   // --- Memoized Audio Context Management ---
   const initAudioContexts = useCallback(() => {
@@ -106,6 +138,8 @@ export function useLiveSession({ currentVoice }) {
     scriptProcessorNodeRef.current = null;
     mediaStreamSourceRef.current?.disconnect();
     mediaStreamSourceRef.current = null;
+
+    stopVideoStreamInternal(); // Also stop video stream on general close
   }, []);
 
   // --- Memoized Audio Playback ---
@@ -242,6 +276,99 @@ export function useLiveSession({ currentVoice }) {
         }
    }, [isRecording, liveConnectionStatus, addLiveMessage, stopRecordingInternal, inputSampleRate]);
 
+  // --- Video Streaming Logic ---
+  const stopVideoStreamInternal = useCallback(() => {
+      if (isStreamingVideo) {
+          console.log('[Video Stream] Stopping video stream internally.');
+          addLiveMessage({ role: 'system', text: 'Video stream stopped.' });
+      }
+      setIsStreamingVideo(false); // Set state first to stop send loop
+      videoStreamRef.current?.getTracks().forEach(track => track.stop());
+      videoStreamRef.current = null;
+       if (videoElementRef.current) {
+          videoElementRef.current.srcObject = null;
+          // Optionally remove elements if desired, or keep for reuse
+          // videoElementRef.current.remove(); videoElementRef.current = null;
+          // canvasElementRef.current.remove(); canvasElementRef.current = null;
+       }
+  }, [isStreamingVideo, addLiveMessage]); // Depends on isStreamingVideo state
+
+  const startVideoStreamInternal = useCallback(async () => {
+      const ws = liveWsConnection.current;
+      if (isStreamingVideo || !ws || ws.readyState !== WebSocket.OPEN || liveConnectionStatus !== 'connected') {
+          console.warn(`Cannot start video stream. State: isStreamingVideo=${isStreamingVideo}, ws=${ws?.readyState}, status=${liveConnectionStatus}`);
+          return;
+      }
+      addLiveMessage({ role: 'system', text: 'Starting video stream...' });
+
+      try {
+          const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 320, height: 240 } }); // Request video
+          videoStreamRef.current = stream;
+          addLiveMessage({ role: 'system', text: 'Webcam access granted.' });
+
+          if (!videoElementRef.current) videoElementRef.current = document.createElement('video');
+          videoElementRef.current.setAttribute('playsinline', ''); videoElementRef.current.muted = true;
+          if (!canvasElementRef.current) canvasElementRef.current = document.createElement('canvas');
+
+          videoElementRef.current.srcObject = stream;
+          await videoElementRef.current.play();
+          canvasElementRef.current.width = videoElementRef.current.videoWidth;
+          canvasElementRef.current.height = videoElementRef.current.videoHeight;
+
+          setIsStreamingVideo(true);
+          addLiveMessage({ role: 'system', text: 'Video stream active.' });
+
+          // --- Start sending frames periodically ---
+          const sendFrame = () => {
+              // Check if still streaming and WS is open
+              if (!isStreamingVideo || ws?.readyState !== WebSocket.OPEN || !videoElementRef.current || !canvasElementRef.current) {
+                   console.log("[Video Stream] Stopping frame sending loop.");
+                   return; // Stop loop if state changes
+              }
+              const canvas = canvasElementRef.current;
+              const video = videoElementRef.current;
+              const context = canvas.getContext('2d');
+
+              // Ensure video has data and canvas is sized
+              if (video.readyState >= video.HAVE_CURRENT_DATA && canvas.width > 0 && canvas.height > 0) {
+                  context.drawImage(video, 0, 0, canvas.width, canvas.height);
+                  // Get blob from canvas
+                  canvas.toBlob(async (blob) => {
+                      if (blob && ws?.readyState === WebSocket.OPEN && isStreamingVideo) { // Double-check state again
+                          try {
+                              // Convert Blob to base64
+                              const reader = new FileReader();
+                              reader.onloadend = () => {
+                                   if (ws?.readyState === WebSocket.OPEN && isStreamingVideo) { // Final check
+                                      const base64data = reader.result.split(',')[1]; // Get base64 part
+                                      const videoChunk = { mimeType: 'image/jpeg', data: base64data };
+                                      // Send structured message to backend
+                                      ws.send(JSON.stringify({ type: 'video_chunk', chunk: videoChunk }));
+                                   }
+                              };
+                              reader.readAsDataURL(blob);
+                          } catch (sendErr) { console.error("[Video Stream] Error sending frame:", sendErr); }
+                      }
+                  }, 'image/jpeg', 0.8); // Send as JPEG, quality 80%
+              }
+              // Schedule next frame (only if still streaming)
+              if (isStreamingVideo) {
+                  setTimeout(sendFrame, 500); // Send roughly 2 frames per second
+              }
+          };
+          sendFrame(); // Start the loop
+
+      } catch (err) {
+           console.error('[Video Stream] Error starting video:', err);
+           let errorText = `Webcam error: ${err.message}`;
+           if (err.name === 'NotAllowedError') errorText = 'Webcam permission denied.';
+           else if (err.name === 'NotFoundError') errorText = 'No webcam found.';
+           addLiveMessage({ role: 'error', text: errorText });
+           setIsStreamingVideo(false); // Ensure state is false on error
+           stopVideoStreamInternal(); // Clean up tracks if error occurred after getting stream
+      }
+  }, [isStreamingVideo, liveConnectionStatus, addLiveMessage, stopVideoStreamInternal]); // Added stopVideoStreamInternal dependency
+
   // --- Memoized WebSocket Logic ---
   const setupLiveConnection = useCallback(() => {
     if (liveWsConnection.current) {
@@ -330,7 +457,7 @@ export function useLiveSession({ currentVoice }) {
                                  const newlyAppendedText = part.text; // Text from this chunk
                                  const currentFullText = liveStreamingTextRef.current + newlyAppendedText; // Calculate new full text
                                  liveStreamingTextRef.current = currentFullText; // Update ref *before* state update
-                                 updateLiveMessage(liveStreamingMsgIdRef.current, currentFullText); // Pass the calculated full text directly
+                                 updateLiveMessage(liveStreamingMsgIdRef.current, { text: currentFullText }); // Pass the calculated full text directly
                              }
                          } else if (part.inlineData?.mimeType?.startsWith('audio/')) {
                               // --- Handle Audio ---
@@ -344,7 +471,18 @@ export function useLiveSession({ currentVoice }) {
                                    } else if (audioContextRef.current?.state !== 'closed') { console.warn('[Audio] Context not running, skipping queue.'); }
                                    else { setAudioError("Audio context closed."); }
                               }
+                         } else if (part.inlineData?.mimeType?.startsWith('image/')) {
+                                // --- Handle Inline Image ---
+                                addOrUpdateLiveModelMessagePart({ inlineData: part.inlineData });
                          }
+                         // --- Handle Code Execution Parts ---
+                         else if (part.executableCode) {
+                              // Add executable code as a part
+                              addOrUpdateLiveModelMessagePart({ executableCode: part.executableCode });
+                          } else if (part.codeExecutionResult) {
+                              // Add code result as a part
+                              addOrUpdateLiveModelMessagePart({ codeExecutionResult: part.codeExecutionResult });
+                          }
                      });
                      // Reset speaking indicator only if audio was playing this turn
                      if (data.serverContent.turnComplete || data.serverContent.generationComplete) {
@@ -381,6 +519,37 @@ export function useLiveSession({ currentVoice }) {
                      console.log("[Live WS] Stored new session resume handle.");
                  }
             }
+            // --- Handle Tool Call Notifications ---
+            else if (data.event === 'tool_call_started') {
+                 console.log("🛠️ [Live WS] Tool call started:", data.calls);
+                 // Add a system message for each tool call started
+                 data.calls?.forEach(call => addLiveMessage({ role: 'system', text: `⏳ Using tool: ${call.name}...`}));
+            } else if (data.event === 'tool_call_result') {
+                 console.log("✅ [Live WS] Tool call result:", data.name, data.result);
+                 addLiveMessage({ role: 'system', text: `✅ Tool ${data.name} result: ${JSON.stringify(data.result)}`});
+            } else if (data.event === 'tool_call_error') {
+                 console.error("❌ [Live WS] Tool call error:", data.name, data.error);
+                 addLiveMessage({ role: 'error', text: `❌ Tool ${data.name} error: ${data.error}`});
+            }
+            // --- Handle Transcription Events ---
+            else if (data.inputTranscription) {
+                 if (data.inputTranscription.text) {
+                     addLiveMessage({ role: 'system', text: `🎤 You: ${data.inputTranscription.text}`, icon: Mic });
+                 }
+            } else if (data.outputTranscription) {
+                if (data.outputTranscription.text) {
+                    // Maybe less verbose for output? Or use a different icon?
+                    addLiveMessage({ role: 'system', text: `🔊 AI: ${data.outputTranscription.text}`, icon: AudioLines });
+                }
+            }
+            // --- Recognize Original Google Tool Call Message (Forwarded by Backend) ---
+            else if (data.toolCall) {
+                 // Backend already sent 'tool_call_started'. We just need to recognize this original message
+                 // to prevent the "Unhandled" warning. Log it differently if needed for deep debug.
+                 console.log("📞 [Live WS] Received original toolCall message structure (handled).");
+            } else if (data.goAway?.timeLeft) { // Handle GoAway for timer
+                 setSessionTimeLeft(data.goAway.timeLeft);
+            }
             // --- Catch Unhandled Structures ---
             else if (!data.event) { // Only warn if it's not one of the handled 'event' types
                 console.warn('[Live WS] Received unhandled message structure:', data);
@@ -404,6 +573,7 @@ export function useLiveSession({ currentVoice }) {
       console.error('[Live WS] WebSocket error event:', errorEvent);
       addLiveMessage({ role: 'error', text: 'WebSocket connection error.' });
       setLiveConnectionStatus('error');
+      setSessionTimeLeft(null); // Reset timer on error
     };
 
     ws.onclose = (event) => {
@@ -414,6 +584,7 @@ export function useLiveSession({ currentVoice }) {
       closeAudioContexts(); // Close both contexts
       if (isRecording) stopRecordingInternal();
       setIsModelSpeaking(false); liveStreamingTextRef.current = ''; liveStreamingMsgIdRef.current = null;
+      setSessionTimeLeft(null); // Reset timer on close
     };
   }, [ liveModality, currentVoice, liveSystemInstruction, addLiveMessage, updateLiveMessage, initAudioContexts, playAudioQueue, closeAudioContexts, isRecording, stopRecordingInternal]); // Adjusted dependencies
 
@@ -436,8 +607,9 @@ export function useLiveSession({ currentVoice }) {
         closeAudioContexts(); // Close both
         setIsModelSpeaking(false);
         if(isRecording) stopRecordingInternal(); // Ensure recording state is reset
+        stopVideoStreamInternal(); // Stop video when session ends
     }
-  }, [addLiveMessage, closeAudioContexts, isRecording, stopRecordingInternal]); // Adjusted dependency
+  }, [addLiveMessage, closeAudioContexts, isRecording, stopRecordingInternal, stopVideoStreamInternal]); // Adjusted dependency
 
   const sendLiveMessageText = useCallback((text) => {
     const ws = liveWsConnection.current;
@@ -482,7 +654,7 @@ export function useLiveSession({ currentVoice }) {
 
   return {
     // State
-    liveMessages, liveConnectionStatus, liveModality, isModelSpeaking, isRecording, audioError,
+    liveMessages, liveConnectionStatus, liveModality, isModelSpeaking, isRecording, isStreamingVideo, audioError, sessionTimeLeft,
     liveSystemInstruction, // Keep original name for App.jsx prop clarity if preferred
 
     // Setters/Handlers
@@ -490,5 +662,6 @@ export function useLiveSession({ currentVoice }) {
     setLiveSystemInstruction, // Keep original name
     startLiveSession, endLiveSession, sendLiveMessage: sendLiveMessageText,
     startRecording, stopRecording,
+    startVideoStream: startVideoStreamInternal, stopVideoStream: stopVideoStreamInternal, // Expose video handlers
   };
 }
