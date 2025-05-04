@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { Switch } from '@headlessui/react';
 import { Send, UploadCloud, CornerDownLeft, Loader2, Mic, MicOff, Paperclip, Image as ImageIcon, Text, Zap } from 'lucide-react';
 
 export default function MessageInput({ onSend, onStreamSend, isLoading, disabled, onFileUploadClick, streamEnabled, onStreamToggleChange }) {
@@ -77,19 +78,21 @@ export default function MessageInput({ onSend, onStreamSend, isLoading, disabled
             >
               <UploadCloud className="h-5 w-5 transition-transform duration-150 ease-in-out group-hover:scale-110" />
             </button>
-             {/* Streaming Toggle Button */}
-            <button
-              type="button"
-              onClick={() => onStreamToggleChange(!streamEnabled)}
-              disabled={isLoading || disabled}
-              className={`
-                p-1.5 mr-2 rounded-md border border-gray-300 dark:border-gray-700 transition-colors
-                ${streamEnabled ? 'bg-yellow-400 text-white' : 'bg-transparent text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'}
-              `}
-              title="Toggle Streaming Mode"
-            >
-              <Zap className="w-4 h-4" />
-            </button>
+            <Switch.Group as="div" className="flex items-center ml-2 flex-shrink-0">
+              <Switch
+                checked={streamEnabled}
+                onChange={onStreamToggleChange}
+                disabled={isLoading || disabled}
+                className={`${streamEnabled ? 'bg-indigo-500' : 'bg-gray-300 dark:bg-gray-600'}
+                  relative inline-flex h-[20px] w-[36px] shrink-0 cursor-pointer rounded-full border-2 border-transparent 
+                  transition-colors duration-200 ease-in-out focus:outline-none focus-visible:ring-2 
+                  focus-visible:ring-white/75 disabled:opacity-50 disabled:cursor-not-allowed`}
+              >
+                <span className="sr-only">Toggle Streaming</span>
+                <Zap className={`absolute top-1/2 left-0.5 transform -translate-y-1/2 h-3 w-3 text-yellow-300 transition-opacity ${streamEnabled ? 'opacity-100' : 'opacity-0'}`} />
+                <span className={`pointer-events-none inline-block h-[16px] w-[16px] transform rounded-full bg-white dark:bg-gray-300 shadow-lg ring-0 transition duration-200 ease-in-out ${streamEnabled ? 'translate-x-[16px]' : 'translate-x-0'}`} />
+              </Switch>
+            </Switch.Group>
             <button
               onClick={handleSend}
               disabled={isLoading || disabled || !text.trim()}
