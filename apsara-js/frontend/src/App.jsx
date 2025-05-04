@@ -120,8 +120,10 @@ export default function App() {
     liveModality,
     liveSystemInstruction: currentLiveSystemInstruction, // Rename for clarity
     isModelSpeaking,
+    sessionTimeLeft, // Get the timer state
     isRecording,
     audioError,
+    isStreamingVideo, // Video state
     // Live Handlers/Setters
     setLiveModality,
     setLiveSystemInstruction: setLivePrompt, // Rename for clarity
@@ -130,6 +132,8 @@ export default function App() {
     sendLiveMessage,
     startRecording,
     stopRecording,
+    startVideoStream, // Video handlers
+    stopVideoStream,
   } = useLiveSession({ currentVoice }); // Pass dependencies
 
   // Settings panel
@@ -184,7 +188,7 @@ export default function App() {
         const systemData = await systemRes.json();
         // Set initialSystemInstruction which feeds useAppSettings
         setInitialSystemInstruction(systemData.systemInstruction);
-        // Also update the live prompt default if needed
+        // Also update the live prompt default
         setLivePrompt(systemData.systemInstruction || 'You are a helpful assistant.');
 
         const filesData = await filesRes.json();
@@ -415,6 +419,10 @@ export default function App() {
           onStartRecording={startRecording}
           onStopRecording={stopRecording}
           isModelSpeaking={isModelSpeaking}
+          sessionTimeLeft={sessionTimeLeft} // Pass timer state down
+          isStreamingVideo={isStreamingVideo} // Pass video state
+          onStartVideo={startVideoStream}     // Pass video handlers
+          onStopVideo={stopVideoStream}
         />
       )}
 

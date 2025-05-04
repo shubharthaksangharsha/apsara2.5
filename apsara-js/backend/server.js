@@ -20,6 +20,9 @@ const { Blob: BlobGoogle } = genai;
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { parse } from 'url';
+import path from 'path';
+import cors from 'cors';
+import { customToolDeclarations, toolHandlers, customToolNames } from './tools.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -34,9 +37,6 @@ if (!process.env.GEMINI_API_KEY) {
 const app = express();
 const server = http.createServer(app);
 const port = process.env.PORT || 9000;
-
-import path from 'path';
-import cors from 'cors';
 
 // now you can do:
 app.use(express.static(join(__dirname, 'public')));
@@ -66,38 +66,16 @@ const availableModels = [
   { id: "gemini-1.5-flash-8b", name: "Gemini 1.5 Flash-8B" },
 ];
 const availableVoices = ['Puck','Charon','Kore','Fenrir','Aoede','Leda','Orus','Zephyr'];
-let currentSystemInstruction = 'You are a helpful assistant.';
-let currentVoice = availableVoices[0];
 
-// Tools (function calling) definitions & handlers
-const tools = [
-  {
-    name: 'getCurrentTime',
-    description: 'Returns current server time in ISO format',
-    parameters: {
-      type: 'object',
-      properties: {
-        timezone: { type: 'string', description: 'Time zone ID (e.g. Asia/Adelaide)' }
-      },
-      required: []
-    }
-  },
-  {
-    name: 'echo',
-    description: 'Echoes the provided message',
-    parameters: {
-      type: 'object',
-      properties: {
-        message: { type: 'string' }
-      },
-      required: ['message']
-    }
-  }
-];
-const toolHandlers = {
-  getCurrentTime: ({ timezone }) => ({ time: new Date().toISOString() }),
-  echo: ({ message }) => ({ message })
+// --- Default System Instruction ---
+const getDefaultSystemInstruction = () => {
+    const toolListString = customToolNames.join(', ');
+    return `You are Apsara, a smart and helpful AI assistant. You can use the following tools if needed: ${toolListString}. You can respond in multiple languages if requested.`;
 };
+let currentSystemInstruction = getDefaultSystemInstruction();
+// -----------------------------------
+
+let currentVoice = availableVoices[0];
 
 // In‐memory WebSocket sessions
 const sessions = new Map();
@@ -184,15 +162,15 @@ app.post('/voices/select',(req,res)=>{
 
 app.get('/system',(req,res)=>res.json({ systemInstruction:currentSystemInstruction }));
 app.post('/system',(req,res)=>{
-  const { instruction }=req.body;
+  const { instruction } = req.body;
   if (!instruction) return res.status(400).json({ error:'Instruction required.' });
   currentSystemInstruction=instruction;
   res.json({ updatedInstruction:currentSystemInstruction });
 });
 
-app.get('/tools',(req,res)=>res.json({ tools }));
+app.get('/tools',(req,res)=>res.json({ tools: customToolDeclarations }));
 app.post('/tools/invoke',(req,res)=>{
-  const { toolName,args }=req.body;
+  const { toolName, args } = req.body;
   if (!toolHandlers[toolName]) return res.status(400).json({ error:'Unknown tool.' });
   try { res.json({ toolName, result:toolHandlers[toolName](args||{}) }); }
   catch(e){ res.status(500).json({ error:e.message }); }
@@ -514,7 +492,14 @@ async function handleLiveConnection(ws, req) {
        // Add sessionResumption config if handle provided or always enable transparent?
        ...(requestedResumeHandle && {
            sessionResumption: { handle: requestedResumeHandle, transparent: true } // Assuming transparent is desired
-       })
+       }),
+       // --- Add Tools Configuration ---
+       // Enable native tools and declare custom ones for the live session
+       tools: [
+           { googleSearch: {} },        // Enable Google Search (native)
+           { codeExecution: {} },       // Enable Code Execution (native)
+           { functionDeclarations: customToolDeclarations } // Use imported custom tool declarations
+       ],
    };
 
    console.log('[Live Backend] Config prepared:', JSON.stringify(liveConnectConfig, null, 2));
@@ -560,6 +545,52 @@ async function handleLiveConnection(ws, req) {
                          }
                     } catch (sendError) {
                          console.error(`[Live Backend] Error forwarding Google message [${messageType}] <${sessionIdShort}> to client WebSocket:`, sendError);
+                    }
+
+                    // --- Handle Tool Calls from Google ---
+                    if (evt.toolCall?.functionCalls?.length > 0) {
+                        console.log(`[Live Backend] Received toolCall request from Google <${sessionIdShort}>:`, JSON.stringify(evt.toolCall.functionCalls));
+                        // Notify frontend that tool call is happening
+                         if (ws.readyState === WebSocket.OPEN) {
+                            ws.send(JSON.stringify({ event: 'tool_call_started', calls: evt.toolCall.functionCalls }));
+                         }
+
+                         // Execute CUSTOM functions and send responses back to Google
+                         const responsesToSend = [];
+                         for (const call of evt.toolCall.functionCalls) {
+                             if (toolHandlers[call.name]) { // Check if it's one of *our* defined custom tools
+                                 try {
+                                     const result = await toolHandlers[call.name](call.args || {});
+                                     responsesToSend.push({ id: call.id, name: call.name, response: { result: result } }); // Correctly structure the response
+                                     // Notify frontend of custom tool result
+                                     if (ws.readyState === WebSocket.OPEN) {
+                                          ws.send(JSON.stringify({ event: 'tool_call_result', name: call.name, result: result }));
+                                     }
+                                 } catch (toolError) {
+                                     console.error(`[Live Backend] Error executing custom tool ${call.name} <${sessionIdShort}>:`, toolError);
+                                     responsesToSend.push({ id: call.id, name: call.name, response: { error: toolError.message || 'Execution failed' } });
+                                      if (ws.readyState === WebSocket.OPEN) {
+                                          ws.send(JSON.stringify({ event: 'tool_call_error', name: call.name, error: toolError.message || 'Execution failed' }));
+                                      }
+                                 }
+                             }
+                             // Native tools (googleSearch, codeExecution) are handled by Google internally.
+                             // We *don't* send a toolResponse for them here. Their results appear in serverContent.
+                         }
+                         // Send responses for executed custom tools back to Google
+                         if (responsesToSend.length > 0) {
+                             console.log(`[Live Backend] Sending toolResponse back to Google <${sessionIdShort}>:`, JSON.stringify(responsesToSend));
+                             await session.sendToolResponse({ functionResponses: responsesToSend });
+                         }
+                    }
+
+                    // --- Forward serverContent (including potential native tool results like codeExecutionResult) ---
+                    if (evt.serverContent) {
+                        // Existing logic to forward text/audio...
+                        // Add check for codeExecutionResult if needed for specific UI display
+                        if (evt.serverContent.modelTurn?.parts?.some(p => p.codeExecutionResult)) {
+                            console.log(`[Live Backend] Forwarding serverContent with codeExecutionResult <${sessionIdShort}>.`);
+                        }
                     }
 
                     // --- Forward Session Resumption Updates ---
@@ -645,7 +676,6 @@ async function handleLiveConnection(ws, req) {
          ws.close(1011, 'No active session found');
              return;
         }
-       console.log(message)
        // --- Differentiate between Binary (Audio) and Text messages ---
        if (message instanceof Buffer) {
            console.log(`[Live Backend] Received BINARY data (Audio PCM) from client (Session: ${currentSessionId}). Size: ${message.length}. Attempting sendRealtimeInput.`);

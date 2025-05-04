@@ -1,4 +1,5 @@
 import React, { useEffect, useRef } from 'react';
+import VideoStreamDisplay from './VideoStreamDisplay.jsx';
 
 export default function ChatWindow({ convo }) {
   const messagesEndRef = useRef(null);
