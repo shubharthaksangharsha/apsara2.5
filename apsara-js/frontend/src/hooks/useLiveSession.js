@@ -39,6 +39,13 @@ export function useLiveSession({ currentVoice }) {
   const liveStreamingTextRef = useRef('');
   const liveStreamingMsgIdRef = useRef(null);
   const sessionResumeHandleRef = useRef(null); // Ref to store the handle
+  const isStreamingVideoRef = useRef(isStreamingVideo); // <-- Add Ref
+
+  // --- Sync state to ref ---
+  useEffect(() => {
+    isStreamingVideoRef.current = isStreamingVideo;
+  }, [isStreamingVideo]);
+  // --- End Sync ---
 
   // --- Memoized Utility Functions ---
   const addLiveMessage = useCallback((msg) => {
@@ -278,96 +285,147 @@ export function useLiveSession({ currentVoice }) {
 
   // --- Video Streaming Logic ---
   const stopVideoStreamInternal = useCallback(() => {
-      if (isStreamingVideo) {
-          console.log('[Video Stream] Stopping video stream internally.');
-          addLiveMessage({ role: 'system', text: 'Video stream stopped.' });
+      // Use the Ref for the check
+      if (!isStreamingVideoRef.current) {
+          // console.log('[Video Stream] stopVideoStreamInternal called but ref is already false.');
+          return;
       }
-      setIsStreamingVideo(false); // Set state first to stop send loop
-      videoStreamRef.current?.getTracks().forEach(track => track.stop());
+
+      console.log('[Video Stream] Stopping video stream internally.');
+      addLiveMessage({ role: 'system', text: 'Video stream stopped.' });
+
+      // Update state and ref *first*
+      setIsStreamingVideo(false);
+      isStreamingVideoRef.current = false;
+
+      // Stop media tracks
+      videoStreamRef.current?.getTracks().forEach(track => {
+          track.stop();
+          console.log(`[Video Stream] Stopped track: ${track.label || track.id}`);
+      });
       videoStreamRef.current = null;
-       if (videoElementRef.current) {
+
+      // Clean up video element source
+      if (videoElementRef.current) {
+          videoElementRef.current.pause();
           videoElementRef.current.srcObject = null;
-          // Optionally remove elements if desired, or keep for reuse
-          // videoElementRef.current.remove(); videoElementRef.current = null;
-          // canvasElementRef.current.remove(); canvasElementRef.current = null;
-       }
-  }, [isStreamingVideo, addLiveMessage]); // Depends on isStreamingVideo state
+          videoElementRef.current.onloadedmetadata = null;
+          videoElementRef.current.onerror = null;
+          console.log('[Video Stream] Detached stream and cleaned up video element listeners.');
+      }
+
+  }, [addLiveMessage]); // Removed state dependency, rely on ref
 
   const startVideoStreamInternal = useCallback(async () => {
       const ws = liveWsConnection.current;
-      if (isStreamingVideo || !ws || ws.readyState !== WebSocket.OPEN || liveConnectionStatus !== 'connected') {
-          console.warn(`Cannot start video stream. State: isStreamingVideo=${isStreamingVideo}, ws=${ws?.readyState}, status=${liveConnectionStatus}`);
+      // Use ref for check
+      if (isStreamingVideoRef.current || !ws || ws.readyState !== WebSocket.OPEN || liveConnectionStatus !== 'connected') {
+          console.warn(`[Video Stream] Cannot start. Ref=${isStreamingVideoRef.current}, ws=${ws?.readyState}, status=${liveConnectionStatus}`);
           return;
       }
-      addLiveMessage({ role: 'system', text: 'Starting video stream...' });
+      // Don't update state/ref yet
+      addLiveMessage({ role: 'system', text: 'Requesting video stream...' });
 
       try {
-          const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 320, height: 240 } }); // Request video
+          const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 320, height: 240 } });
           videoStreamRef.current = stream;
           addLiveMessage({ role: 'system', text: 'Webcam access granted.' });
 
+          // Ensure elements exist
           if (!videoElementRef.current) videoElementRef.current = document.createElement('video');
           videoElementRef.current.setAttribute('playsinline', ''); videoElementRef.current.muted = true;
           if (!canvasElementRef.current) canvasElementRef.current = document.createElement('canvas');
 
-          videoElementRef.current.srcObject = stream;
-          await videoElementRef.current.play();
-          canvasElementRef.current.width = videoElementRef.current.videoWidth;
-          canvasElementRef.current.height = videoElementRef.current.videoHeight;
+          const video = videoElementRef.current;
+          const canvas = canvasElementRef.current;
 
-          setIsStreamingVideo(true);
-          addLiveMessage({ role: 'system', text: 'Video stream active.' });
-
-          // --- Start sending frames periodically ---
-          const sendFrame = () => {
-              // Check if still streaming and WS is open
-              if (!isStreamingVideo || ws?.readyState !== WebSocket.OPEN || !videoElementRef.current || !canvasElementRef.current) {
-                   console.log("[Video Stream] Stopping frame sending loop.");
-                   return; // Stop loop if state changes
+          video.onloadedmetadata = () => {
+              console.log("[Video Stream] Video metadata loaded.");
+              if (!liveWsConnection.current || liveWsConnection.current.readyState !== WebSocket.OPEN) {
+                  console.log("[Video Stream] Aborting frame sending start because WS closed before metadata loaded.");
+                  videoStreamRef.current?.getTracks().forEach(track => track.stop()); videoStreamRef.current = null;
+                  setIsStreamingVideo(false); isStreamingVideoRef.current = false; // Sync state/ref
+                  return;
               }
-              const canvas = canvasElementRef.current;
-              const video = videoElementRef.current;
-              const context = canvas.getContext('2d');
+              canvas.width = video.videoWidth; canvas.height = video.videoHeight;
 
-              // Ensure video has data and canvas is sized
-              if (video.readyState >= video.HAVE_CURRENT_DATA && canvas.width > 0 && canvas.height > 0) {
-                  context.drawImage(video, 0, 0, canvas.width, canvas.height);
-                  // Get blob from canvas
-                  canvas.toBlob(async (blob) => {
-                      if (blob && ws?.readyState === WebSocket.OPEN && isStreamingVideo) { // Double-check state again
-                          try {
-                              // Convert Blob to base64
-                              const reader = new FileReader();
-                              reader.onloadend = () => {
-                                   if (ws?.readyState === WebSocket.OPEN && isStreamingVideo) { // Final check
-                                      const base64data = reader.result.split(',')[1]; // Get base64 part
-                                      const videoChunk = { mimeType: 'image/jpeg', data: base64data };
-                                      // Send structured message to backend
-                                      ws.send(JSON.stringify({ type: 'video_chunk', chunk: videoChunk }));
-                                   }
-                              };
-                              reader.readAsDataURL(blob);
-                          } catch (sendErr) { console.error("[Video Stream] Error sending frame:", sendErr); }
+              // --- Update state AND ref right before starting loop ---
+              console.log("[Video Stream] Setting state/ref to active and starting frame send.");
+              setIsStreamingVideo(true);
+              isStreamingVideoRef.current = true; // Sync Ref
+              addLiveMessage({ role: 'system', text: 'Video stream active. Sending frames.' });
+
+              // --- Frame Sending Loop ---
+              const sendFrame = () => {
+                  // PRIMARY CHECK: Use the Ref
+                  if (!isStreamingVideoRef.current || !liveWsConnection.current || liveWsConnection.current.readyState !== WebSocket.OPEN) {
+                      console.log(`[Video Stream] Stopping frame sending loop. Ref=${isStreamingVideoRef.current}, wsState=${liveWsConnection.current?.readyState}`);
+                      return; // Exit the function, loop terminates
+                  }
+
+                  try {
+                      const context = canvas.getContext('2d');
+                      if (video.readyState >= video.HAVE_CURRENT_DATA && canvas.width > 0 && canvas.height > 0) {
+                          context.drawImage(video, 0, 0, canvas.width, canvas.height);
+                          canvas.toBlob((blob) => {
+                              // Check Ref *again* before async blob processing completes
+                              if (blob && isStreamingVideoRef.current && liveWsConnection.current?.readyState === WebSocket.OPEN) {
+                                  try {
+                                      const reader = new FileReader();
+                                      reader.onloadend = () => {
+                                          // Final check using Ref
+                                          if (isStreamingVideoRef.current && liveWsConnection.current?.readyState === WebSocket.OPEN) {
+                                              const base64data = reader.result.split(',')[1];
+                                              const videoChunk = { mimeType: 'image/jpeg', data: base64data };
+                                              console.log(`[Video Stream] Sending frame chunk to backend.`);
+                                              liveWsConnection.current.send(JSON.stringify({ type: 'video_chunk', chunk: videoChunk }));
+                                              // --- Schedule the next frame *after* successful send ---
+                                              // Check Ref before scheduling next call
+                                              if (isStreamingVideoRef.current) {
+                                                  // console.log("[Video Stream] Scheduling next frame call.");
+                                                  setTimeout(sendFrame, 500); // Recursive call
+                                              } else { console.log("[Video Stream] Loop terminated: Ref became false before scheduling next frame."); }
+                                          } else { console.log("[Video Stream] State changed (ref) during blob read or WS closed. Loop terminates."); }
+                                      };
+                                      reader.readAsDataURL(blob);
+                                  } catch (processingErr) {
+                                      console.error("[Video Stream] Error processing frame blob:", processingErr);
+                                      // Check Ref before scheduling next call
+                                      if (isStreamingVideoRef.current) { setTimeout(sendFrame, 500); }
+                                  }
+                              } else if (!blob) {
+                                  console.warn("[Video Stream] canvas.toBlob produced null blob. Scheduling next frame.");
+                                   // Check Ref before scheduling next call
+                                   if (isStreamingVideoRef.current) { setTimeout(sendFrame, 500); }
+                              } else { console.log("[Video Stream] State changed (ref) or WS closed before blob processing completed. Loop terminates."); }
+                          }, 'image/jpeg', 0.8);
+                      } else {
+                          console.warn(`[Video Stream] Video not ready (readyState: ${video.readyState}) or canvas not sized (W:${canvas.width}, H:${canvas.height}). Scheduling next frame.`);
+                           // Check Ref before scheduling next call
+                           if (isStreamingVideoRef.current) { setTimeout(sendFrame, 500); }
                       }
-                  }, 'image/jpeg', 0.8); // Send as JPEG, quality 80%
-              }
-              // Schedule next frame (only if still streaming)
-              if (isStreamingVideo) {
-                  setTimeout(sendFrame, 500); // Send roughly 2 frames per second
-              }
-          };
-          sendFrame(); // Start the loop
+                  } catch (drawError) {
+                      console.error("[Video Stream] Error drawing frame:", drawError);
+                       // Check Ref before scheduling next call
+                       if (isStreamingVideoRef.current) { setTimeout(sendFrame, 500); }
+                  }
+              }; // --- End SendFrame definition ---
+              sendFrame(); // Start the loop
+          }; // --- End onloadedmetadata ---
 
+          video.onerror = (err) => { console.error("[Video Stream] Video element error:", err); addLiveMessage({ role: 'error', text: `Video element error: ${err.message || 'Unknown'}`}); stopVideoStreamInternal(); };
+          video.srcObject = stream;
+          video.play().catch(err => { console.error("[Video Stream] Error starting video playback:", err); addLiveMessage({ role: 'error', text: `Video playback error: ${err.message}`}); stopVideoStreamInternal(); });
       } catch (err) {
            console.error('[Video Stream] Error starting video:', err);
            let errorText = `Webcam error: ${err.message}`;
            if (err.name === 'NotAllowedError') errorText = 'Webcam permission denied.';
            else if (err.name === 'NotFoundError') errorText = 'No webcam found.';
+           else if (err.name === 'NotReadableError') errorText = 'Webcam is already in use or hardware error.';
            addLiveMessage({ role: 'error', text: errorText });
-           setIsStreamingVideo(false); // Ensure state is false on error
-           stopVideoStreamInternal(); // Clean up tracks if error occurred after getting stream
+           stopVideoStreamInternal(); // Use the main cleanup function
       }
-  }, [isStreamingVideo, liveConnectionStatus, addLiveMessage, stopVideoStreamInternal]); // Added stopVideoStreamInternal dependency
+  }, [liveConnectionStatus, addLiveMessage, stopVideoStreamInternal]); // Removed state dependency
 
   // --- Memoized WebSocket Logic ---
   const setupLiveConnection = useCallback(() => {
@@ -656,6 +714,7 @@ export function useLiveSession({ currentVoice }) {
     // State
     liveMessages, liveConnectionStatus, liveModality, isModelSpeaking, isRecording, isStreamingVideo, audioError, sessionTimeLeft,
     liveSystemInstruction, // Keep original name for App.jsx prop clarity if preferred
+    mediaStream: videoStreamRef.current,
 
     // Setters/Handlers
     setLiveModality,

@@ -666,54 +666,87 @@ async function handleLiveConnection(ws, req) {
     sessions.set(ws, session);
 
 
-    // --- Client WebSocket Message Handler ---
+    // --- REFINED Client WebSocket Message Handler ---
     ws.on('message', async (message) => {
-       const currentSession = sessions.get(ws); // Get session using the client ws object
-       const currentSessionId = currentSession?.conn?.id?.substring(0, 8) ?? 'N/A'; // Get Google session ID (shortened)
+       const currentSession = sessions.get(ws);
+       const currentSessionId = currentSession?.conn?.id?.substring(0, 8) ?? 'N/A';
 
        if (!currentSession) {
-         console.warn(`[Live Backend] Received message from client (ID: N/A - session not found) with no active session.`);
+         console.warn(`[Live Backend] Received message from client (ID: N/A - session not found) for closed session.`);
          ws.close(1011, 'No active session found');
-             return;
-        }
-       // --- Differentiate between Binary (Audio) and Text messages ---
-       if (message instanceof Buffer) {
-           console.log(`[Live Backend] Received BINARY data (Audio PCM) from client (Session: ${currentSessionId}). Size: ${message.length}. Attempting sendRealtimeInput.`);
-           try {
-               // Attempt to decode as UTF-8 text first
-               const textData = message.toString('utf8');
-               let parsedMessage;
-               try {
-                   parsedMessage = JSON.parse(textData);
-               } catch (e) {
-                   // JSON parse failed, assume it's raw audio PCM
-                   console.log(`[Live Backend] Received BINARY data (Audio PCM assumed) from client (Session: ${currentSessionId}). Size: ${message.length}. Attempting sendRealtimeInput.`);
-                   const base64Pcm = message.toString('base64');
-                   await currentSession.sendRealtimeInput({ audio: { data: base64Pcm, mimeType: 'audio/pcm' } });
-                   console.log(`[Live Backend] Sent Audio PCM data via sendRealtimeInput for <${currentSessionId}>.`);
-                   return; // Exit early after handling audio
-               }
+         return;
+       }
 
-               // If JSON parse succeeded, check if it's our text structure
-               if (parsedMessage && parsedMessage.type === 'text' && parsedMessage.text) {
-                   console.log(`[Live Backend] Received TEXT data (as Buffer) from client (Session: ${currentSessionId}). Attempting sendClientContent.`);
-                   await currentSession.sendClientContent({ turns: [{ role: 'user', parts: [{ text: parsedMessage.text }] }] });
-                   console.log(`[Live Backend] Sent Text data via sendClientContent for <${currentSessionId}>.`);
-               } else {
-                   // Parsed JSON but not the expected structure - treat as unknown/error or potentially audio? For now, log warning.
-                   console.warn(`[Live Backend] Received Buffer containing unexpected JSON structure:`, textData);
-               }
-           } catch (error) {
-               console.error(`[Live Backend] Error processing client BUFFER message <${currentSessionId}>:`, error);
+       // We expect messages to be Buffers (either raw PCM or JSON strings)
+       if (!(message instanceof Buffer)) {
+          console.warn(`[Live Backend] Received unexpected non-Buffer message type from client <${currentSessionId}>: ${typeof message}. Ignoring.`);
+          return;
+       }
+
+       let parsedMessage;
+       let isJson = false;
+
+       // Attempt to parse the Buffer as JSON text
+       try {
+           const textData = message.toString('utf8');
+           parsedMessage = JSON.parse(textData);
+           isJson = true;
+       } catch (e) {
+           // JSON parse failed, assume it's raw audio PCM
+           isJson = false;
+       }
+
+       try {
+           if (isJson && parsedMessage) {
+                // --- Handle JSON messages ---
+                if (parsedMessage.type === 'text' && typeof parsedMessage.text === 'string') {
+                    // Handle Text Input
+                    console.log(`[Live Backend] Received TEXT JSON from client <${currentSessionId}>. Sending via sendClientContent.`);
+                    await currentSession.sendClientContent({
+                        turns: [{ role: 'user', parts: [{ text: parsedMessage.text.trim() }] }]
+                    });
+                    console.log(`[Live Backend] Sent Text data via sendClientContent for <${currentSessionId}>.`);
+
+                } else if (parsedMessage.type === 'video_chunk' && parsedMessage.chunk) {
+                    // Handle Video Chunk Input (received as JSON from frontend)
+                    console.log(`[Live Backend] Received VIDEO CHUNK JSON from client <${currentSessionId}>. Sending via sendRealtimeInput.`);
+                     // Ensure the chunk format matches what sendRealtimeInput expects
+                     // It expects { video: { data: base64string, mimeType: 'image/jpeg' } }
+                     // Our frontend sends { type: 'video_chunk', chunk: { mimeType: 'image/jpeg', data: base64data } }
+                     console.log('RECEIVED video data**')
+                     console.log(parsedMessage)
+                     if (parsedMessage.chunk.data && parsedMessage.chunk.mimeType) {
+                        await currentSession.sendRealtimeInput({
+                            video: {
+                                data: parsedMessage.chunk.data,
+                                mimeType: parsedMessage.chunk.mimeType
+                            }
+                        });
+                        console.log(`[Live Backend] Sent Video Chunk data via sendRealtimeInput for <${currentSessionId}>.`);
+                     } else {
+                         console.warn(`[Live Backend] Received video_chunk JSON but chunk data/mimeType missing <${currentSessionId}>.`);
+                     }
+
+                } else {
+                    // Unknown JSON structure
+                    console.warn(`[Live Backend] Received Buffer containing unrecognized JSON structure <${currentSessionId}>:`, parsedMessage);
+                }
+           } else {
+                // --- Handle Raw Binary Data (Assume Audio PCM) ---
+                console.log(`[Live Backend] Received RAW BUFFER (Audio PCM assumed) from client <${currentSessionId}>. Size: ${message.length}. Sending via sendRealtimeInput.`);
+                const base64Pcm = message.toString('base64');
+                await currentSession.sendRealtimeInput({
+                     audio: { data: base64Pcm, mimeType: 'audio/pcm' } // Assuming PCM if not JSON
+                });
+                console.log(`[Live Backend] Sent Audio PCM data via sendRealtimeInput for <${currentSessionId}>.`);
            }
-       } else if (typeof message === 'string') { // Keep this block for robustness, though seems unlikely to be hit now
-            console.warn(`[Live Backend] Received message as STRING unexpectedly (expected Buffer). Content: ${message.substring(0, 100)}...`);
-           // Optionally, try to process it as text here too, similar to the buffer logic.
-           // For now, just log a warning.
-        } else {
-             console.warn(`[Live Backend] Received unexpected message type from client (Session: ${currentSessionId}): ${typeof message}`);
-        }
+       } catch (error) {
+           console.error(`[Live Backend] Error processing client message or sending to Google <${currentSessionId}>:`, error);
+           // Optionally send an error back to the client if appropriate
+           // ws.send(JSON.stringify({ event: 'error', message: 'Backend processing error' }));
+       }
     });
+    // --- END REFINED Client WebSocket Message Handler ---
 
     // --- Client WebSocket Close Handler ---
     ws.on('close', (code, reason) => {
@@ -724,7 +757,6 @@ async function handleLiveConnection(ws, req) {
         if (currentSession) {
             console.log(`[Live Backend] Closing associated Google session <${currentSessionId}> due to client disconnect.`);
              try {
-                 // Check Google WS state before closing
                  const googleWsState = currentSession.conn?.readyState;
                  if (googleWsState === WebSocket.OPEN || googleWsState === WebSocket.CONNECTING) {
                     currentSession.close();
@@ -761,8 +793,7 @@ async function handleLiveConnection(ws, req) {
                   sessions.delete(ws);
               }
         }
-        // Ensure the client WebSocket itself is terminated if it's still open on error
-         try { if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING ) ws.terminate(); } catch(e){}
+        try { if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING ) ws.terminate(); } catch(e){}
          console.error('[Live Backend] Client WebSocket terminated due to error.');
   });
 

@@ -124,6 +124,7 @@ export default function App() {
     isRecording,
     audioError,
     isStreamingVideo, // Video state
+    mediaStream, // <-- ADD THIS LINE: Get the stream from the hook
     // Live Handlers/Setters
     setLiveModality,
     setLiveSystemInstruction: setLivePrompt, // Rename for clarity
@@ -421,6 +422,7 @@ export default function App() {
           isModelSpeaking={isModelSpeaking}
           sessionTimeLeft={sessionTimeLeft} // Pass timer state down
           isStreamingVideo={isStreamingVideo} // Pass video state
+          mediaStream={mediaStream} // <-- ADD THIS LINE: Pass the stream down
           onStartVideo={startVideoStream}     // Pass video handlers
           onStopVideo={stopVideoStream}
         />

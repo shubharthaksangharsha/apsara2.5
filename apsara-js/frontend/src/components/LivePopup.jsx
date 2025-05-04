@@ -99,7 +99,7 @@ export default function LivePopup({
   isRecording, 
   isModelSpeaking, 
   isStreamingVideo,
-  mediaStream, // Pass the actual MediaStream object
+  mediaStream, // Receives the actual stream object now
   
   // Handlers from App.jsx
   onVoiceChange, 
