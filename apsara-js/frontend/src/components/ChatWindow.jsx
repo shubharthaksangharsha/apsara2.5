@@ -2,14 +2,18 @@ import React, { useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import ImageModal from './ImageModal';
+import StreamingApsaraLogo from './StreamingApsaraLogo';
+import { ClipboardCopy, ChevronDown, ChevronUp } from 'lucide-react';
 
 // Helper function to detect code blocks for specific styling
 // const isCodePart = (part) => part.executableCode || part.codeExecutionResult; // We'll handle this within the markdown components
 
-export default function ChatWindow({ convo }) {
+export default function ChatWindow({ convo, streamingModelMessageId }) {
   const messagesEndRef = useRef(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedImageData, setSelectedImageData] = useState(null);
+  const [copiedStates, setCopiedStates] = useState({});
+  const [collapsedSections, setCollapsedSections] = useState({});
   
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -25,8 +29,85 @@ export default function ChatWindow({ convo }) {
     setSelectedImageData(null);
   };
 
+  const handleCopyCode = (code, id) => {
+    navigator.clipboard.writeText(code).then(() => {
+      setCopiedStates(prev => ({ ...prev, [id]: true }));
+      setTimeout(() => {
+        setCopiedStates(prev => ({ ...prev, [id]: false }));
+      }, 2000);
+    }).catch(err => {
+      console.error('Failed to copy code: ', err);
+      // Optionally, add user feedback for copy failure
+    });
+  };
+
+  const toggleCollapse = (sectionId) => {
+    setCollapsedSections(prev => ({ ...prev, [sectionId]: !prev[sectionId] }));
+  };
+
   if (!convo) return null;
   
+  const isStreaming = streamingModelMessageId !== null;
+  
+  const renderCodeBlock = (codeContent, language, uniqueIdPrefix) => {
+    const sectionId = `${uniqueIdPrefix}-code`;
+    const isCollapsed = collapsedSections[sectionId];
+    return (
+      <div key={sectionId} className="my-3 bg-gray-800 dark:bg-black rounded-md overflow-hidden shadow">
+        <div className="px-4 py-2 text-xs text-gray-300 dark:text-gray-400 bg-gray-700 dark:bg-gray-900/70 flex justify-between items-center">
+          <span>{language?.toLowerCase() || 'code'}</span>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => handleCopyCode(codeContent, sectionId)}
+              className="p-1 text-gray-300 hover:text-white transition"
+              title="Copy code"
+            >
+              {copiedStates[sectionId] ? <span className="text-xs">Copied!</span> : <ClipboardCopy size={14} />}
+            </button>
+            <button
+              onClick={() => toggleCollapse(sectionId)}
+              className="p-1 text-gray-300 hover:text-white transition"
+              title={isCollapsed ? "Expand" : "Collapse"}
+            >
+              {isCollapsed ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
+            </button>
+          </div>
+        </div>
+        {!isCollapsed && (
+          <pre className="p-4 overflow-x-auto custom-scrollbar text-sm">
+            <code className={`language-${language?.toLowerCase() || ''} text-gray-100 dark:text-gray-200`}>
+              {codeContent}
+            </code>
+          </pre>
+        )}
+      </div>
+    );
+  };
+
+  const renderCodeExecutionResult = (resultOutput, uniqueIdPrefix) => {
+    const sectionId = `${uniqueIdPrefix}-output`;
+    const isCollapsed = collapsedSections[sectionId];
+    return (
+      <div key={sectionId} className="my-2 text-sm">
+        <div className="flex justify-between items-center px-3 py-1.5 bg-green-50 dark:bg-green-900/20 border-l-4 border-green-500 dark:border-green-400 rounded-r-md">
+            <span className="font-semibold text-gray-800 dark:text-green-300">Output:</span>
+            <button
+                onClick={() => toggleCollapse(sectionId)}
+                className="p-1 text-gray-500 dark:text-gray-400 hover:text-black dark:hover:text-white transition"
+                title={isCollapsed ? "Show output" : "Hide output"}
+            >
+                {isCollapsed ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
+            </button>
+        </div>
+        {!isCollapsed && (
+            <pre className="whitespace-pre-wrap font-mono text-xs mt-1 p-3 bg-green-50 dark:bg-green-900/10 border-l-4 border-green-500 dark:border-green-400 rounded-r-md">
+                {resultOutput}
+            </pre>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className="max-w-3xl mx-auto w-full space-y-6 pb-4">
       {(convo.messages || []).map((msg, idx) => {
@@ -64,11 +145,12 @@ export default function ChatWindow({ convo }) {
               <div className={`w-full text-gray-800 dark:text-gray-200 ${isSystem ? 'text-center' : ''}`}>
                 {(msg.parts && msg.parts.length > 0) ? (
                   msg.parts.map((part, i) => {
+                    const partId = `${msg.id || idx}-part-${i}`;
                     if (part.text) {
                       return (
                         <div
-                          key={`${msg.id || idx}-text-${i}`}
-                          className={`prose prose-sm dark:prose-invert max-w-none py-1 ${ // Added prose for markdown styling
+                          key={`${partId}-text`}
+                          className={`prose prose-sm dark:prose-invert max-w-none py-1 ${
                             isError ? 'text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-900/20 p-3 rounded-md' :
                             isSystem ? 'text-sm text-gray-500 dark:text-gray-400 italic px-3 py-2 bg-gray-100 dark:bg-gray-700/50 rounded-md' :
                             ''
@@ -80,30 +162,13 @@ export default function ChatWindow({ convo }) {
                         </div>
                       );
                     } else if (part.executableCode) {
-                      return (
-                        <div key={`${msg.id || idx}-code-${i}`} className="my-3 bg-gray-800 dark:bg-black rounded-md overflow-hidden shadow">
-                          <div className="px-4 py-2 text-xs text-gray-300 dark:text-gray-400 bg-gray-700 dark:bg-gray-900/70 flex justify-between items-center">
-                            <span>{part.executableCode.language?.toLowerCase() || 'code'}</span>
-                            {/* Add Copy button here later */}
-                          </div>
-                          <pre className="p-4 overflow-x-auto custom-scrollbar text-sm">
-                            <code className={`language-${part.executableCode.language?.toLowerCase() || ''} text-gray-100 dark:text-gray-200`}>
-                                {part.executableCode.code}
-                            </code>
-                          </pre>
-                        </div>
-                      );
+                      return renderCodeBlock(part.executableCode.code, part.executableCode.language, partId);
                     } else if (part.codeExecutionResult) {
-                      return (
-                        <div key={`${msg.id || idx}-coderesult-${i}`} className="my-2 p-3 border-l-4 border-green-500 dark:border-green-400 bg-green-50 dark:bg-green-900/20 text-sm text-gray-800 dark:text-green-700">
-                          <span className="font-semibold">Output:</span>
-                          <pre className="whitespace-pre-wrap font-mono text-xs mt-1">{part.codeExecutionResult.output}</pre>
-                        </div>
-                      );
+                      return renderCodeExecutionResult(part.codeExecutionResult.output, partId);
                     } else if (part.inlineData?.mimeType?.startsWith('image/')) {
                       return (
                         <div
-                          key={`${msg.id || idx}-img-${i}`}
+                          key={`${partId}-img`}
                           className="my-2 p-1 bg-gray-100 dark:bg-gray-900/30 rounded-md inline-block cursor-pointer hover:ring-2 hover:ring-indigo-500 transition-all"
                           onClick={() => handleImageClick(part.inlineData)}
                         >
@@ -131,23 +196,8 @@ export default function ChatWindow({ convo }) {
                          <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.text}</ReactMarkdown>
                        </div>
                     )}
-                    {/* Similar updates for top-level executableCode and codeExecutionResult if that structure is still used */}
-                    {msg.executableCode && (
-                      <div key={`${msg.id || idx}-top-code`} className="my-3 bg-gray-800 dark:bg-black rounded-md overflow-hidden shadow">
-                         <div className="px-4 py-2 text-xs text-gray-300 dark:text-gray-400 bg-gray-700 dark:bg-gray-900/70 flex justify-between items-center">
-                           <span>{msg.executableCode.language?.toLowerCase() || 'code'}</span>
-                         </div>
-                         <pre className="p-4 overflow-x-auto custom-scrollbar text-sm">
-                           <code className={`language-${msg.executableCode.language?.toLowerCase() || ''} text-gray-100 dark:text-gray-200`}>{msg.executableCode.code}</code>
-                         </pre>
-                       </div>
-                    )}
-                    {msg.codeExecutionResult && (
-                       <div key={`${msg.id || idx}-top-coderesult`} className="my-2 p-3 border-l-4 border-green-500 dark:border-green-400 bg-green-50 dark:bg-green-900/20 text-sm text-gray-800 dark:text-green-700">
-                         <span className="font-semibold">Output:</span>
-                         <pre className="whitespace-pre-wrap font-mono text-xs mt-1">{msg.codeExecutionResult.output}</pre>
-                       </div>
-                    )}
+                    {msg.executableCode && renderCodeBlock(msg.executableCode.code, msg.executableCode.language, `${msg.id || idx}-topLegacy`)}
+                    {msg.codeExecutionResult && renderCodeExecutionResult(msg.codeExecutionResult.output, `${msg.id || idx}-topLegacy`)}
                   </>
                 )}
               </div>
@@ -155,6 +205,10 @@ export default function ChatWindow({ convo }) {
           );
         }
       })}
+      
+      {/* Show streaming logo when a message is streaming */}
+      <StreamingApsaraLogo isVisible={isStreaming} />
+      
       <div ref={messagesEndRef} />
       <ImageModal isOpen={modalOpen} onClose={closeModal} imageData={selectedImageData} />
     </div>
