@@ -51,7 +51,7 @@ export default function StreamingApsaraLogo({ isVisible }) {
       </div>
       <div className="text-sm font-medium animate-textFade">
         <span className="bg-gradient-to-r from-pink-500 via-purple-500 to-indigo-500 bg-clip-text text-transparent">
-          Apsara is creating<span className="streaming-dots-animation">...</span>
+          Apsara is thinking<span className="streaming-dots-animation">...</span>
         </span>
       </div>
     </div>

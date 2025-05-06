@@ -81,6 +81,8 @@ export default function App() {
     handleNewChat: createNewChat, // Rename for clarity
     handleDeleteChat,
     handleDeleteAllChats,
+    handleEditChatTitle,
+    handlePinChat,
   } = useConversations();
 
   const {
@@ -321,6 +323,8 @@ export default function App() {
         onNewChat={createNewChat}
         onDeleteAllChats={handleDeleteAllChats}
         onDeleteChat={handleDeleteChat}
+        onEditChatTitle={handleEditChatTitle}
+        onPinChat={handlePinChat}
       />
 
       {/* Main content */}
@@ -407,7 +411,7 @@ export default function App() {
 
       {/* Live Chat Popup - Use Imported Component */}
       {liveOpen && (
-        <LivePopup
+        <LivePopup 
           connectionStatus={liveConnectionStatus}
           messages={liveMessages}
           currentVoice={currentVoice}

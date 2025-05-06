@@ -48,7 +48,7 @@ export default function MessageInput({ onSend, onStreamSend, isLoading, disabled
       onSend(messageToSend);
     }
   };
-
+  
   return (
     <div className="border-t border-gray-200 dark:border-gray-700 px-2 py-2 sm:px-4 sm:py-3 bg-white dark:bg-gray-800">
       <div className="max-w-3xl mx-auto">
@@ -58,7 +58,7 @@ export default function MessageInput({ onSend, onStreamSend, isLoading, disabled
             className="flex-1 w-full resize-none py-2 px-3 bg-transparent text-gray-900 dark:text-gray-100 focus:outline-none custom-scrollbar placeholder-gray-500 dark:placeholder-gray-400"
             placeholder={
               disabled ? "Select a conversation..." :
-              isLoading ? "Apsara is thinking..." :
+              isLoading ? "Apsara is thinking..." : 
               "Type your message..." // Simplified placeholder
             }
             value={text}
@@ -93,7 +93,7 @@ export default function MessageInput({ onSend, onStreamSend, isLoading, disabled
                 disabled={isLoading || disabled}
                 className={`${streamEnabled ? 'bg-indigo-600' : 'bg-gray-300 dark:bg-gray-500'}
                   relative inline-flex h-[22px] w-[40px] shrink-0 cursor-pointer rounded-full border-2 border-transparent
-                  transition-colors duration-200 ease-in-out focus:outline-none focus-visible:ring-2
+                  transition-colors duration-200 ease-in-out focus:outline-none focus-visible:ring-2 
                   focus-visible:ring-white/75 disabled:opacity-50`}
               >
                 <span className="sr-only">Toggle Streaming</span>

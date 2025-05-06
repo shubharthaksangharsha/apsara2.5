@@ -50,6 +50,26 @@ export default function ChatWindow({ convo, streamingModelMessageId, isLoading }
   // Show animation either during streaming or during regular loading
   const isThinking = streamingModelMessageId !== null || isLoading;
   
+  // Render streaming text with fade-in animation
+  const renderStreamingText = (text) => {
+    // Split text into words
+    const words = text.split(/(\s+)/);
+    
+    return (
+      <div className="streaming-text-container">
+        {words.map((word, index) => (
+          <span 
+            key={index} 
+            className="streaming-text-word" 
+            style={{ animationDelay: `${index * 50}ms` }}
+          >
+            {word}
+          </span>
+        ))}
+      </div>
+    );
+  };
+  
   const renderCodeBlock = (codeContent, language, uniqueIdPrefix) => {
     const sectionId = `${uniqueIdPrefix}-code`;
     const isCollapsed = collapsedSections[sectionId];
@@ -108,33 +128,41 @@ export default function ChatWindow({ convo, streamingModelMessageId, isLoading }
       </div>
     );
   };
-
+  
   return (
     <div className="max-w-3xl mx-auto w-full space-y-6 pb-4">
-      {(convo.messages || []).map((msg, idx) => {
+      {(convo.messages || []).map((msg, idx, arr) => {
         const isUser = msg.role === 'user';
         const isError = msg.role === 'error';
         const isSystem = msg.role === 'system';
+        const isStreaming = msg.id === streamingModelMessageId;
+        const isLastUser = isUser && (idx === arr.length - 1 || arr.slice(idx + 1).findIndex(m => m.role === 'user') === -1);
 
+        // Render user message
         if (isUser) {
-          // --- User Messages ---
           return (
-            <div key={msg.id || idx} className="flex justify-end group">
-              <div
-                className="max-w-[80%] rounded-2xl px-4 py-3 break-words bg-indigo-500 text-white shadow-md"
-              >
-                {(msg.parts || []).map((part, i) =>
-                  part.text ? (
-                    <div key={`${msg.id || idx}-text-${i}`} className="whitespace-pre-wrap">
-                      {part.text}
-                    </div>
-                  ) : null // User messages typically don't have complex markdown or code
-                )}
-                {!msg.parts && msg.text && (
-                   <div className="whitespace-pre-wrap">{msg.text}</div>
-                )}
+            <React.Fragment key={msg.id || idx}>
+              <div className="flex justify-end group">
+                <div className="max-w-[80%] rounded-2xl px-4 py-3 break-words bg-indigo-500 text-white shadow-md">
+                  {(msg.parts || []).map((part, i) =>
+                    part.text ? (
+                      <div key={`${msg.id || idx}-text-${i}`} className="whitespace-pre-wrap">
+                        {part.text}
+                      </div>
+                    ) : null
+                  )}
+                  {!msg.parts && msg.text && (
+                    <div className="whitespace-pre-wrap">{msg.text}</div>
+                  )}
+                </div>
               </div>
-            </div>
+              {/* Show streaming logo/animation right after the last user message if streaming/loading */}
+              {isLastUser && (isThinking || streamingModelMessageId !== null) && (
+                <div className="flex items-center pt-2 pb-2">
+                  <StreamingApsaraLogo isVisible={true} />
+                </div>
+              )}
+            </React.Fragment>
           );
         } else {
           // --- Apsara, System, or Error Messages ---
@@ -148,6 +176,7 @@ export default function ChatWindow({ convo, streamingModelMessageId, isLoading }
                   msg.parts.map((part, i) => {
                     const partId = `${msg.id || idx}-part-${i}`;
                     if (part.text) {
+                      // Use streaming animation for the model's text when it's actively streaming
                       return (
                         <div
                           key={`${partId}-text`}
@@ -157,9 +186,13 @@ export default function ChatWindow({ convo, streamingModelMessageId, isLoading }
                             ''
                           }`}
                         >
-                          <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                            {part.text}
-                          </ReactMarkdown>
+                          {isStreaming ? (
+                            renderStreamingText(part.text)
+                          ) : (
+                            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                              {part.text}
+                            </ReactMarkdown>
+                          )}
                         </div>
                       );
                     } else if (part.executableCode) {
@@ -167,26 +200,26 @@ export default function ChatWindow({ convo, streamingModelMessageId, isLoading }
                     } else if (part.codeExecutionResult) {
                       return renderCodeExecutionResult(part.codeExecutionResult.output, partId);
                     } else if (part.inlineData?.mimeType?.startsWith('image/')) {
-                      return (
+                return (
                         <div
                           key={`${partId}-img`}
                           className="my-2 p-1 bg-gray-100 dark:bg-gray-900/30 rounded-md inline-block cursor-pointer hover:ring-2 hover:ring-indigo-500 transition-all"
                           onClick={() => handleImageClick(part.inlineData)}
                         >
-                          <img
-                            src={`data:${part.inlineData.mimeType};base64,${part.inlineData.data}`}
-                            alt="Generated content"
+                    <img
+                      src={`data:${part.inlineData.mimeType};base64,${part.inlineData.data}`}
+                      alt="Generated content"
                             className="max-w-md h-auto rounded"
-                          />
-                        </div>
-                      );
+                    />
+                  </div>
+                );
                     } else {
-                      return null;
-                    }
+                return null;
+              }
                   })
                 ) : (
                   // Fallback for messages with no 'parts' array
-                  <>
+              <>
                     {msg.text && (
                        <div className={`prose prose-sm dark:prose-invert max-w-none py-1 ${
                             isError ? 'text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-900/20 p-3 rounded-md' :
@@ -194,21 +227,22 @@ export default function ChatWindow({ convo, streamingModelMessageId, isLoading }
                             ''
                           }`}
                        >
-                         <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.text}</ReactMarkdown>
-                       </div>
-                    )}
+                         {isStreaming ? (
+                           renderStreamingText(msg.text)
+                         ) : (
+                           <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.text}</ReactMarkdown>
+                         )}
+                  </div>
+                )}
                     {msg.executableCode && renderCodeBlock(msg.executableCode.code, msg.executableCode.language, `${msg.id || idx}-topLegacy`)}
                     {msg.codeExecutionResult && renderCodeExecutionResult(msg.codeExecutionResult.output, `${msg.id || idx}-topLegacy`)}
-                  </>
-                )}
-              </div>
-            </div>
+              </>
+            )}
+          </div>
+        </div>
           );
         }
       })}
-      
-      {/* Show animation when either streaming or loading */}
-      <StreamingApsaraLogo isVisible={isThinking} />
       
       <div ref={messagesEndRef} />
       <ImageModal isOpen={modalOpen} onClose={closeModal} imageData={selectedImageData} />

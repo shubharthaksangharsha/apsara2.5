@@ -298,8 +298,8 @@ export function useLiveSession({ currentVoice }) {
           return;
       }
 
-      console.log('[Video Stream] Stopping video stream internally.');
-      addLiveMessage({ role: 'system', text: 'Video stream stopped.' });
+          console.log('[Video Stream] Stopping video stream internally.');
+          addLiveMessage({ role: 'system', text: 'Video stream stopped.' });
 
       // Update state and ref *first*
       setIsStreamingVideo(false);
@@ -319,7 +319,7 @@ export function useLiveSession({ currentVoice }) {
           videoElementRef.current.onloadedmetadata = null;
           videoElementRef.current.onerror = null;
           console.log('[Video Stream] Detached stream and cleaned up video element listeners.');
-      }
+       }
 
   }, [addLiveMessage]); // Removed state dependency, rely on ref
 
@@ -358,12 +358,12 @@ export function useLiveSession({ currentVoice }) {
 
               // --- Update state AND ref right before starting loop ---
               console.log("[Video Stream] Setting state/ref to active and starting frame send.");
-              setIsStreamingVideo(true);
+          setIsStreamingVideo(true);
               isStreamingVideoRef.current = true; // Sync Ref
               addLiveMessage({ role: 'system', text: 'Video stream active. Sending frames.' });
 
               // --- Frame Sending Loop ---
-              const sendFrame = () => {
+          const sendFrame = () => {
                   // PRIMARY CHECK: Use the Ref
                   if (!isStreamingVideoRef.current || !liveWsConnection.current || liveWsConnection.current.readyState !== WebSocket.OPEN) {
                       console.log(`[Video Stream] Stopping frame sending loop. Ref=${isStreamingVideoRef.current}, wsState=${liveWsConnection.current?.readyState}`);
@@ -377,7 +377,7 @@ export function useLiveSession({ currentVoice }) {
                           canvas.toBlob((blob) => {
                               // Check Ref *again* before async blob processing completes
                               if (blob && isStreamingVideoRef.current && liveWsConnection.current?.readyState === WebSocket.OPEN) {
-                                  try {
+                          try {
                               const reader = new FileReader();
                               reader.onloadend = () => {
                                           // Final check using Ref
@@ -415,7 +415,7 @@ export function useLiveSession({ currentVoice }) {
                       console.error("[Video Stream] Error drawing frame:", drawError);
                        // Check Ref before scheduling next call
                        if (isStreamingVideoRef.current) { setTimeout(sendFrame, 500); }
-                  }
+              }
               }; // --- End SendFrame definition ---
           sendFrame(); // Start the loop
           }; // --- End onloadedmetadata ---
