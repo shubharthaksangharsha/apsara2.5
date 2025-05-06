@@ -727,6 +727,21 @@ async function handleLiveConnection(ws, req) {
                          console.warn(`[Live Backend] Received video_chunk JSON but chunk data/mimeType missing <${currentSessionId}>.`);
                      }
 
+                } else if (parsedMessage.type === 'screen_chunk' && parsedMessage.chunk) {
+                    // Handle Screen Share Chunk Input
+                    console.log(`[Live Backend] Received SCREEN CHUNK JSON from client <${currentSessionId}>. Sending via sendRealtimeInput.`);
+                     if (parsedMessage.chunk.data && parsedMessage.chunk.mimeType) {
+                        await currentSession.sendRealtimeInput({
+                            video: { // Google Live API likely expects screen share frames as 'video' type input
+                                data: parsedMessage.chunk.data,
+                                mimeType: parsedMessage.chunk.mimeType
+                            }
+                        });
+                        console.log(`[Live Backend] Sent Screen Chunk data via sendRealtimeInput for <${currentSessionId}>.`);
+                     } else {
+                         console.warn(`[Live Backend] Received screen_chunk JSON but chunk data/mimeType missing <${currentSessionId}>.`);
+                     }
+
                 } else {
                     // Unknown JSON structure
                     console.warn(`[Live Backend] Received Buffer containing unrecognized JSON structure <${currentSessionId}>:`, parsedMessage);
