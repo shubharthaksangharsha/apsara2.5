@@ -37,7 +37,7 @@
 
   /* Custom scrollbar styles */
   .custom-scrollbar::-webkit-scrollbar {
-    width: 6px; /* Adjust width */
+    width: 8px; /* Increased width for better visibility */
   }
   .custom-scrollbar::-webkit-scrollbar-track {
     background: theme('colors.gray.100');
@@ -47,25 +47,25 @@
     background: theme('colors.gray.700');
   }
   .custom-scrollbar::-webkit-scrollbar-thumb {
-    background: theme('colors.gray.400');
+    background: theme('colors.gray.500'); /* Darker color for better visibility */
     border-radius: 10px;
   }
   .dark .custom-scrollbar::-webkit-scrollbar-thumb {
-     background: theme('colors.gray.500');
+     background: theme('colors.gray.600'); /* Darker color for better visibility */
   }
   .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-     background: theme('colors.gray.500');
+     background: theme('colors.indigo.400'); /* Highlight color on hover */
   }
    .dark .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-     background: theme('colors.gray.400');
+     background: theme('colors.indigo.500'); /* Highlight color on hover */
   }
   /* Firefox scrollbar */
   .custom-scrollbar {
     scrollbar-width: thin;
-    scrollbar-color: theme('colors.gray.400') theme('colors.gray.100');
+    scrollbar-color: theme('colors.gray.500') theme('colors.gray.100');
   }
    .dark .custom-scrollbar {
-     scrollbar-color: theme('colors.gray.500') theme('colors.gray.700');
+     scrollbar-color: theme('colors.gray.600') theme('colors.gray.700');
    }
 
   /* Simple pulse animation for Tailwind */
@@ -94,6 +94,23 @@
     80%, 100% { content: '...'; }
   }
 
+  /* Fade-in animations for streaming text */
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  
+  .streaming-text-word {
+    opacity: 0;
+    display: inline-block;
+    animation: fadeIn 0.8s ease-in forwards;
+    margin-right: 4px;
+  }
+  
+  .streaming-text-container p {
+    margin: 0;
+  }
+  
   /* Particle animations with different paths for each particle */
   .particle-1 {
     animation-name: particle1;

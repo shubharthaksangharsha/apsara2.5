@@ -86,7 +86,11 @@ export function useConversations() {
   const handleNewChat = useCallback(() => {
     const id = Date.now().toString();
     const newChat = { id, title: 'New Chat', messages: [] };
-    setConvos(prevConvos => [newChat, ...prevConvos]); // Prepend new chat
+    setConvos(prevConvos => {
+      const pinned = prevConvos.filter(c => c.pinned);
+      const unpinned = prevConvos.filter(c => !c.pinned);
+      return [...pinned, newChat, ...unpinned];
+    });
     setActiveConvoId(id);
   }, []); // No dependencies needed if it only uses Date.now()
 
@@ -111,6 +115,27 @@ export function useConversations() {
     }
   }, []); // No dependencies
 
+  // Edit conversation title
+  const handleEditChatTitle = useCallback((idToEdit, newTitle) => {
+    setConvos(prevConvos => prevConvos.map(convo =>
+      convo.id === idToEdit ? { ...convo, title: newTitle } : convo
+    ));
+  }, []);
+
+  // Pin/unpin conversation
+  const handlePinChat = useCallback((idToPin) => {
+    setConvos(prevConvos => {
+      const updatedConvos = prevConvos.map(convo =>
+        convo.id === idToPin ? { ...convo, pinned: !convo.pinned } : convo
+      );
+      // Move pinned convos to the top
+      return [
+        ...updatedConvos.filter(c => c.pinned),
+        ...updatedConvos.filter(c => !c.pinned)
+      ];
+    });
+  }, []);
+
   return {
     convos,
     setConvos, // Expose setConvos for direct manipulation (e.g., adding messages)
@@ -119,5 +144,7 @@ export function useConversations() {
     handleNewChat,
     handleDeleteChat,
     handleDeleteAllChats,
+    handleEditChatTitle, // Expose edit handler
+    handlePinChat,      // Expose pin handler
   };
 }
