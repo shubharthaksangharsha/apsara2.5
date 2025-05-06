@@ -29,8 +29,8 @@ export default function Sidebar({
         }
       `}
     >
-      {/* Ensure the 'group' class is ONLY applied when NOT locked */}
-      <div className="flex flex-col h-full overflow-y-auto overflow-x-hidden custom-scrollbar">
+      {/* Main scrollable container for the entire sidebar content */}
+      <div className="flex flex-col h-full overflow-x-hidden"> {/* Removed overflow-y-auto here, will put it on the list */}
 
         {/* Sidebar Hamburger/Lock Button */}
         <div className="hidden lg:flex flex-shrink-0 px-3 pt-3 pb-2">
@@ -80,12 +80,12 @@ export default function Sidebar({
         </div>
 
         {/* Conversations List Container */}
-        {/* Visibility based on lock OR hover */}
         <div className={`
           flex-1 px-2 overflow-hidden transition-opacity duration-300
+          flex flex-col /* Make this a flex column to manage children height */
           ${sidebarLocked ? 'lg:opacity-100' : 'lg:opacity-0 group-hover:lg:opacity-100'}
         `}>
-          <div className="my-0 flex justify-between items-center px-2 py-2 sticky top-0 bg-white dark:bg-gray-800 z-10">
+          <div className="my-0 flex justify-between items-center px-2 py-2 sticky top-0 bg-white dark:bg-gray-800 z-10 flex-shrink-0"> {/* flex-shrink-0 for header */}
             <div className="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
               Conversations
             </div>
@@ -100,7 +100,8 @@ export default function Sidebar({
               </button>
             )}
           </div>
-          <ul className="space-y-1 pb-2">
+          {/* This ul will now be the scrollable part for conversations */}
+          <ul className="space-y-1 pb-2 overflow-y-auto custom-scrollbar flex-grow"> {/* Added overflow-y-auto, custom-scrollbar, and flex-grow */}
             {convos && convos.map(c => (
               <li
                 key={c.id}
