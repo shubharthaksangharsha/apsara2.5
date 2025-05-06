@@ -19,7 +19,8 @@ export function useLiveSession({ currentVoice }) {
   const [liveSystemInstruction, setLiveSystemInstruction] = useState('You are a helpful assistant.');
   const [isModelSpeaking, setIsModelSpeaking] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
-  const [isStreamingVideo, setIsStreamingVideo] = useState(false); // Video state
+  const [isStreamingVideo, setIsStreamingVideo] = useState(false);
+  const [isStreamingScreen, setIsStreamingScreen] = useState(false); // <-- New state for screen share
   const [audioError, setAudioError] = useState(null);
   const [sessionTimeLeft, setSessionTimeLeft] = useState(null); // State for timer
   const [inputSampleRate] = useState(16000); // Target input sample rate for PCM
@@ -39,12 +40,18 @@ export function useLiveSession({ currentVoice }) {
   const liveStreamingTextRef = useRef('');
   const liveStreamingMsgIdRef = useRef(null);
   const sessionResumeHandleRef = useRef(null); // Ref to store the handle
-  const isStreamingVideoRef = useRef(isStreamingVideo); // <-- Add Ref
+  const isStreamingVideoRef = useRef(isStreamingVideo);
+  const screenStreamRef = useRef(null); // <-- New ref for screen share stream
+  const isScreenSharingRef = useRef(isStreamingScreen); // <-- New ref for screen share status
 
-  // --- Sync state to ref ---
+  // --- Sync state to refs ---
   useEffect(() => {
     isStreamingVideoRef.current = isStreamingVideo;
   }, [isStreamingVideo]);
+
+  useEffect(() => {
+    isScreenSharingRef.current = isStreamingScreen; // <-- Sync screen share state
+  }, [isStreamingScreen]);
   // --- End Sync ---
 
   // --- Memoized Utility Functions ---
@@ -427,6 +434,150 @@ export function useLiveSession({ currentVoice }) {
       }
   }, [liveConnectionStatus, addLiveMessage, stopVideoStreamInternal]); // Removed state dependency
 
+  // --- Screen Streaming Logic ---
+  const stopScreenShareInternal = useCallback(() => {
+    if (!isScreenSharingRef.current) {
+      return;
+    }
+    console.log('[Screen Share] Stopping screen share internally.');
+    addLiveMessage({ role: 'system', text: 'Screen share stopped.' });
+
+    setIsStreamingScreen(false);
+    isScreenSharingRef.current = false;
+
+    screenStreamRef.current?.getTracks().forEach(track => {
+      track.stop();
+      console.log(`[Screen Share] Stopped track: ${track.label || track.id}`);
+    });
+    screenStreamRef.current = null;
+
+    // Note: We use the same videoElementRef and canvasElementRef for simplicity,
+    // assuming webcam and screen share are mutually exclusive or managed carefully.
+    // If they can run concurrently and display separately, they'd need distinct refs.
+    if (videoElementRef.current && videoElementRef.current.srcObject === screenStreamRef.current) { // Check if it was screen
+        videoElementRef.current.pause();
+        videoElementRef.current.srcObject = null;
+        videoElementRef.current.onloadedmetadata = null;
+        videoElementRef.current.onerror = null;
+    }
+     // We might not need to clean canvasElementRef here if it's reused by video
+     // or if screen sharing doesn't use the same canvas for local preview.
+     // For sending, it WILL use a canvas.
+
+  }, [addLiveMessage]);
+
+  const startScreenShareInternal = useCallback(async () => {
+    const ws = liveWsConnection.current;
+    if (isScreenSharingRef.current || !ws || ws.readyState !== WebSocket.OPEN || liveConnectionStatus !== 'connected') {
+      console.warn(`[Screen Share] Cannot start. Ref=${isScreenSharingRef.current}, ws=${ws?.readyState}, status=${liveConnectionStatus}`);
+      return;
+    }
+    addLiveMessage({ role: 'system', text: 'Requesting screen share...' });
+
+    try {
+      const stream = await navigator.mediaDevices.getDisplayMedia({
+        video: { mediaSource: "screen", width: { ideal: 1280 }, height: { ideal: 720 } }, // Added ideal dimensions
+        audio: false // Typically screen share doesn't include tab audio by default for this use case
+      });
+      screenStreamRef.current = stream;
+      addLiveMessage({ role: 'system', text: 'Screen share access granted.' });
+
+      // Re-use video and canvas elements for capturing frames for sending
+      // Ensure elements exist (same as video stream)
+      if (!videoElementRef.current) videoElementRef.current = document.createElement('video');
+      videoElementRef.current.setAttribute('playsinline', ''); videoElementRef.current.muted = true;
+      if (!canvasElementRef.current) canvasElementRef.current = document.createElement('canvas');
+
+      const video = videoElementRef.current; // This video element is for processing, not necessarily for display
+      const canvas = canvasElementRef.current;
+
+      video.onloadedmetadata = () => {
+        console.log("[Screen Share] Stream metadata loaded.");
+        if (!liveWsConnection.current || liveWsConnection.current.readyState !== WebSocket.OPEN) {
+          console.log("[Screen Share] Aborting frame sending: WS closed.");
+          screenStreamRef.current?.getTracks().forEach(track => track.stop()); screenStreamRef.current = null;
+          setIsStreamingScreen(false); isScreenSharingRef.current = false;
+          return;
+        }
+        canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+        console.log(`[Screen Share] Canvas resized to ${canvas.width}x${canvas.height}`);
+
+        setIsStreamingScreen(true);
+        isScreenSharingRef.current = true;
+        addLiveMessage({ role: 'system', text: 'Screen share active. Sending frames.' });
+
+        const sendScreenFrame = () => {
+          if (!isScreenSharingRef.current || !liveWsConnection.current || liveWsConnection.current.readyState !== WebSocket.OPEN) {
+            console.log(`[Screen Share] Stopping frame sending. Ref=${isScreenSharingRef.current}, wsState=${liveWsConnection.current?.readyState}`);
+            return;
+          }
+
+          try {
+            const context = canvas.getContext('2d');
+            if (video.readyState >= video.HAVE_CURRENT_DATA && canvas.width > 0 && canvas.height > 0) {
+              context.drawImage(video, 0, 0, canvas.width, canvas.height);
+              canvas.toBlob((blob) => {
+                if (blob && isScreenSharingRef.current && liveWsConnection.current?.readyState === WebSocket.OPEN) {
+                  try {
+                    const reader = new FileReader();
+                    reader.onloadend = () => {
+                      if (isScreenSharingRef.current && liveWsConnection.current?.readyState === WebSocket.OPEN) {
+                        const base64data = reader.result.split(',')[1];
+                        const screenChunk = { mimeType: 'image/jpeg', data: base64data };
+                        console.log(`[Screen Share] Sending screen frame chunk to backend.`);
+                        liveWsConnection.current.send(JSON.stringify({ type: 'screen_chunk', chunk: screenChunk }));
+                        if (isScreenSharingRef.current) { setTimeout(sendScreenFrame, 1000); } // Slower rate for screen share
+                      } else { console.log("[Screen Share] Loop terminated: Ref became false during blob read or WS closed."); }
+                    };
+                    reader.readAsDataURL(blob);
+                  } catch (processingErr) {
+                    console.error("[Screen Share] Error processing frame blob:", processingErr);
+                    if (isScreenSharingRef.current) { setTimeout(sendScreenFrame, 1000); }
+                  }
+                } else if (!blob) {
+                  console.warn("[Screen Share] canvas.toBlob produced null blob.");
+                  if (isScreenSharingRef.current) { setTimeout(sendScreenFrame, 1000); }
+                } else { console.log("[Screen Share] State changed (ref) or WS closed before blob processing. Loop terminates."); }
+              }, 'image/jpeg', 0.7); // Slightly lower quality for screen share potentially
+            } else {
+              console.warn(`[Screen Share] Video element not ready or canvas not sized. Retrying.`);
+              if (isScreenSharingRef.current) { setTimeout(sendScreenFrame, 1000); }
+            }
+          } catch (drawError) {
+            console.error("[Screen Share] Error drawing screen frame:", drawError);
+            if (isScreenSharingRef.current) { setTimeout(sendScreenFrame, 1000); }
+          }
+        };
+        sendScreenFrame();
+      };
+
+      video.onerror = (err) => { console.error("[Screen Share] Video element error (for processing):", err); addLiveMessage({ role: 'error', text: `Screen share processing error: ${err.message || 'Unknown'}`}); stopScreenShareInternal(); };
+      video.srcObject = stream; // Assign the screen share stream to the processing video element
+      video.play().catch(err => { console.error("[Screen Share] Error playing processing video:", err); addLiveMessage({ role: 'error', text: `Screen share playback error: ${err.message}`}); stopScreenShareInternal(); });
+
+      // Handle when the user stops sharing via the browser's native UI
+      stream.getVideoTracks()[0].onended = () => {
+        console.log("[Screen Share] User stopped sharing via browser UI.");
+        stopScreenShareInternal(); // Call our internal stop function
+      };
+
+
+    } catch (err) {
+      console.error('[Screen Share] Error starting screen share:', err);
+      let errorText = `Screen share error: ${err.message}`;
+      if (err.name === 'NotAllowedError') errorText = 'Screen share permission denied.';
+      // ... other specific errors for getDisplayMedia if needed
+      addLiveMessage({ role: 'error', text: errorText });
+      // Ensure state is reset
+      setIsStreamingScreen(false);
+      isScreenSharingRef.current = false;
+      if(screenStreamRef.current) { // If stream was partially acquired
+           screenStreamRef.current.getTracks().forEach(track => track.stop());
+           screenStreamRef.current = null;
+      }
+    }
+  }, [liveConnectionStatus, addLiveMessage, stopScreenShareInternal ]);
+
   // --- Memoized WebSocket Logic ---
   const setupLiveConnection = useCallback(() => {
     if (liveWsConnection.current) {
@@ -715,6 +866,8 @@ export function useLiveSession({ currentVoice }) {
     liveMessages, liveConnectionStatus, liveModality, isModelSpeaking, isRecording, isStreamingVideo, audioError, sessionTimeLeft,
     liveSystemInstruction, // Keep original name for App.jsx prop clarity if preferred
     mediaStream: videoStreamRef.current,
+    isStreamingScreen, // <-- New state
+    screenStream: screenStreamRef.current, // <-- New stream for screen share display
 
     // Setters/Handlers
     setLiveModality,
@@ -722,5 +875,7 @@ export function useLiveSession({ currentVoice }) {
     startLiveSession, endLiveSession, sendLiveMessage: sendLiveMessageText,
     startRecording, stopRecording,
     startVideoStream: startVideoStreamInternal, stopVideoStream: stopVideoStreamInternal, // Expose video handlers
+    startScreenShare: startScreenShareInternal, // <-- New handler
+    stopScreenShare: stopScreenShareInternal,   // <-- New handler
   };
 }

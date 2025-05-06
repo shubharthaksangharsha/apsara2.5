@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { MessageSquare, X, Send, Mic, MicOff, Video, VideoOff } from 'lucide-react';
+import { MessageSquare, X, Send, Mic, MicOff, Video, VideoOff, ScreenShare, ScreenShareOff } from 'lucide-react';
 import VideoStreamDisplay from './VideoStreamDisplay.jsx'; // Import the video display component
+import ScreenShareDisplay from './ScreenShareDisplay.jsx'; // <-- Import new component
 
 // Helper to render message content with potential icon
 const renderMessageContent = (msg) => {
@@ -100,6 +101,8 @@ export default function LivePopup({
   isModelSpeaking, 
   isStreamingVideo,
   mediaStream, // Receives the actual stream object now
+  isStreamingScreen, // <-- New prop
+  screenStream,      // <-- New prop
   
   // Handlers from App.jsx
   onVoiceChange, 
@@ -113,6 +116,8 @@ export default function LivePopup({
   onStopRecording, 
   onStartVideo,     // Video handlers
   onStopVideo,
+  onStartScreenShare, // <-- New handler
+  onStopScreenShare,  // <-- New handler
 }) {
   const [inputText, setInputText] = useState('');
   const messagesEndRef = useRef(null);
@@ -186,6 +191,11 @@ export default function LivePopup({
         {/* Render it only when streaming and the stream exists */}
         {isStreamingVideo && mediaStream && (
             <VideoStreamDisplay videoStream={mediaStream} isWebcamActive={isStreamingVideo} />
+        )}
+        
+        {/* Screen Share Display - Positioned differently or adjust as needed */}
+        {isStreamingScreen && screenStream && (
+            <ScreenShareDisplay screenStream={screenStream} isScreenSharingActive={isStreamingScreen} />
         )}
         
         {/* Message Display Area */}
@@ -323,14 +333,30 @@ export default function LivePopup({
                 onClick={() => {
                   if (isStreamingVideo) onStopVideo(); else onStartVideo();
                 }}
+                disabled={isStreamingScreen} // Disable if screen sharing
                 className={`p-2 rounded-full transition-colors group ${
                   isStreamingVideo
                     ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 hover:bg-blue-200 dark:hover:bg-blue-800/50 animate-pulse'
                     : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600'
-                }`}
-                title={isStreamingVideo ? 'Stop Video Stream' : 'Start Video Stream (Sends snapshots)'}
+                } ${isStreamingScreen ? 'opacity-50 cursor-not-allowed' : ''}`}
+                title={isStreamingVideo ? 'Stop Video Stream' : (isStreamingScreen ? 'Video disabled during screen share' : 'Start Video Stream')}
               >
                 {isStreamingVideo ? <VideoOff className="h-5 w-5" /> : <Video className="h-5 w-5 transition-transform group-hover:scale-110" />}
+              </button>
+              {/* Screen Share Button */}
+              <button
+                onClick={() => {
+                  if (isStreamingScreen) onStopScreenShare(); else onStartScreenShare();
+                }}
+                disabled={isStreamingVideo} // Disable if video streaming
+                className={`p-2 rounded-full transition-colors group ${
+                  isStreamingScreen
+                    ? 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 hover:bg-green-200 dark:hover:bg-green-800/50 animate-pulse'
+                    : 'bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600'
+                } ${isStreamingVideo ? 'opacity-50 cursor-not-allowed' : ''}`}
+                title={isStreamingScreen ? 'Stop Screen Share' : (isStreamingVideo ? 'Screen share disabled during video' :'Start Screen Share')}
+              >
+                {isStreamingScreen ? <ScreenShareOff className="h-5 w-5" /> : <ScreenShare className="h-5 w-5 transition-transform group-hover:scale-110" />}
               </button>
               {/* Text Input */}
               <div className="relative flex-1">

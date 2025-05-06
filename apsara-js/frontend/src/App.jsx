@@ -123,8 +123,8 @@ export default function App() {
     sessionTimeLeft, // Get the timer state
     isRecording,
     audioError,
-    isStreamingVideo, // Video state
-    mediaStream, // <-- ADD THIS LINE: Get the stream from the hook
+    isStreamingVideo,
+    mediaStream,
     // Live Handlers/Setters
     setLiveModality,
     setLiveSystemInstruction: setLivePrompt, // Rename for clarity
@@ -133,8 +133,12 @@ export default function App() {
     sendLiveMessage,
     startRecording,
     stopRecording,
-    startVideoStream, // Video handlers
+    startVideoStream,
     stopVideoStream,
+    isStreamingScreen,
+    screenStream,
+    startScreenShare,
+    stopScreenShare,
   } = useLiveSession({ currentVoice }); // Pass dependencies
 
   // Settings panel
@@ -398,7 +402,7 @@ export default function App() {
 
       {/* Live Chat Popup - Use Imported Component */}
       {liveOpen && (
-        <LivePopup 
+        <LivePopup
           connectionStatus={liveConnectionStatus}
           messages={liveMessages}
           currentVoice={currentVoice}
@@ -420,11 +424,15 @@ export default function App() {
           onStartRecording={startRecording}
           onStopRecording={stopRecording}
           isModelSpeaking={isModelSpeaking}
-          sessionTimeLeft={sessionTimeLeft} // Pass timer state down
-          isStreamingVideo={isStreamingVideo} // Pass video state
-          mediaStream={mediaStream} // <-- ADD THIS LINE: Pass the stream down
-          onStartVideo={startVideoStream}     // Pass video handlers
+          sessionTimeLeft={sessionTimeLeft}
+          isStreamingVideo={isStreamingVideo}
+          mediaStream={mediaStream}
+          isStreamingScreen={isStreamingScreen}
+          screenStream={screenStream}
+          onStartVideo={startVideoStream}
           onStopVideo={stopVideoStream}
+          onStartScreenShare={startScreenShare}
+          onStopScreenShare={stopScreenShare}
         />
       )}
 
