@@ -313,7 +313,7 @@ export function useLiveSession({ currentVoice }) {
       videoStreamRef.current = null;
 
       // Clean up video element source
-      if (videoElementRef.current) {
+       if (videoElementRef.current) {
           videoElementRef.current.pause();
           videoElementRef.current.srcObject = null;
           videoElementRef.current.onloadedmetadata = null;
@@ -371,19 +371,19 @@ export function useLiveSession({ currentVoice }) {
                   }
 
                   try {
-                      const context = canvas.getContext('2d');
-                      if (video.readyState >= video.HAVE_CURRENT_DATA && canvas.width > 0 && canvas.height > 0) {
-                          context.drawImage(video, 0, 0, canvas.width, canvas.height);
+              const context = canvas.getContext('2d');
+              if (video.readyState >= video.HAVE_CURRENT_DATA && canvas.width > 0 && canvas.height > 0) {
+                  context.drawImage(video, 0, 0, canvas.width, canvas.height);
                           canvas.toBlob((blob) => {
                               // Check Ref *again* before async blob processing completes
                               if (blob && isStreamingVideoRef.current && liveWsConnection.current?.readyState === WebSocket.OPEN) {
                                   try {
-                                      const reader = new FileReader();
-                                      reader.onloadend = () => {
+                              const reader = new FileReader();
+                              reader.onloadend = () => {
                                           // Final check using Ref
                                           if (isStreamingVideoRef.current && liveWsConnection.current?.readyState === WebSocket.OPEN) {
                                               const base64data = reader.result.split(',')[1];
-                                              const videoChunk = { mimeType: 'image/jpeg', data: base64data };
+                                      const videoChunk = { mimeType: 'image/jpeg', data: base64data };
                                               console.log(`[Video Stream] Sending frame chunk to backend.`);
                                               liveWsConnection.current.send(JSON.stringify({ type: 'video_chunk', chunk: videoChunk }));
                                               // --- Schedule the next frame *after* successful send ---
@@ -393,8 +393,8 @@ export function useLiveSession({ currentVoice }) {
                                                   setTimeout(sendFrame, 500); // Recursive call
                                               } else { console.log("[Video Stream] Loop terminated: Ref became false before scheduling next frame."); }
                                           } else { console.log("[Video Stream] State changed (ref) during blob read or WS closed. Loop terminates."); }
-                                      };
-                                      reader.readAsDataURL(blob);
+                              };
+                              reader.readAsDataURL(blob);
                                   } catch (processingErr) {
                                       console.error("[Video Stream] Error processing frame blob:", processingErr);
                                       // Check Ref before scheduling next call
@@ -417,7 +417,7 @@ export function useLiveSession({ currentVoice }) {
                        if (isStreamingVideoRef.current) { setTimeout(sendFrame, 500); }
                   }
               }; // --- End SendFrame definition ---
-              sendFrame(); // Start the loop
+          sendFrame(); // Start the loop
           }; // --- End onloadedmetadata ---
 
           video.onerror = (err) => { console.error("[Video Stream] Video element error:", err); addLiveMessage({ role: 'error', text: `Video element error: ${err.message || 'Unknown'}`}); stopVideoStreamInternal(); };

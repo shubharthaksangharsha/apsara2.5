@@ -105,7 +105,7 @@ export default function App() {
 
   const {
     isLoading: isChatLoading, // Rename to avoid conflict if dataLoading is used
-    // streamingModelMessageId, // Not directly used in App UI
+    streamingModelMessageId, // Not directly used in App UI
     sendToBackend,
     startStreamChat,
   } = useChatApi({ // Pass dependencies
@@ -352,7 +352,7 @@ export default function App() {
               const activeConvo = convos.find(c => c.id === activeConvoId);
               if (activeConvo && activeConvo.messages && activeConvo.messages.length > 0) {
                 // Ensure ChatWindow doesn't cause remounts if its key changes unnecessarily
-                return <ChatWindow key={activeConvoId} convo={activeConvo} />; 
+                return <ChatWindow key={activeConvoId} convo={activeConvo} streamingModelMessageId={streamingModelMessageId} />; 
               } else {
                 // Active chat but NO messages yet: Show EmptyChatContent
                 // Pass the *same* props as WelcomeScreen gets for prompts

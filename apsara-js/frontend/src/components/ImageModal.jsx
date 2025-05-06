@@ -14,31 +14,33 @@ export default function ImageModal({ isOpen, onClose, imageData }) {
   };
 
   const handleShare = async () => {
-    const imageFile = await (await fetch(`data:${imageData.mimeType};base64,${imageData.data}`)).blob();
-    const filesArray = [
-        new File([imageFile], `image.${imageData.mimeType.split('/')[1] || 'png'}`, {
-            type: imageData.mimeType,
-        }),
-    ];
+    if (!navigator.share) {
+      alert('Web Share API is not supported in your browser. Please try downloading.');
+      return;
+    }
 
-    if (navigator.share && navigator.canShare && navigator.canShare({ files: filesArray })) {
-      try {
+    try {
+      const response = await fetch(`data:${imageData.mimeType};base64,${imageData.data}`);
+      const blob = await response.blob();
+      const file = new File([blob], `image.${imageData.mimeType.split('/')[1] || 'png'}`, { type: imageData.mimeType });
+
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
         await navigator.share({
-          files: filesArray,
+          files: [file],
           title: 'Shared Image',
-          text: 'Check out this image!',
+          text: 'Check out this image from Apsara!',
         });
         console.log('Image shared successfully');
-      } catch (error) {
-        console.error('Error sharing image:', error);
-        // Fallback or error message
-        alert('Sharing failed. Your browser might not support sharing files directly, or an error occurred.');
+      } else {
+        // If canShare({files}) is false, try sharing title/text and hope the OS share sheet lets you add the image,
+        // or inform the user. For simplicity, we'll alert for now.
+        alert('Your browser supports sharing, but not directly sharing this file type or file. You can download the image.');
+        // As a more advanced fallback, you could try sharing just a URL if you had one,
+        // or copying the image to clipboard if browser supports Clipboard API for images.
       }
-    } else {
-      // Fallback for browsers that don't support Web Share API or sharing files
-      console.warn('Web Share API not supported or cannot share files.');
-      alert('Sharing is not supported on your browser, or file sharing is disabled. You can download the image instead.');
-      // You could implement a copy link to image data URI as a fallback.
+    } catch (error) {
+      console.error('Error sharing image:', error);
+      alert(`Sharing failed: ${error.message}. You can download the image instead.`);
     }
   };
 
@@ -72,7 +74,7 @@ export default function ImageModal({ isOpen, onClose, imageData }) {
           >
             <Download size={18} /> Download
           </button>
-          {navigator.share && navigator.canShare && ( // Only show share if API is available
+          {navigator.share && ( // Show share button if basic Web Share API is present
             <button
               onClick={handleShare}
               className="flex items-center gap-2 px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600 transition"

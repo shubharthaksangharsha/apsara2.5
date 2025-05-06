@@ -1,5 +1,6 @@
-import React from 'react';
-import { Menu, Sun, Moon, MessageSquare, Settings } from 'lucide-react';
+import React, { Fragment } from 'react';
+import { Menu, Sun, Moon, MessageSquare, Settings, Check, ChevronsUpDown } from 'lucide-react';
+import { Listbox, Transition } from '@headlessui/react';
 
 export default function Header({ 
     models, 
@@ -11,8 +12,10 @@ export default function Header({
     setSettingsOpen, 
     setIsSidebarOpen 
 }) {
+  const selectedModelObject = models.find(m => m.id === currentModel);
+
   return (
-    <header className="bg-white dark:bg-gray-800 shadow-sm z-10 py-2 px-4 flex-shrink-0 border-b border-gray-200 dark:border-gray-700/50">
+    <header className="bg-white dark:bg-gray-800 shadow-sm z-20 py-2 px-4 flex-shrink-0 border-b border-gray-200 dark:border-gray-700/50">
       <div className="flex items-center justify-between">
         {/* Mobile Hamburger Button */}
         <button
@@ -23,26 +26,64 @@ export default function Header({
           <Menu className="h-5 w-5" />
         </button>
         
-        {/* Model Select */}
+        {/* Model Select - Custom with Headless UI Listbox */}
         <div className="flex items-center flex-shrink min-w-0 lg:ml-0 ml-2">
-          <div className="relative flex-shrink min-w-0">
-            <select
-              id="modelSelect"
-              className="text-sm font-medium rounded-md py-1.5 pl-3 pr-8 bg-gray-100 dark:bg-gray-700/50 hover:bg-gray-200 dark:hover:bg-gray-600/60 focus:outline-none focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 appearance-none truncate cursor-pointer transition-colors" 
-              value={currentModel}
-              onChange={e => setCurrentModel(e.target.value)}
-              title={models.find(m => m.id === currentModel)?.name || currentModel} 
-            >
-              {models.map(m => (
-                <option key={m.id} value={m.id} title={m.name}>
-                  {m.name}
-                </option>
-              ))}
-            </select>
-            <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-500 dark:text-gray-400">
-              <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/></svg>
+          <Listbox value={currentModel} onChange={setCurrentModel}>
+            <div className="relative w-auto min-w-[200px] max-w-[280px] sm:min-w-[240px]">
+              <Listbox.Button className="relative w-full cursor-pointer rounded-lg bg-gray-100 dark:bg-gray-700/50 py-2 pl-3 pr-10 text-left shadow-md hover:bg-gray-200 dark:hover:bg-gray-600/60 focus:outline-none focus-visible:border-indigo-500 focus-visible:ring-2 focus-visible:ring-white/75 focus-visible:ring-offset-2 focus-visible:ring-offset-orange-300 sm:text-sm transition-colors">
+                <span className="block truncate text-sm font-medium text-gray-900 dark:text-gray-100">
+                  {selectedModelObject?.name || 'Select Model'}
+                </span>
+                <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2">
+                  <ChevronsUpDown
+                    className="h-5 w-5 text-gray-400 dark:text-gray-500"
+                    aria-hidden="true"
+                  />
+                </span>
+              </Listbox.Button>
+              <Transition
+                as={Fragment}
+                leave="transition ease-in duration-100"
+                leaveFrom="opacity-100 scale-100"
+                leaveTo="opacity-0 scale-95"
+                enter="transition ease-out duration-150"
+                enterFrom="opacity-0 scale-95"
+                enterTo="opacity-100 scale-100"
+              >
+                <Listbox.Options className="absolute mt-1 max-h-60 w-full overflow-auto rounded-md bg-white dark:bg-gray-700 py-1 text-base shadow-lg ring-1 ring-black/5 focus:outline-none sm:text-sm z-30">
+                  {models.map((model) => (
+                    <Listbox.Option
+                      key={model.id}
+                      className={({ active }) =>
+                        `relative cursor-default select-none py-2 pl-10 pr-4 ${
+                          active ? 'bg-indigo-100 dark:bg-indigo-600 text-indigo-900 dark:text-white' : 'text-gray-900 dark:text-gray-200'
+                        }`
+                      }
+                      value={model.id}
+                      title={model.name}
+                    >
+                      {({ selected }) => (
+                        <>
+                          <span
+                            className={`block truncate ${
+                              selected ? 'font-medium text-indigo-700 dark:text-indigo-200' : 'font-normal'
+                            }`}
+                          >
+                            {model.name}
+                          </span>
+                          {selected ? (
+                            <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-indigo-600 dark:text-indigo-300">
+                              <Check className="h-5 w-5" aria-hidden="true" />
+                            </span>
+                          ) : null}
+                        </>
+                      )}
+                    </Listbox.Option>
+                  ))}
+                </Listbox.Options>
+              </Transition>
             </div>
-          </div>
+          </Listbox>
         </div>
         
         {/* Header Buttons */}
