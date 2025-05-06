@@ -8,7 +8,7 @@ import { ClipboardCopy, ChevronDown, ChevronUp } from 'lucide-react';
 // Helper function to detect code blocks for specific styling
 // const isCodePart = (part) => part.executableCode || part.codeExecutionResult; // We'll handle this within the markdown components
 
-export default function ChatWindow({ convo, streamingModelMessageId }) {
+export default function ChatWindow({ convo, streamingModelMessageId, isLoading }) {
   const messagesEndRef = useRef(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedImageData, setSelectedImageData] = useState(null);
@@ -47,7 +47,8 @@ export default function ChatWindow({ convo, streamingModelMessageId }) {
 
   if (!convo) return null;
   
-  const isStreaming = streamingModelMessageId !== null;
+  // Show animation either during streaming or during regular loading
+  const isThinking = streamingModelMessageId !== null || isLoading;
   
   const renderCodeBlock = (codeContent, language, uniqueIdPrefix) => {
     const sectionId = `${uniqueIdPrefix}-code`;
@@ -206,8 +207,8 @@ export default function ChatWindow({ convo, streamingModelMessageId }) {
         }
       })}
       
-      {/* Show streaming logo when a message is streaming */}
-      <StreamingApsaraLogo isVisible={isStreaming} />
+      {/* Show animation when either streaming or loading */}
+      <StreamingApsaraLogo isVisible={isThinking} />
       
       <div ref={messagesEndRef} />
       <ImageModal isOpen={modalOpen} onClose={closeModal} imageData={selectedImageData} />
