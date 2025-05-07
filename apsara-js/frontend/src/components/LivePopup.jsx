@@ -167,7 +167,7 @@ export default function LivePopup({
         onClose(); // Use the onClose from props which should handle session end
      }
   }
-
+  
   const handleCopyCode = (text, id) => {
     navigator.clipboard.writeText(text);
     setCopiedCode(id);

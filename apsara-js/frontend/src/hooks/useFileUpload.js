@@ -39,16 +39,33 @@ export function useFileUpload(initialFiles = []) {
   };
 
   // Optional: Add a function to remove/delete files if needed
-  const deleteFile = async (fileId) => {
-     // TODO: Implement backend call to delete file
-     console.log("Attempting to delete file (not implemented):", fileId);
-     // setFiles(prev => prev.filter(f => f.id !== fileId)); // Optimistic UI update
-  }
+  const removeFile = async (fileIdToRemove) => { // fileIdToRemove is the googleFileName
+     console.log("useFileUpload: Attempting to remove file:", fileIdToRemove);
+     try {
+       const response = await fetch(`${BACKEND_URL}/files/${encodeURIComponent(fileIdToRemove)}`, {
+         method: 'DELETE',
+       });
+
+       const data = await response.json();
+       if (!response.ok || data.error) {
+            throw new Error(data.error?.message || data.error || `HTTP error! status: ${response.status}`);
+       }
+       
+       // Update local state by filtering out the removed file
+       setFiles(prevFiles => prevFiles.filter(f => f.googleFileName !== fileIdToRemove && f.id !== fileIdToRemove));
+       console.log("useFileUpload: File removed successfully from frontend state:", fileIdToRemove);
+       return true; // Indicate success
+     } catch (err) {
+       console.error('File removal error in hook:', err);
+       // Re-throw or handle as needed, e.g., show an alert to the user
+       throw err;
+     }
+  };
 
   return {
     files,
     setFiles, // Expose setter if direct manipulation is needed
     uploadFile,
-    // deleteFile, // Expose delete function if implemented
+    removeFile, // Expose remove function
   };
 }

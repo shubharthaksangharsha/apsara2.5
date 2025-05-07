@@ -106,7 +106,10 @@ export default function FileUploadPopup({ onClose, onUpload, files = [] }) { // 
               <span className="font-semibold">Click to upload</span> or drag and drop
             </p>
             <p className="text-xs text-gray-500 dark:text-gray-400">
-              Max file size handled by backend. Accepts various formats.
+              Supports PDFs, common document, and text files. You can upload multiple files.
+            </p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+              Max file size is typically 20-50MB via Google's File API.
             </p>
             <input
               ref={fileInputRef}
