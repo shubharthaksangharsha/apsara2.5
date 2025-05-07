@@ -9,6 +9,8 @@ import ChatWindow from './components/ChatWindow';
 import MessageInput from './components/MessageInput';
 import SettingsPanel from './components/SettingsPanel';
 import LivePopup from './components/LivePopup';
+import VideoStreamDisplay from './components/VideoStreamDisplay';
+import ScreenShareDisplay from './components/ScreenShareDisplay';
 import EmptyChatContent from './components/EmptyChatContent'; // Import the new component
 import FileUploadPopup from './components/FileUploadPopup';
 
@@ -127,6 +129,8 @@ export default function App() {
     audioError,
     isStreamingVideo,
     mediaStream,
+    isStreamingScreen,
+    screenStream,
     // Live Handlers/Setters
     setLiveModality,
     setLiveSystemInstruction: setLivePrompt, // Rename for clarity
@@ -137,8 +141,6 @@ export default function App() {
     stopRecording,
     startVideoStream,
     stopVideoStream,
-    isStreamingScreen,
-    screenStream,
     startScreenShare,
     stopScreenShare,
   } = useLiveSession({ currentVoice }); // Pass dependencies
@@ -443,6 +445,14 @@ export default function App() {
           onStartScreenShare={startScreenShare}
           onStopScreenShare={stopScreenShare}
         />
+      )}
+
+      {/* THESE ARE THE FLOATING, TOP-RIGHT VIEWS */}
+      {liveOpen && isStreamingVideo && mediaStream && (
+        <VideoStreamDisplay videoStream={mediaStream} isWebcamActive={isStreamingVideo} />
+      )}
+      {liveOpen && isStreamingScreen && screenStream && (
+        <ScreenShareDisplay screenStream={screenStream} isScreenSharingActive={isStreamingScreen} />
       )}
 
       {/* File Upload Popup - Use Imported Component */}

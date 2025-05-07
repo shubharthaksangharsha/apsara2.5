@@ -41,15 +41,13 @@ function VideoStreamDisplay({ videoStream, isWebcamActive }) {
   }
 
   return (
-    <div className="video-stream-container bg-black rounded-md overflow-hidden shadow-lg absolute bottom-20 right-5 w-48 h-36 z-50 border border-gray-700">
-       {/* Basic styling - adjust as needed */}
+    <div className="video-stream-container bg-white/20 dark:bg-gray-900/40 backdrop-blur-lg rounded-2xl overflow-hidden shadow-2xl fixed top-5 right-5 w-56 h-40 z-[60] border-2 border-indigo-400/60 dark:border-indigo-500/60 ring-2 ring-indigo-300/30 dark:ring-indigo-700/30">
       <video
         ref={videoRef}
-        className="w-full h-full object-cover" // Ensure video fills the container
-        playsInline // Important for mobile browsers
-        // `autoPlay` might be needed but `play()` is called in useEffect
+        className="w-full h-full object-cover"
+        playsInline
       />
-      <p className="absolute bottom-1 left-1 text-xs text-white bg-black bg-opacity-50 px-1 rounded">Your Camera</p>
+      <p className="absolute bottom-2 left-2 text-xs text-white bg-black/60 px-2 py-0.5 rounded-full shadow">Your Camera</p>
     </div>
   );
 }

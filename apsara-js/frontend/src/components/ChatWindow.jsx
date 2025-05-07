@@ -14,6 +14,7 @@ export default function ChatWindow({ convo, streamingModelMessageId, isLoading }
   const [selectedImageData, setSelectedImageData] = useState(null);
   const [copiedStates, setCopiedStates] = useState({});
   const [collapsedSections, setCollapsedSections] = useState({});
+  const [copiedMsgId, setCopiedMsgId] = useState(null);
   
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -43,6 +44,13 @@ export default function ChatWindow({ convo, streamingModelMessageId, isLoading }
 
   const toggleCollapse = (sectionId) => {
     setCollapsedSections(prev => ({ ...prev, [sectionId]: !prev[sectionId] }));
+  };
+
+  const handleCopyMessage = (msgId, text) => {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopiedMsgId(msgId);
+      setTimeout(() => setCopiedMsgId(null), 1500);
+    });
   };
 
   if (!convo) return null;
@@ -156,6 +164,17 @@ export default function ChatWindow({ convo, streamingModelMessageId, isLoading }
                   )}
                 </div>
               </div>
+              {/* Copy icon below user bubble */}
+              <div className="flex justify-end mt-1 mb-2">
+                <button
+                  className="flex items-center gap-1 px-2 py-1 rounded hover:bg-indigo-100 dark:hover:bg-indigo-900/30 text-indigo-500 dark:text-indigo-300 text-xs transition"
+                  title="Copy message"
+                  onClick={() => handleCopyMessage(msg.id || idx, (msg.parts ? msg.parts.map(p => p.text).filter(Boolean).join(' ') : msg.text || ''))}
+                >
+                  <ClipboardCopy className="w-4 h-4" />
+                  {copiedMsgId === (msg.id || idx) ? 'Copied!' : 'Copy'}
+                </button>
+              </div>
               {/* Show streaming logo/animation right after the last user message if streaming/loading */}
               {isLastUser && (isThinking || streamingModelMessageId !== null) && (
                 <div className="flex items-center pt-2 pb-2">
@@ -239,6 +258,19 @@ export default function ChatWindow({ convo, streamingModelMessageId, isLoading }
               </>
             )}
           </div>
+          {/* Copy icon below model bubble, only after streaming is done and not for system/error */}
+          {msg.role === 'model' && msg.id !== streamingModelMessageId && !isSystem && !isError && (
+            <div className="flex justify-start mt-1 mb-2">
+              <button
+                className="flex items-center gap-1 px-2 py-1 rounded hover:bg-indigo-100 dark:hover:bg-indigo-900/30 text-indigo-500 dark:text-indigo-300 text-xs transition"
+                title="Copy message"
+                onClick={() => handleCopyMessage(msg.id || idx, (msg.parts ? msg.parts.map(p => p.text).filter(Boolean).join(' ') : msg.text || ''))}
+              >
+                <ClipboardCopy className="w-4 h-4" />
+                {copiedMsgId === (msg.id || idx) ? 'Copied!' : 'Copy'}
+              </button>
+            </div>
+          )}
         </div>
           );
         }
