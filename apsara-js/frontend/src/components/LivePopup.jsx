@@ -102,6 +102,8 @@ export default function LivePopup({
   mediaStream, // Receives the actual stream object now
   isStreamingScreen, // <-- New prop
   screenStream,      // <-- New prop
+  videoDevices, // <-- New prop
+  selectedVideoDeviceId, // <-- New prop
   
   // Handlers from App.jsx
   onVoiceChange, 
@@ -117,12 +119,18 @@ export default function LivePopup({
   onStopVideo,
   onStartScreenShare, // <-- New handler
   onStopScreenShare,  // <-- New handler
+  onSetSelectedVideoDeviceId, // <-- New handler
+  onGetVideoInputDevices, // <-- New handler
 }) {
   const [inputText, setInputText] = useState('');
   const messagesEndRef = useRef(null);
   // Local state for temp system instruction edit within the popup
   const [tempSystemInstruction, setTempSystemInstruction] = useState(liveSystemInstruction);
   const [copiedCode, setCopiedCode] = useState(null);
+  const [showCameraSelector, setShowCameraSelector] = useState(false);
+
+  // Calculate isSessionActive here
+  const isSessionActive = connectionStatus === 'connected' || connectionStatus === 'connecting';
 
   // Scroll to bottom when messages change
   useEffect(() => {
@@ -133,6 +141,13 @@ export default function LivePopup({
   useEffect(() => {
     setTempSystemInstruction(liveSystemInstruction);
   }, [liveSystemInstruction]);
+
+  // Fetch video devices when the popup opens or connection status changes (to re-fetch if needed)
+  useEffect(() => {
+    if (connectionStatus === 'connected' || !isSessionActive) { // Fetch if connected or if settings are visible
+      onGetVideoInputDevices();
+    }
+  }, [onGetVideoInputDevices, connectionStatus, isSessionActive]);
 
   const handleSendMessage = () => {
     if (!inputText.trim() || connectionStatus !== 'connected') return;
@@ -153,12 +168,35 @@ export default function LivePopup({
      }
   }
 
-  const isSessionActive = connectionStatus === 'connected' || connectionStatus === 'connecting';
-  
   const handleCopyCode = (text, id) => {
     navigator.clipboard.writeText(text);
     setCopiedCode(id);
     setTimeout(() => setCopiedCode(null), 1200);
+  };
+
+  const handleVideoToggle = async () => {
+    if (isStreamingVideo) {
+      onStopVideo();
+    } else {
+      // Refresh device list just in case
+      const currentDevices = await onGetVideoInputDevices();
+      if (currentDevices && currentDevices.length > 1) {
+        setShowCameraSelector(true); // Show selector if multiple cameras
+      } else if (currentDevices && currentDevices.length === 1) {
+        // If only one camera, use it directly
+        onSetSelectedVideoDeviceId(currentDevices[0].deviceId);
+        onStartVideo(currentDevices[0].deviceId);
+      } else {
+        // No cameras or only default, start with no specific ID
+        onStartVideo();
+      }
+    }
+  };
+
+  const handleCameraSelect = (deviceId) => {
+    onSetSelectedVideoDeviceId(deviceId);
+    onStartVideo(deviceId);
+    setShowCameraSelector(false);
   };
 
   return (
@@ -383,9 +421,7 @@ export default function LivePopup({
               </button>
               {/* Video Button */}
               <button
-                onClick={() => {
-                  if (isStreamingVideo) onStopVideo(); else onStartVideo();
-                }}
+                onClick={handleVideoToggle}
                 disabled={isStreamingScreen}
                 className={`p-2 rounded-full transition-colors group focus:outline-none focus:ring-2 focus:ring-indigo-400 ${
                   isStreamingVideo
@@ -445,6 +481,43 @@ export default function LivePopup({
             </div>
           )}
         </div>
+
+        {/* Camera Selector Modal */}
+        {showCameraSelector && (
+          <div 
+            className="absolute inset-0 z-60 flex justify-center items-center bg-black/30 backdrop-blur-sm p-4"
+            onClick={() => setShowCameraSelector(false)} // Close on overlay click
+          >
+            <div 
+              className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-2xl w-full max-w-sm"
+              onClick={e => e.stopPropagation()} // Prevent closing when clicking inside modal
+            >
+              <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-4">Select Camera Source</h3>
+              {videoDevices.length > 0 ? (
+                <ul className="space-y-2">
+                  {videoDevices.map(device => (
+                    <li key={device.deviceId}>
+                      <button
+                        onClick={() => handleCameraSelect(device.deviceId)}
+                        className="w-full text-left px-4 py-2 rounded-md text-gray-700 dark:text-gray-300 hover:bg-indigo-100 dark:hover:bg-indigo-700/50 transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                      >
+                        {device.label || `Camera ${videoDevices.indexOf(device) + 1}`}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-gray-500 dark:text-gray-400">No camera devices found.</p>
+              )}
+              <button
+                onClick={() => setShowCameraSelector(false)}
+                className="mt-6 w-full px-4 py-2 rounded-md text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

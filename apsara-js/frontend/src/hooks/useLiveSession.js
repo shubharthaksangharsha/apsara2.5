@@ -24,6 +24,8 @@ export function useLiveSession({ currentVoice }) {
   const [audioError, setAudioError] = useState(null);
   const [sessionTimeLeft, setSessionTimeLeft] = useState(null); // State for timer
   const [inputSampleRate] = useState(16000); // Target input sample rate for PCM
+  const [videoDevices, setVideoDevices] = useState([]); // <-- New state for video devices
+  const [selectedVideoDeviceId, setSelectedVideoDeviceId] = useState(null); // <-- New state for selected video device
 
   // Refs
   const liveWsConnection = useRef(null);
@@ -59,6 +61,31 @@ export function useLiveSession({ currentVoice }) {
     console.log(`➕ Adding new message ID ${msg.id}, text: "${msg.text?.substring(0, 20)}..."`);
     setLiveMessages(prev => [...prev, { ...msg, id: msg.id || (Date.now() + Math.random() * 1000), timestamp: Date.now() }]);
   }, []);
+
+  // --- NEW: Get Video Input Devices ---
+  const getVideoInputDevices = useCallback(async () => {
+    try {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) {
+        console.warn("enumerateDevices() not supported.");
+        addLiveMessage({ role: 'system', text: 'Camera enumeration not supported by this browser.' });
+        setVideoDevices([]);
+        return [];
+      }
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const videoInputs = devices.filter(device => device.kind === 'videoinput');
+      setVideoDevices(videoInputs);
+      if (videoInputs.length > 0 && !selectedVideoDeviceId) {
+        // setSelectedVideoDeviceId(videoInputs[0].deviceId); // Optionally select the first one by default
+      }
+      console.log('[Video Devices] Found video inputs:', videoInputs);
+      return videoInputs;
+    } catch (err) {
+      console.error('[Video Devices] Error enumerating devices:', err);
+      addLiveMessage({ role: 'error', text: `Error listing cameras: ${err.message}` });
+      setVideoDevices([]);
+      return [];
+    }
+  }, [addLiveMessage, selectedVideoDeviceId]);
 
   const updateLiveMessage = useCallback((id, updates) => {
     setLiveMessages(prevMessages => {
@@ -323,20 +350,35 @@ export function useLiveSession({ currentVoice }) {
 
   }, [addLiveMessage]); // Removed state dependency, rely on ref
 
-  const startVideoStreamInternal = useCallback(async () => {
+  const startVideoStreamInternal = useCallback(async (deviceId = null) => {
       const ws = liveWsConnection.current;
       // Use ref for check
       if (isStreamingVideoRef.current || !ws || ws.readyState !== WebSocket.OPEN || liveConnectionStatus !== 'connected') {
           console.warn(`[Video Stream] Cannot start. Ref=${isStreamingVideoRef.current}, ws=${ws?.readyState}, status=${liveConnectionStatus}`);
           return;
       }
-      // Don't update state/ref yet
       addLiveMessage({ role: 'system', text: 'Requesting video stream...' });
 
+      const videoConstraints = {
+        width: 320,
+        height: 240
+      };
+
+      const finalDeviceId = deviceId || selectedVideoDeviceId; // Use passed deviceId, then selected, then default
+
+      if (finalDeviceId) {
+        videoConstraints.deviceId = { exact: finalDeviceId };
+        console.log(`[Video Stream] Attempting to use specific camera: ${finalDeviceId}`);
+      } else {
+        console.log("[Video Stream] No specific camera selected, using default.");
+      }
+
       try {
-          const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 320, height: 240 } });
+          const stream = await navigator.mediaDevices.getUserMedia({ video: videoConstraints });
           videoStreamRef.current = stream;
-          addLiveMessage({ role: 'system', text: 'Webcam access granted.' });
+          const currentTrack = stream.getVideoTracks()[0];
+          const currentDeviceLabel = currentTrack ? currentTrack.label : 'Unknown Camera';
+          addLiveMessage({ role: 'system', text: `Webcam access granted (${currentDeviceLabel}).` });
 
           // Ensure elements exist
           if (!videoElementRef.current) videoElementRef.current = document.createElement('video');
@@ -432,7 +474,7 @@ export function useLiveSession({ currentVoice }) {
            addLiveMessage({ role: 'error', text: errorText });
            stopVideoStreamInternal(); // Use the main cleanup function
       }
-  }, [liveConnectionStatus, addLiveMessage, stopVideoStreamInternal]); // Removed state dependency
+  }, [liveConnectionStatus, addLiveMessage, stopVideoStreamInternal, selectedVideoDeviceId]); // Added selectedVideoDeviceId
 
   // --- Screen Streaming Logic ---
   const stopScreenShareInternal = useCallback(() => {
@@ -868,10 +910,14 @@ export function useLiveSession({ currentVoice }) {
     mediaStream: videoStreamRef.current,
     isStreamingScreen, // <-- New state
     screenStream: screenStreamRef.current, // <-- New stream for screen share display
+    videoDevices, // <-- New: expose video devices
+    selectedVideoDeviceId, // <-- New: expose selected video device ID
 
     // Setters/Handlers
     setLiveModality,
     setLiveSystemInstruction, // Keep original name
+    setSelectedVideoDeviceId, // <-- New: expose setter for selected video device
+    getVideoInputDevices, // <-- New: expose function to get video devices
     startLiveSession, endLiveSession, sendLiveMessage: sendLiveMessageText,
     startRecording, stopRecording,
     startVideoStream: startVideoStreamInternal, stopVideoStream: stopVideoStreamInternal, // Expose video handlers
