@@ -31,14 +31,17 @@ function ScreenShareDisplay({ screenStream, isScreenSharingActive }) {
     return null;
   }
 
+  // Position below the camera view if active, otherwise top-right.
+  // Assuming camera view height is roughly 10rem (160px) + 1.25rem (20px) for top-5.
+  // Adjust this value (top-48) if camera size/position changes.
   return (
-    <div className="screen-share-container bg-black rounded-md overflow-hidden shadow-lg absolute bottom-20 left-5 w-64 h-48 z-50 border border-gray-700"> {/* Adjusted size slightly */}
+    <div className="screen-share-container bg-white/20 dark:bg-gray-900/40 backdrop-blur-lg rounded-2xl overflow-hidden shadow-2xl fixed top-48 right-5 w-80 h-52 z-[60] border-2 border-green-400/60 dark:border-green-500/60 ring-2 ring-green-300/30 dark:ring-green-700/30">
       <video
         ref={videoRef}
-        className="w-full h-full object-contain" // Use object-contain for screen shares
+        className="w-full h-full object-contain"
         playsInline
       />
-      <p className="absolute bottom-1 left-1 text-xs text-white bg-black bg-opacity-50 px-1 rounded">Your Screen Share</p>
+      <p className="absolute bottom-2 left-2 text-xs text-white bg-black/60 px-2 py-0.5 rounded-full shadow">Your Screen Share</p>
     </div>
   );
 }
