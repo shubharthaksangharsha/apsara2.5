@@ -13,6 +13,7 @@ import VideoStreamDisplay from './components/VideoStreamDisplay';
 import ScreenShareDisplay from './components/ScreenShareDisplay';
 import EmptyChatContent from './components/EmptyChatContent'; // Import the new component
 import FileUploadPopup from './components/FileUploadPopup';
+import FilePreviewBar from './components/FilePreviewBar'; // <-- Add this import
 
 // Import the custom hook
 import { useTheme } from './hooks/useTheme';
@@ -103,8 +104,9 @@ export default function App() {
 
   const {
     files,
-    // setFiles, // Allow direct set for initial load
+    setFiles,
     uploadFile,
+    removeFile,
   } = useFileUpload(initialFiles); // Pass fetched files
 
   const {
@@ -114,7 +116,9 @@ export default function App() {
     startStreamChat,
   } = useChatApi({ // Pass dependencies
     convos, setConvos, activeConvoId, setActiveConvoId, // From useConversations
-    currentModel, temperature, maxOutputTokens, enableGoogleSearch, enableCodeExecution, systemInstruction, isSystemInstructionApplicable // From useAppSettings
+    currentModel, temperature, maxOutputTokens, enableGoogleSearch, enableCodeExecution, systemInstruction, isSystemInstructionApplicable, // From useAppSettings
+    uploadedFiles: files, // <-- Pass the files
+    clearUploadedFiles: () => setFiles([]), // <-- Pass a function to clear them
   });
 
   const {
@@ -381,6 +385,11 @@ export default function App() {
           )}
         </div>
         
+        {/* =============================================== */}
+        {/* File Preview Bar - Renders if files are present */}
+        {/* =============================================== */}
+        <FilePreviewBar files={files} onRemoveFile={removeFile} />
+
         {/* Message Input - Use Imported Component */}
         <MessageInput
           onSend={sendToBackend}
@@ -388,8 +397,8 @@ export default function App() {
           isLoading={isChatLoading}
           disabled={!activeConvoId}
           onFileUploadClick={() => setFileUploadOpen(true)}
-          streamEnabled={streamToggleState} // Pass state down
-          onStreamToggleChange={setStreamToggleState} // Pass handler down
+          streamEnabled={streamToggleState}
+          onStreamToggleChange={setStreamToggleState}
         />
       </main>
 

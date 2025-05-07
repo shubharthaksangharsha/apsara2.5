@@ -15,6 +15,7 @@ import {
   FunctionCallingConfigMode,
   Modality,
   DynamicRetrievalConfigMode,
+  createPartFromUri,
 } from '@google/genai';
 const { Blob: BlobGoogle } = genai;
 import { fileURLToPath } from 'url';
@@ -184,12 +185,133 @@ app.post('/tools/invoke',(req,res)=>{
   catch(e){ res.status(500).json({ error:e.message }); }
 });
 
-app.post('/files',upload.single('file'),(req,res)=>{
+app.post('/files',upload.single('file'), async (req,res)=>{
   if (!req.file) return res.status(400).json({ error:'File required.' });
-  uploadedFiles.push(req.file);
-  res.json({ file:req.file });
+  
+  console.log(`[POST /files] Received file: ${req.file.originalname}, size: ${req.file.size}, path: ${req.file.path}`);
+
+  try {
+    // Step 1: Upload to Google File API
+    console.log(`[POST /files] Uploading "${req.file.originalname}" to Google File API...`);
+    const googleFileResource = await ai.files.upload({
+      file: req.file.path, // multer saves it to a temp path
+      config: {
+        displayName: req.file.originalname,
+        mimeType: req.file.mimetype,
+      },
+    });
+
+    console.log(`[POST /files] Google File API upload initiated. File Name: ${googleFileResource.name}, State: ${googleFileResource.state}`);
+
+    // Step 2: Wait for the file to be processed
+    let getFile = googleFileResource;
+    let retries = 0;
+    const maxRetries = 12; // Poll for up to 60 seconds (12 * 5s)
+    
+    while (getFile.state === 'PROCESSING' && retries < maxRetries) {
+      console.log(`[POST /files] File "${getFile.name}" is still PROCESSING. Retrying in 5 seconds... (Attempt ${retries + 1})`);
+      await new Promise(resolve => setTimeout(resolve, 5000));
+      getFile = await ai.files.get({ name: getFile.name });
+      retries++;
+    }
+
+    if (getFile.state === 'FAILED') {
+      console.error(`[POST /files] Google File API processing FAILED for "${getFile.name}". Reason: ${getFile.error?.message || 'Unknown error'}`);
+      // Optionally, try to delete the failed file from Google if possible, though not critical
+      // await ai.files.delete({name: getFile.name });
+      return res.status(500).json({ error: `File processing failed on Google's side: ${getFile.error?.message || 'Unknown error'}` });
+    }
+
+    if (getFile.state !== 'ACTIVE') {
+      console.error(`[POST /files] File "${getFile.name}" did not become ACTIVE after ${retries} retries. Final state: ${getFile.state}`);
+      return res.status(500).json({ error: `File processing timed out or ended in an unexpected state: ${getFile.state}` });
+    }
+
+    console.log(`[POST /files] File "${getFile.name}" is ACTIVE. URI: ${getFile.uri}`);
+
+    const fileMetadata = {
+      id: getFile.name, // Google's file name is the unique ID (e.g., "files/...")
+      originalname: req.file.originalname,
+      mimetype: getFile.mimeType, // Use mimeType from Google's response
+      size: req.file.size, // Original size from multer
+      uri: getFile.uri, // Crucial for creating fileData parts
+      googleFileName: getFile.name, // Store the full Google file name
+      state: getFile.state,
+      uploadTimestamp: Date.now()
+    };
+    
+    uploadedFiles.push(fileMetadata);
+    
+    // Clean up the temporary file saved by multer
+    // import fs from 'fs/promises'; // Make sure to import fs/promises at the top
+    // try {
+    //   await fs.unlink(req.file.path);
+    //   console.log(`[POST /files] Deleted temporary file: ${req.file.path}`);
+    // } catch (unlinkError) {
+    //   console.error(`[POST /files] Error deleting temporary file ${req.file.path}:`, unlinkError);
+    // }
+
+    res.json({ file: fileMetadata });
+
+  } catch (error) {
+    console.error('[POST /files] Error during file upload to Google or processing:', error);
+    // Clean up temp file on error too
+    // if (req.file && req.file.path) {
+    //   try { await fs.unlink(req.file.path); } catch (e) { console.error("Error cleaning up temp file on failure:", e); }
+    // }
+    res.status(500).json({ error: error.message || 'Internal server error during file upload processing.' });
+  }
 });
 app.get('/files',(req,res)=>res.json({ files:uploadedFiles }));
+
+app.delete('/files/:fileId', async (req, res) => {
+  const fileId = req.params.fileId; // This will be the Google File API name, e.g., "files/xxxxxxxx"
+  console.log(`[DELETE /files] Request to delete file with Google Name: ${fileId}`);
+
+  if (!fileId) {
+    return res.status(400).json({ error: 'File ID (Google File Name) is required.' });
+  }
+
+  try {
+    // Attempt to delete from Google File API
+    // The name needs to be in the format "files/FILE_ID_PART"
+    const googleFileApiName = fileId.startsWith('files/') ? fileId : `files/${fileId}`;
+    
+    console.log(`[DELETE /files] Attempting to delete from Google File API: ${googleFileApiName}`);
+    await ai.files.delete({ name: googleFileApiName });
+    console.log(`[DELETE /files] Successfully deleted file ${googleFileApiName} from Google File API.`);
+
+    // Remove from our in-memory list
+    const initialLength = uploadedFiles.length;
+    // We stored googleFileName as the unique ID from Google.
+    const fileIndex = uploadedFiles.findIndex(f => f.googleFileName === googleFileApiName || f.id === googleFileApiName); 
+    
+    if (fileIndex > -1) {
+      uploadedFiles.splice(fileIndex, 1);
+      console.log(`[DELETE /files] Removed file ${googleFileApiName} from server's in-memory list. New count: ${uploadedFiles.length}`);
+    } else {
+      console.warn(`[DELETE /files] File ${googleFileApiName} was deleted from Google, but not found in server's in-memory list.`);
+    }
+
+    res.status(200).json({ message: `File ${googleFileApiName} deleted successfully.` });
+
+  } catch (error) {
+    console.error(`[DELETE /files] Error deleting file ${fileId}:`, error);
+    // Google API might throw an error if the file doesn't exist, which is fine.
+    // Consider the error structure from Google API for more specific handling.
+    if (error.message && error.message.includes('not found')) {
+        // If Google says not found, but we might still have it in our list, try removing from list.
+        const fileIndex = uploadedFiles.findIndex(f => f.googleFileName === fileId || f.id === fileId);
+        if (fileIndex > -1) {
+            uploadedFiles.splice(fileIndex, 1);
+            console.log(`[DELETE /files] File ${fileId} not found on Google (perhaps already deleted), removed from server list.`);
+            return res.status(200).json({ message: `File ${fileId} was already deleted from Google or not found, removed from local list.` });
+        }
+        return res.status(404).json({ error: `File ${fileId} not found on Google File API.` });
+    }
+    res.status(500).json({ error: error.message || 'Internal server error during file deletion.' });
+  }
+});
 
 // --- REST: /chat, /chat/stream, /chat/function-result ---
 app.post('/chat', async (req,res)=>{

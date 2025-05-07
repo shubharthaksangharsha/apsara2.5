@@ -14,6 +14,8 @@ export function useChatApi({
   enableCodeExecution, // Add if used
   systemInstruction,
   isSystemInstructionApplicable,
+  uploadedFiles, // <-- New prop: List of uploaded file metadata
+  clearUploadedFiles, // <-- New prop: Function to clear uploaded files
 }) {
   const [isLoading, setIsLoading] = useState(false);
   const [streamingModelMessageId, setStreamingModelMessageId] = useState(null);
@@ -72,6 +74,24 @@ export function useChatApi({
 
     setIsLoading(true);
     let finalConvoId = convoIdToUse;
+    let userMessageParts = [{ text }]; // Start with the text part
+
+    // Append file parts if any files are uploaded
+    if (uploadedFiles && uploadedFiles.length > 0) {
+      uploadedFiles.forEach(file => {
+        if (file.uri && file.mimetype) {
+          userMessageParts.push({
+            fileData: {
+              mimeType: file.mimetype,
+              fileUri: file.uri,
+            }
+          });
+          console.log(`[useChatApi] Adding file to message: ${file.originalname}, URI: ${file.uri}`);
+        } else {
+          console.warn(`[useChatApi] Skipping file due to missing URI or mimetype:`, file);
+        }
+      });
+    }
 
     try {
       let turns;
@@ -80,23 +100,23 @@ export function useChatApi({
       // --- Handle initial convo creation or find existing ---
       if (initialConvoData) {
         finalConvoId = initialConvoData.id;
-        turns = [{ role: 'user', parts: [{ text }] }];
+        turns = [{ role: 'user', parts: userMessageParts }]; // Use combined parts
         // Add new convo optimistically
         setConvos(prev => [
-          { ...initialConvoData, messages: [{ role: 'user', parts: [{ text }] }] },
+          { ...initialConvoData, messages: [{ role: 'user', parts: userMessageParts }] },
           ...prev.filter(c => c.id !== initialConvoData.id)
         ]);
         setActiveConvoId(finalConvoId); // Ensure App knows the active ID
-        currentMessages = [{ role: 'user', parts: [{ text }] }]; // For title update logic later
+        currentMessages = [{ role: 'user', parts: userMessageParts }]; // For title update logic later
       } else {
         const activeConvo = convos.find(c => c.id === convoIdToUse);
         if (!activeConvo) throw new Error('No active conversation found');
         currentMessages = activeConvo.messages || [];
         const validMessages = currentMessages.filter(msg => (msg.role === 'user' || msg.role === 'model') && msg.parts?.length > 0);
-        turns = [...validMessages, { role: 'user', parts: [{ text }] }];
+        turns = [...validMessages, { role: 'user', parts: userMessageParts }]; // Use combined parts
         // Update UI immediately with user message
         setConvos(prev => prev.map(c =>
-          c.id !== convoIdToUse ? c : { ...c, messages: [...currentMessages, { role: 'user', parts: [{ text }] }] }
+          c.id !== convoIdToUse ? c : { ...c, messages: [...currentMessages, { role: 'user', parts: userMessageParts }] }
         ));
       }
 
@@ -114,6 +134,12 @@ export function useChatApi({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(baseRequestBody),
       });
+
+      // Clear uploaded files after the request is made (success or fail)
+      if (uploadedFiles && uploadedFiles.length > 0) {
+        console.log("[useChatApi] Clearing uploaded files after sendToBackend.");
+        clearUploadedFiles();
+      }
 
       const data = await response.json();
       if (!response.ok || data.error) {
@@ -168,6 +194,11 @@ export function useChatApi({
           messages: [...currentMsgs, { role: 'error', parts: [{ text: `Error: ${err.message}` }], id: Date.now() + Math.random() }],
         };
       }));
+      // Also clear files on error if they haven't been cleared yet
+      if (uploadedFiles && uploadedFiles.length > 0 && clearUploadedFiles) {
+         console.log("[useChatApi] Clearing uploaded files after sendToBackend error.");
+         clearUploadedFiles();
+      }
     } finally {
       setIsLoading(false);
     }
@@ -183,6 +214,24 @@ export function useChatApi({
     setIsLoading(true);
     let finalConvoId = convoIdToUse;
     let tempModelMessageId = null; // Temporary ID for the message being built
+    let userMessageParts = [{ text }]; // Start with the text part
+
+    // Append file parts if any files are uploaded
+    if (uploadedFiles && uploadedFiles.length > 0) {
+      uploadedFiles.forEach(file => {
+        if (file.uri && file.mimetype) {
+          userMessageParts.push({
+            fileData: {
+              mimeType: file.mimetype,
+              fileUri: file.uri,
+            }
+          });
+          console.log(`[useChatApi Stream] Adding file to message: ${file.originalname}, URI: ${file.uri}`);
+        } else {
+          console.warn(`[useChatApi Stream] Skipping file due to missing URI or mimetype:`, file);
+        }
+      });
+    }
 
     try {
        let activeConvo;
@@ -192,7 +241,7 @@ export function useChatApi({
        if (initialConvoData) {
          finalConvoId = initialConvoData.id;
          activeConvo = initialConvoData;
-         turns = [{ role: 'user', parts: [{ text }] }];
+         turns = [{ role: 'user', parts: userMessageParts }]; // Use combined parts
 
          tempModelMessageId = Date.now() + Math.random() + '_model'; // Unique ID
          setStreamingModelMessageId(tempModelMessageId); // Track the ID
@@ -200,7 +249,7 @@ export function useChatApi({
          // Add new convo, user message, and placeholder model message
          setConvos(prev => [
              { ...initialConvoData, messages: [
-                 { role: 'user', parts: [{ text }], id: Date.now() + Math.random() + '_user' },
+                 { role: 'user', parts: userMessageParts, id: Date.now() + Math.random() + '_user' }, // Use combined parts
                  { role: 'model', parts: [], id: tempModelMessageId } // Placeholder model msg
              ] },
              ...prev.filter(c => c.id !== initialConvoData.id)
@@ -213,7 +262,7 @@ export function useChatApi({
 
       const validMessages = (activeConvo.messages || [])
            .filter(msg => (msg.role === 'user' || msg.role === 'model') && msg.parts?.length > 0);
-         turns = [...validMessages, { role: 'user', parts: [{ text }] }];
+         turns = [...validMessages, { role: 'user', parts: userMessageParts }]; // Use combined parts
 
          tempModelMessageId = Date.now() + Math.random() + '_model';
          setStreamingModelMessageId(tempModelMessageId);
@@ -225,7 +274,7 @@ export function useChatApi({
           ...c,
              messages: [
                ...(c.messages || []),
-               { role: 'user', parts: [{ text }], id: Date.now() + Math.random() + '_user' },
+               { role: 'user', parts: userMessageParts, id: Date.now() + Math.random() + '_user' }, // Use combined parts
                { role: 'model', parts: [], id: tempModelMessageId } // Placeholder
              ]
         };
@@ -246,6 +295,12 @@ export function useChatApi({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(baseRequestBody)
       });
+
+      // Clear uploaded files after the request is made (success or fail)
+      if (uploadedFiles && uploadedFiles.length > 0) {
+        console.log("[useChatApi Stream] Clearing uploaded files after startStreamChat.");
+        clearUploadedFiles();
+      }
 
       if (!response.ok || !response.body) {
           const errorData = await response.json().catch(() => ({ error: { message: `HTTP error! status: ${response.status}` } }));
@@ -380,6 +435,11 @@ export function useChatApi({
          if (!messageUpdated) { messagesWithError.push({ role: 'error', parts: [{ text: `Stream Error: ${err.message}` }], id: Date.now() + Math.random() + '_error' }); }
          return { ...c, messages: messagesWithError };
        }));
+        // Also clear files on error if they haven't been cleared yet
+        if (uploadedFiles && uploadedFiles.length > 0 && clearUploadedFiles) {
+            console.log("[useChatApi Stream] Clearing uploaded files after startStreamChat error.");
+            clearUploadedFiles();
+        }
      } finally {
        setIsLoading(false);
        setStreamingModelMessageId(null); // Clear tracking ID
