@@ -131,9 +131,13 @@ export default function App() {
     mediaStream,
     isStreamingScreen,
     screenStream,
+    videoDevices, // <-- Add new state from hook
+    selectedVideoDeviceId, // <-- Add new state from hook
     // Live Handlers/Setters
     setLiveModality,
     setLiveSystemInstruction: setLivePrompt, // Rename for clarity
+    setSelectedVideoDeviceId, // <-- Add new setter from hook
+    getVideoInputDevices, // <-- Add new handler from hook
     startLiveSession,
     endLiveSession,
     sendLiveMessage,
@@ -444,6 +448,11 @@ export default function App() {
           onStopVideo={stopVideoStream}
           onStartScreenShare={startScreenShare}
           onStopScreenShare={stopScreenShare}
+          // Video device props
+          videoDevices={videoDevices}
+          selectedVideoDeviceId={selectedVideoDeviceId}
+          onSetSelectedVideoDeviceId={setSelectedVideoDeviceId}
+          onGetVideoInputDevices={getVideoInputDevices}
         />
       )}
 
