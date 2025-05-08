@@ -60,7 +60,7 @@ const availableModels = [
   { id: "gemini-2.5-pro-exp-03-25", name: "Gemini 2.5 Pro Exp" },
   { id: "gemini-2.5-flash-preview-04-17", name: "Gemini 2.5 Flash Preview" },
   { id: "gemini-2.0-flash", name: "Gemini 2.0 Flash" },
-  { id: "gemini-2.0-flash-exp-image-generation", name: "Gemini 2.0 Flash (Image Gen)" },
+  { id: "gemini-2.0-flash-preview-image-generation", name: "Gemini 2.0 Flash (Image Gen)" },
   { id: "imagen-3.0-generate-002", name: "Imagen 3" },
   { id: "gemini-1.5-pro", name: "Gemini 1.5 Pro" },
   { id: "gemini-1.5-flash", name: "Gemini 1.5 Flash" },
@@ -99,7 +99,7 @@ function buildApiRequest(body) {
   const apiRequest = { model: selectedModelId, contents, config: {} };
 
   // Image‐gen modalities
-  if (selectedModelId === 'gemini-2.0-flash-exp-image-generation') {
+  if (selectedModelId === 'gemini-2.0-flash-preview-image-generation') {
     apiRequest.config.responseModalities = [Modality.TEXT, Modality.IMAGE];
   }
 
@@ -329,7 +329,7 @@ app.post('/chat', async (req,res)=>{
       return res.json({ response:parts });
     }
     // Gemini image‐gen
-    if (modelId==='gemini-2.0-flash-exp-image-generation') {
+    if (modelId==='gemini-2.0-flash-preview-image-generation') {
       const reqA=buildApiRequest(req.body);
       const result=await ai.models.generateContent(reqA);
       const c=result.candidates[0];
@@ -657,7 +657,7 @@ async function handleLiveConnection(ws, req) {
                     }
                 },
                 onmessage: async (evt) => {
-                    const sessionIdShort = session?.conn?.id?.substring(0, 8) ?? 'N/A'; // Safer logging
+                    const sessionIdShort = session?.conn?.id?.substring(0, 8) ?? 'N/A';
                     const messageType = Object.keys(evt).find(key => evt[key] !== undefined && key !== 'type') || 'unknown';
                     // Reduce log verbosity for content chunks
                     if (evt.serverContent?.modelTurn?.parts?.some(p => p.inlineData)) {
@@ -685,16 +685,29 @@ async function handleLiveConnection(ws, req) {
                             ws.send(JSON.stringify({ event: 'tool_call_started', calls: evt.toolCall.functionCalls }));
                          }
 
-                         // Execute CUSTOM functions and send responses back to Google
                          const responsesToSend = [];
                          for (const call of evt.toolCall.functionCalls) {
-                             if (toolHandlers[call.name]) { // Check if it's one of *our* defined custom tools
+                             if (toolHandlers[call.name]) {
                                  try {
                                      const result = await toolHandlers[call.name](call.args || {});
-                                     responsesToSend.push({ id: call.id, name: call.name, response: { result: result } }); // Correctly structure the response
-                                     // Notify frontend of custom tool result
+                                     responsesToSend.push({ id: call.id, name: call.name, response: { result: result } }); // Send FULL result back to Google
+
+                                     // --- Check for Map Display Data and send separate event ---
+                                     if (result?._mapDisplayData && ws.readyState === WebSocket.OPEN) {
+                                        console.log(`[Live Backend] Sending map_display_update event for tool ${call.name} <${sessionIdShort}>.`);
+                                        ws.send(JSON.stringify({
+                                            event: 'map_display_update',
+                                            mapData: result._mapDisplayData // Send only the map-specific data
+                                        }));
+                                     }
+                                     // --- End Map Display Check ---
+
+                                     // Notify frontend of custom tool result (send the non-map part)
                                      if (ws.readyState === WebSocket.OPEN) {
-                                          ws.send(JSON.stringify({ event: 'tool_call_result', name: call.name, result: result }));
+                                        // Clone result and remove map data before sending to frontend as standard tool result
+                                        const resultForFrontend = { ...result };
+                                        delete resultForFrontend._mapDisplayData;
+                                        ws.send(JSON.stringify({ event: 'tool_call_result', name: call.name, result: resultForFrontend }));
                                      }
                                  } catch (toolError) {
                                      console.error(`[Live Backend] Error executing custom tool ${call.name} <${sessionIdShort}>:`, toolError);
@@ -704,12 +717,9 @@ async function handleLiveConnection(ws, req) {
                                       }
                                  }
                              }
-                             // Native tools (googleSearch, codeExecution) are handled by Google internally.
-                             // We *don't* send a toolResponse for them here. Their results appear in serverContent.
                          }
-                         // Send responses for executed custom tools back to Google
                          if (responsesToSend.length > 0) {
-                             console.log(`[Live Backend] Sending toolResponse back to Google <${sessionIdShort}>:`, JSON.stringify(responsesToSend));
+                             console.log(`[Live Backend] Sending toolResponse back to Google <${sessionIdShort}>.`);
                              await session.sendToolResponse({ functionResponses: responsesToSend });
                          }
                     }

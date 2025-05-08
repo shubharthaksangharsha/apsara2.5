@@ -1,5 +1,12 @@
 // backend/tools.js
 
+// Import from gmail-tools.js
+import { gmailToolSchemas, gmailToolHandlers } from './gmail-tools.js';
+// Import from calendar-tools.js
+import { calendarToolSchemas, calendarToolHandlers } from './calendar-tools.js';
+// Import from maps-tools.js
+import { mapsToolSchemas, mapsToolHandlers } from './maps-tools.js';
+
 // --- Tool Schemas ---
 const getCurrentTimeSchema = {
   name: 'getCurrentTime',
@@ -36,11 +43,48 @@ const getBatteryStatusSchema = {
   }
 };
 
+// --- NEW TOOL SCHEMAS ---
+
+
+const getWeatherSchema = {
+  name: 'getWeather',
+  description: 'Gets the current weather information for a specified city.',
+  parameters: {
+    type: 'object',
+    properties: {
+      city: { type: 'string', description: 'The name of the city (e.g., "London").' },
+      countryCode: { type: 'string', description: 'Optional. The two-letter ISO country code (e.g., "GB" for Great Britain).' },
+      units: { type: 'string', enum: ['metric', 'imperial'], description: 'Optional. Units for temperature. Defaults to metric (Celsius).' }
+    },
+    required: ['city']
+  }
+};
+
+const captureScreenshotSchema = {
+  name: 'captureScreenshot',
+  description: 'Captures a "screenshot" (placeholder for server-side action). In a real scenario, this might involve a headless browser or specific server utility.',
+  parameters: {
+    type: 'object',
+    properties: {
+      targetUrl: { type: 'string', description: 'Optional. If capturing a webpage, the URL to capture.' },
+      fileName: { type: 'string', description: 'Optional. Suggested filename for the screenshot.' }
+    },
+    required: []
+  }
+};
+
+
 // Array of tool schemas for Gemini configuration
+// Combine imported schemas from all tool files
 export const customToolDeclarations = [
   getCurrentTimeSchema,
   echoSchema,
-  getBatteryStatusSchema
+  getBatteryStatusSchema,
+  ...gmailToolSchemas, // Spread Gmail tool schemas
+  ...calendarToolSchemas, // Spread Calendar tool schemas
+  ...mapsToolSchemas, // Spread Maps tool schemas
+  getWeatherSchema,
+  captureScreenshotSchema,
 ];
 
 
@@ -102,11 +146,38 @@ async function handleGetBatteryStatus() {
 }
 
 
+async function handleGetWeather({ city, countryCode, units = 'metric' }) {
+  console.log(`[Tool: getWeather] Request for weather: City: "${city}", Country: ${countryCode || 'N/A'}, Units: ${units}`);
+  return {
+    status: 'success',
+    city: city,
+    temperature: `20°${units === 'metric' ? 'C' : 'F'} (Mock Data)`,
+    condition: 'Sunny (Mock Data)',
+    humidity: '60% (Mock Data)'
+  };
+}
+
+async function handleCaptureScreenshot({ targetUrl, fileName }) {
+  console.log(`[Tool: captureScreenshot] Request to capture screenshot. Target: ${targetUrl || 'N/A'}, FileName: ${fileName || 'screenshot.png'}`);
+  return {
+    status: 'success',
+    message: `Screenshot capture for "${targetUrl || 'desktop'}" logged. Real capture not implemented.`,
+    filePath: `/path/to/mock/${fileName || 'screenshot.png'} (Mock Path)`
+  };
+}
+
+
 // Map of tool names to their handler functions
+// Combine imported handlers from all tool files
 export const toolHandlers = {
   getCurrentTime: handleGetCurrentTime,
   echo: handleEcho,
   getBatteryStatus: handleGetBatteryStatus,
+  ...gmailToolHandlers, // Spread Gmail handlers
+  ...calendarToolHandlers, // Spread Calendar handlers
+  ...mapsToolHandlers, // Spread Maps handlers
+  getWeather: handleGetWeather,
+  captureScreenshot: handleCaptureScreenshot,
 };
 
 // Export just the names for the system prompt

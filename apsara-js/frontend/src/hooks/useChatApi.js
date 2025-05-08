@@ -122,7 +122,7 @@ export function useChatApi({
 
       // --- API Call ---
       const modelToUse = targetModelId || currentModel;
-      const isImageGen = modelToUse === 'gemini-2.0-flash-exp-image-generation';
+      const isImageGen = modelToUse === 'gemini-2.0-flash-preview-image-generation';
       const baseRequestBody = {
         contents: turns,
         modelId: modelToUse,
@@ -283,7 +283,7 @@ export function useChatApi({
 
        // --- API Call ---
        const modelToUse = targetModelId || currentModel;
-       const isImageGen = modelToUse === 'gemini-2.0-flash-exp-image-generation';
+       const isImageGen = modelToUse === 'gemini-2.0-flash-preview-image-generation';
       const baseRequestBody = {
         contents: turns,
          modelId: modelToUse,
