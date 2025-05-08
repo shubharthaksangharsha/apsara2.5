@@ -14,6 +14,7 @@ import ScreenShareDisplay from './components/ScreenShareDisplay';
 import EmptyChatContent from './components/EmptyChatContent'; // Import the new component
 import FileUploadPopup from './components/FileUploadPopup';
 import FilePreviewBar from './components/FilePreviewBar'; // <-- Add this import
+import MapDisplay from './components/MapDisplay'; // <-- Import MapDisplay
 
 // Import the custom hook
 import { useTheme } from './hooks/useTheme';
@@ -44,8 +45,8 @@ const suggestedPrompts = [
   { text: "Write a short story about a space explorer finding a new planet", icon: BookOpen, modelId: "gemini-1.5-flash" },
 
   // Image Generation (Using 2.0 Flash Image variant)
-  { text: "Generate an image of a futuristic cityscape at sunset", icon: ImageIcon, modelId: "gemini-2.0-flash-exp-image-generation" },
-  { text: "Generate an image of a cat wearing sunglasses", icon: ImageIcon, modelId: "gemini-2.0-flash-exp-image-generation" },
+  { text: "Generate an image of a futuristic cityscape at sunset", icon: ImageIcon, modelId: "gemini-2.0-flash-preview-image-generation" },
+  { text: "Generate an image of a cat wearing sunglasses", icon: ImageIcon, modelId: "gemini-2.0-flash-preview-image-generation" },
 
   // Planning & Practical (Using Flash)
   { text: "Create a recipe for vegan lasagna", icon: UtensilsCrossed, modelId: "gemini-1.5-flash" },
@@ -151,6 +152,7 @@ export default function App() {
     stopVideoStream,
     startScreenShare,
     stopScreenShare,
+    mapDisplayData,
   } = useLiveSession({ currentVoice }); // Pass dependencies
 
   // Settings panel
@@ -338,7 +340,7 @@ export default function App() {
       />
 
       {/* Main content */}
-      <main className="flex-1 flex flex-col overflow-hidden transition-all duration-500 ease-in-out bg-gray-100 dark:bg-gray-900"> {/* Ensure main bg color */}
+      <main className="flex-1 flex flex-col overflow-hidden transition-all duration-500 ease-in-out bg-gray-100 dark:bg-gray-900">
         {/* Header - Use Imported Component */}
         <Header
           models={models}
@@ -351,8 +353,8 @@ export default function App() {
           setIsSidebarOpen={setIsSidebarOpen}
         />
         
-        {/* Chat Messages Area */}
-        <div className="flex-1 flex flex-col overflow-y-auto p-4 pb-0 bg-gray-100 dark:bg-gray-900 custom-scrollbar"> {/* Added flex flex-col */}
+        {/* Chat Messages Area (Now directly under header) */}
+        <div className="flex-1 flex flex-col overflow-y-auto p-4 pb-0 bg-gray-100 dark:bg-gray-900 custom-scrollbar">
           {!activeConvoId ? (
             // No active chat: Show full Welcome Screen
             <WelcomeScreen
@@ -384,10 +386,8 @@ export default function App() {
             })()
           )}
         </div>
-        
-        {/* =============================================== */}
+
         {/* File Preview Bar - Renders if files are present */}
-        {/* =============================================== */}
         <FilePreviewBar files={files} onRemoveFile={removeFile} />
 
         {/* Message Input - Use Imported Component */}
@@ -424,7 +424,7 @@ export default function App() {
         />
       )}
 
-      {/* Live Chat Popup - Use Imported Component */}
+      {/* Live Chat Popup - Conditionally render the popup */}
       {liveOpen && (
         <LivePopup 
           connectionStatus={liveConnectionStatus}
@@ -465,6 +465,28 @@ export default function App() {
         />
       )}
 
+      {/* Map Display - Conditionally render *next to* or *near* the LivePopup */}
+      {/* Render only if LivePopup is open AND we have map data */}
+      {liveOpen && mapDisplayData && (
+         // Use fixed or absolute positioning. Adjust top/right/width/height as needed.
+         // Using fixed positioning to stay relative to the viewport
+         <div className="fixed top-[8vh] right-[2vw] w-[30vw] max-w-[450px] h-[84vh] z-[55] bg-white dark:bg-gray-800 rounded-lg shadow-xl border dark:border-gray-600 overflow-hidden">
+             <div className="p-1 h-full w-full">
+               <MapDisplay mapData={mapDisplayData} />
+              </div>
+
+            {/* Apply padding inside if needed */}
+            {/* <div className="p-2 h-full w-full"> */}
+                 {/* <MapDisplay mapData={mapDisplayData} /> */}
+            {/* </div> */}
+         </div>
+         // Alternative: Absolute positioning relative to the main App container if needed.
+         // Remember to ensure the main App container has `position: relative`.
+        //  <div className="absolute top-16 right-4 w-96 h-[calc(100vh-8rem)] z-40 hidden lg:block">
+        //      <MapDisplay mapData={mapDisplayData} />
+        //  </div>
+      )}
+
       {/* THESE ARE THE FLOATING, TOP-RIGHT VIEWS */}
       {liveOpen && isStreamingVideo && mediaStream && (
         <VideoStreamDisplay videoStream={mediaStream} isWebcamActive={isStreamingVideo} />
@@ -481,6 +503,7 @@ export default function App() {
           files={files}
         />
       )}
+
     </div>
   );
 }

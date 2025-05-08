@@ -26,6 +26,7 @@ export function useLiveSession({ currentVoice }) {
   const [inputSampleRate] = useState(16000); // Target input sample rate for PCM
   const [videoDevices, setVideoDevices] = useState([]); // <-- New state for video devices
   const [selectedVideoDeviceId, setSelectedVideoDeviceId] = useState(null); // <-- New state for selected video device
+  const [mapDisplayData, setMapDisplayData] = useState(null); // <-- New state for map data
 
   // Refs
   const liveWsConnection = useRef(null);
@@ -58,6 +59,8 @@ export function useLiveSession({ currentVoice }) {
 
   // --- Memoized Utility Functions ---
   const addLiveMessage = useCallback((msg) => {
+    // Clear map data when a new message (esp. user message) is added? Debatable.
+    // setMapDisplayData(null); // Optional: Clear map on any new message
     console.log(`➕ Adding new message ID ${msg.id}, text: "${msg.text?.substring(0, 20)}..."`);
     setLiveMessages(prev => [...prev, { ...msg, id: msg.id || (Date.now() + Math.random() * 1000), timestamp: Date.now() }]);
   }, []);
@@ -633,6 +636,7 @@ export function useLiveSession({ currentVoice }) {
     addLiveMessage({ role: 'system', text: 'Preparing live session...' });
     liveStreamingTextRef.current = ''; liveStreamingMsgIdRef.current = null;
     setAudioError(null);
+    setMapDisplayData(null); // Clear map data when starting a new connection
 
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const params = new URLSearchParams({ modalities: liveModality });
@@ -667,8 +671,11 @@ export function useLiveSession({ currentVoice }) {
 
           let turnOrGenComplete = false; // Flag to check if completion happened
 
-          // --- Process Events FIRST ---
-          if (data.event === 'backend_connected') {
+          // --- Process Events FIRST (Including our new map event) ---
+          if (data.event === 'map_display_update') {
+              console.log("🗺️ [Live WS] Processing 'map_display_update':", data.mapData);
+              setMapDisplayData(data.mapData); // Update map state
+          } else if (data.event === 'backend_connected') {
                 console.log("🔵 [Live WS] Processing 'backend_connected'.");
                 addLiveMessage({ role: 'system', text: 'Backend ready. AI connection pending.' });
             } else if (data.event === 'connected') {
@@ -825,6 +832,7 @@ export function useLiveSession({ currentVoice }) {
       addLiveMessage({ role: 'error', text: 'WebSocket connection error.' });
       setLiveConnectionStatus('error');
       setSessionTimeLeft(null); // Reset timer on error
+      setMapDisplayData(null); // Clear map on error
     };
 
     ws.onclose = (event) => {
@@ -836,18 +844,19 @@ export function useLiveSession({ currentVoice }) {
       if (isRecording) stopRecordingInternal();
       setIsModelSpeaking(false); liveStreamingTextRef.current = ''; liveStreamingMsgIdRef.current = null;
       setSessionTimeLeft(null); // Reset timer on close
+      setMapDisplayData(null); // Clear map on close
     };
   }, [ liveModality, currentVoice, liveSystemInstruction, addLiveMessage, updateLiveMessage, initAudioContexts, playAudioQueue, closeAudioContexts, isRecording, stopRecordingInternal]); // Adjusted dependencies
 
   // --- Memoized Public Handlers ---
   const startLiveSession = useCallback(() => {
-      // **Simplified start:** Directly call setup. The setup function now handles closing existing connections.
-      // Always initialize contexts regardless of modality selected for output
+      setMapDisplayData(null); // Clear map when starting
       initAudioContexts();
       setupLiveConnection();
   }, [liveModality, initAudioContexts, setupLiveConnection]);
 
   const endLiveSession = useCallback(() => {
+    setMapDisplayData(null); // Clear map when ending
     if (liveWsConnection.current) {
         addLiveMessage({ role: 'system', text: 'Ending session...' });
         liveWsConnection.current.close(1000, "User ended session"); // Normal closure
@@ -863,6 +872,7 @@ export function useLiveSession({ currentVoice }) {
   }, [addLiveMessage, closeAudioContexts, isRecording, stopRecordingInternal, stopVideoStreamInternal]); // Adjusted dependency
 
   const sendLiveMessageText = useCallback((text) => {
+    setMapDisplayData(null); // Clear map display when user sends a new text message
     const ws = liveWsConnection.current;
     if (!ws || ws.readyState !== WebSocket.OPEN || !text.trim()) {
         console.warn("Cannot send live message, WS not ready or text empty."); return;
@@ -888,7 +898,11 @@ export function useLiveSession({ currentVoice }) {
         await startRecordingInternal(); // Now call the internal function
   }, [startRecordingInternal]);
 
-  const stopRecording = useCallback(() => stopRecordingInternal(), [stopRecordingInternal]);
+  const stopRecording = useCallback(() => {
+      // Optional: Clear map when user stops recording? Maybe not needed.
+      // setMapDisplayData(null);
+      stopRecordingInternal()
+  }, [stopRecordingInternal]);
 
   // --- Cleanup Effect ---
   useEffect(() => {
@@ -912,12 +926,14 @@ export function useLiveSession({ currentVoice }) {
     screenStream: screenStreamRef.current, // <-- New stream for screen share display
     videoDevices, // <-- New: expose video devices
     selectedVideoDeviceId, // <-- New: expose selected video device ID
+    mapDisplayData, // <-- Expose map data state
 
     // Setters/Handlers
     setLiveModality,
     setLiveSystemInstruction, // Keep original name
     setSelectedVideoDeviceId, // <-- New: expose setter for selected video device
     getVideoInputDevices, // <-- New: expose function to get video devices
+    setMapDisplayData, // <-- Expose map data setter if needed externally (maybe not)
     startLiveSession, endLiveSession, sendLiveMessage: sendLiveMessageText,
     startRecording, stopRecording,
     startVideoStream: startVideoStreamInternal, stopVideoStream: stopVideoStreamInternal, // Expose video handlers

@@ -13,7 +13,7 @@ export const getModelCapabilities = (modelId) => {
       return { supportsSearch: true, supportsSystemInstruction: true, supportsCodeExecution: true };
     case "gemini-2.0-flash": // Assuming based on 2.0 family, added Search based on prompt
       return { supportsSearch: true, supportsSystemInstruction: true, supportsCodeExecution: true };
-    case "gemini-2.0-flash-exp-image-generation": // Image only
+    case "gemini-2.0-flash-preview-image-generation": // Image only
       return { supportsSearch: false, supportsSystemInstruction: false, supportsCodeExecution: false };
     case "imagen-3.0-generate-002": // Image only
       return { supportsSearch: false, supportsSystemInstruction: false, supportsCodeExecution: false };
