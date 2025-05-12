@@ -41,13 +41,13 @@ function VideoStreamDisplay({ videoStream, isWebcamActive }) {
   }
 
   return (
-    <div className="video-stream-container bg-white/20 dark:bg-gray-900/40 backdrop-blur-lg rounded-2xl overflow-hidden shadow-2xl fixed top-5 right-5 w-56 h-40 z-[60] border-2 border-indigo-400/60 dark:border-indigo-500/60 ring-2 ring-indigo-300/30 dark:ring-indigo-700/30">
+    <div className="video-stream-container w-full h-full bg-black rounded-lg overflow-hidden relative shadow-md border border-indigo-500/50">
       <video
         ref={videoRef}
         className="w-full h-full object-cover"
         playsInline
       />
-      <p className="absolute bottom-2 left-2 text-xs text-white bg-black/60 px-2 py-0.5 rounded-full shadow">Your Camera</p>
+      <p className="absolute bottom-1.5 left-1.5 text-xs text-white bg-black/70 px-2 py-0.5 rounded-md shadow">Your Camera</p>
     </div>
   );
 }

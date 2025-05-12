@@ -467,33 +467,30 @@ export default function App() {
 
       {/* Map Display - Conditionally render *next to* or *near* the LivePopup */}
       {/* Render only if LivePopup is open AND we have map data */}
-      {liveOpen && mapDisplayData && (
-         // Use fixed or absolute positioning. Adjust top/right/width/height as needed.
-         // Using fixed positioning to stay relative to the viewport
-         <div className="fixed top-[8vh] right-[2vw] w-[30vw] max-w-[450px] h-[84vh] z-[55] bg-white dark:bg-gray-800 rounded-lg shadow-xl border dark:border-gray-600 overflow-hidden">
-             <div className="p-1 h-full w-full">
-               <MapDisplay mapData={mapDisplayData} />
-              </div>
-
-            {/* Apply padding inside if needed */}
-            {/* <div className="p-2 h-full w-full"> */}
-                 {/* <MapDisplay mapData={mapDisplayData} /> */}
-            {/* </div> */}
-         </div>
-         // Alternative: Absolute positioning relative to the main App container if needed.
-         // Remember to ensure the main App container has `position: relative`.
-        //  <div className="absolute top-16 right-4 w-96 h-[calc(100vh-8rem)] z-40 hidden lg:block">
-        //      <MapDisplay mapData={mapDisplayData} />
+      {!liveOpen && mapDisplayData && (
+         // --- Adjusted Positioning ---
+         // Making it slightly smaller and ensuring high z-index
+         // Added explicit background for better visibility during testing
+         // Removed lg:block for testing, should appear on all screen sizes if data present
+        //  <div className="fixed top-[8vh] right-[2vw] w-[30vw] max-w-[450px] h-[84vh] z-[55] bg-white dark:bg-gray-800 rounded-lg shadow-xl border dark:border-gray-600 overflow-hidden">
+             {/* Add padding inside the container if MapDisplay doesn't have its own */}
+            //  {/* <div className="p-1 h-full w-full"> */}
+                //  {/* <MapDisplay mapData={mapDisplayData} /> */}
+            //  </div>
+            //  {/* Temporary Debug Info */}
+            //  {/* <pre className="absolute bottom-0 left-0 text-xs bg-black/50 text-white p-1">
+                //  Map Data Type: {mapDisplayData?.type}
+            //  </pre> */}
         //  </div>
       )}
 
       {/* THESE ARE THE FLOATING, TOP-RIGHT VIEWS */}
-      {liveOpen && isStreamingVideo && mediaStream && (
+      {/* {liveOpen && isStreamingVideo && mediaStream && (
         <VideoStreamDisplay videoStream={mediaStream} isWebcamActive={isStreamingVideo} />
       )}
       {liveOpen && isStreamingScreen && screenStream && (
         <ScreenShareDisplay screenStream={screenStream} isScreenSharingActive={isStreamingScreen} />
-      )}
+      )} */}
 
       {/* File Upload Popup - Use Imported Component */}
       {fileUploadOpen && (

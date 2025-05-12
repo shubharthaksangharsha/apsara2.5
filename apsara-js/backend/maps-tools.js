@@ -20,11 +20,18 @@ export const getGoogleMapsRouteSchema = {
 // --- Tool Handlers for Maps ---
 
 export async function handleGetGoogleMapsRoute({ origin, destination, travelMode = 'DRIVING' }) {
-  console.log(`[MapsTool: getRoute] Request: From: "${origin}", To: "${destination}", Mode: ${travelMode}`);
   const apiKey = process.env.GOOGLE_MAPS_API_KEY;
+  // --- ADD LOG ---
+  const apiKeySnippet = apiKey ? `${apiKey.substring(0, 4)}...${apiKey.substring(apiKey.length - 4)}` : 'Not Found!';
+  console.log(`[MapsTool: getRoute] Using API Key Snippet: ${apiKeySnippet}`);
+  // --- END LOG ---
+
   if (!apiKey) {
-    return { status: 'error', message: 'Google Maps API key not configured in .env file.' };
+    console.error("[MapsTool: getRoute] Google Maps API key not found in process.env.GOOGLE_MAPS_API_KEY.");
+    return { status: 'error', message: 'Google Maps API key not configured in server .env file.' };
   }
+
+  console.log(`[MapsTool: getRoute] Request: From: "${origin}", To: "${destination}", Mode: ${travelMode}`);
 
   const params = new URLSearchParams({
     origin,
@@ -68,6 +75,10 @@ export async function handleGetGoogleMapsRoute({ origin, destination, travelMode
         polyline: route.overview_polyline.points, // Encoded polyline string
         maps_link: `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}&travelmode=${travelMode.toLowerCase()}`
       };
+
+      // --- ADD LOG HERE ---
+      console.log("[MapsTool: getRoute] Populated _mapDisplayData:", JSON.stringify(resultForAI._mapDisplayData));
+      // --- END ADD ---
 
       return resultForAI; // Return the combined object
 

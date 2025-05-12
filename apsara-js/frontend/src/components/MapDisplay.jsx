@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { APIProvider, Map, AdvancedMarker, useMap } from '@vis.gl/react-google-maps';
+import { APIProvider, Map, AdvancedMarker, useMap, useMapsLibrary } from '@vis.gl/react-google-maps';
 import { Loader } from '@googlemaps/js-api-loader'; // Optional: use loader directly if needed
 
 const API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
@@ -39,139 +39,131 @@ function decodePolyline(encoded) {
 // Internal component to handle map adjustments and polyline drawing
 function MapViewUpdater({ mapData }) {
     const map = useMap();
+    // Load the 'routes' library explicitly, needed for Polyline and LatLngBounds
+    const routesLibrary = useMapsLibrary('routes');
     const polylineRef = useRef(null); // Use ref to store the polyline instance
 
     useEffect(() => {
-        if (!map || !mapData) return;
+        // Ensure map instance and the necessary routes library are loaded
+        if (!map || !routesLibrary || !mapData) {
+            console.log("[MapDisplay] Waiting for map instance or routes library or mapData...");
+            return;
+        }
 
-        if (mapData.type === 'route' && mapData.bounds) {
-            const { northeast, southwest } = mapData.bounds;
-            if (northeast && southwest) {
-                try {
-                     if (window.google && window.google.maps && window.google.maps.LatLngBounds) {
-                         const bounds = new window.google.maps.LatLngBounds(
-                            { lat: southwest.lat, lng: southwest.lng },
-                            { lat: northeast.lat, lng: northeast.lng }
-                         );
-                         console.log("[MapDisplay] Fitting bounds:", bounds.toJSON());
-                         map.fitBounds(bounds, 50); // Add padding
-                     } else {
-                        console.warn("[MapDisplay] google.maps.LatLngBounds not available yet.");
-                        if(mapData.originCoords) map.setCenter(mapData.originCoords);
-                     }
-                } catch (e) {
+        console.log("[MapDisplay] Map instance and routes library loaded. Processing mapData:", mapData);
+
+        // Clear existing polyline if data is not a route or is null/undefined
+        if (mapData.type !== 'route' || !mapData.polyline) {
+             if (polylineRef.current) {
+                console.log("[MapDisplay] Removing existing polyline.");
+                polylineRef.current.setMap(null); 
+                polylineRef.current = null; 
+             }
+        }
+
+        // Handle Route Data
+        if (mapData.type === 'route') {
+             // Fit Bounds
+             if (mapData.bounds?.northeast && mapData.bounds?.southwest) {
+                 try {
+                     const bounds = new routesLibrary.LatLngBounds( // Use library object
+                         mapData.bounds.southwest, // API uses {lat, lng} directly
+                         mapData.bounds.northeast
+                     );
+                     console.log("[MapDisplay] Fitting bounds:", bounds.toJSON());
+                     map.fitBounds(bounds, 60); // Increased padding slightly
+                 } catch (e) {
                      console.error("[MapDisplay] Error fitting bounds:", e);
-                     if(mapData.originCoords) map.setCenter(mapData.originCoords);
-                }
-            } else if (mapData.originCoords) {
-                map.setCenter(mapData.originCoords);
-                map.setZoom(12);
+                     if(mapData.originCoords) map.setCenter(mapData.originCoords); // Fallback center
+                 }
+             } else if (mapData.originCoords) {
+                 console.log("[MapDisplay] No bounds, centering on origin:", mapData.originCoords);
+                 map.setCenter(mapData.originCoords);
+                 map.setZoom(12); // Default zoom if no bounds
+             }
+
+             // Draw Polyline
+             if (mapData.polyline) {
+                 try {
+                     const decodedPath = decodePolyline(mapData.polyline);
+                     if (!polylineRef.current) {
+                         polylineRef.current = new routesLibrary.Polyline({ // Use library object
+                             path: decodedPath,
+                             geodesic: true,
+                             strokeColor: '#4285F4', // Google Maps blue
+                             strokeOpacity: 0.8,
+                             strokeWeight: 4, // Slightly thicker
+                             map: map, 
+                         });
+                         console.log("[MapDisplay] Polyline created with path length:", decodedPath.length);
+                     } else {
+                         polylineRef.current.setPath(decodedPath);
+                         if (!polylineRef.current.getMap()) { // Ensure it's on the map
+                             polylineRef.current.setMap(map);
+                         }
+                         console.log("[MapDisplay] Polyline path updated with length:", decodedPath.length);
+                     }
+                 } catch(e) {
+                     console.error("[MapDisplay] Error decoding or drawing polyline:", e);
+                 }
             }
-        } else if (mapData.type === 'places' && mapData.markers?.length > 0) {
-            // Logic to fit bounds for multiple markers if implemented later
-            map.setCenter(mapData.markers[0]); // Center on first marker
-            map.setZoom(13);
+        } 
+        // --- Add logic for other mapData types if needed ---
+        else if (mapData.type === 'places' && mapData.markers?.length > 0) {
+             // Example: center on first marker
+             map.setCenter(mapData.markers[0]); 
+             map.setZoom(13);
+             console.log("[MapDisplay] Centering on first place marker.");
         } else if (mapData.type === 'single_location' && mapData.center) {
-            map.setCenter(mapData.center);
-            map.setZoom(15);
+             map.setCenter(mapData.center);
+             map.setZoom(15);
+              console.log("[MapDisplay] Centering on single location.");
         }
 
-    }, [map, mapData]); // Re-run when map instance or data changes
-
-    // Effect for drawing/updating the polyline
-    useEffect(() => {
-        if (!map) return; // Need map instance
-
-        // Check if we have polyline data and the Maps API is loaded
-        if (mapData?.type === 'route' && mapData.polyline && window.google?.maps?.Polyline) {
-            const decodedPath = decodePolyline(mapData.polyline);
-
-            if (!polylineRef.current) {
-                // Create new polyline instance if it doesn't exist
-                polylineRef.current = new window.google.maps.Polyline({
-                    path: decodedPath,
-                    geodesic: true,
-                    strokeColor: '#FF0000', // Red color
-                    strokeOpacity: 0.8,
-                    strokeWeight: 3,
-                    map: map, // Add it to the map immediately
-                });
-                console.log("[MapDisplay] Polyline created.");
-            } else {
-                // Update path if instance already exists
-                polylineRef.current.setPath(decodedPath);
-                 // Ensure it's on the map (might have been removed)
-                if (!polylineRef.current.getMap()) {
-                    polylineRef.current.setMap(map);
-                }
-                console.log("[MapDisplay] Polyline path updated.");
-            }
-        } else {
-            // If no polyline data or type is not 'route', remove existing polyline
-            if (polylineRef.current) {
-                polylineRef.current.setMap(null); // Remove from map
-                polylineRef.current = null; // Clear the ref
-                console.log("[MapDisplay] Polyline removed.");
-            }
-        }
-
-        // Cleanup function for when component unmounts or dependencies change
-        return () => {
-            // This cleanup runs BEFORE the next effect execution or on unmount
-            // If the effect is re-running because mapData changed to NOT be a route,
-            // the 'else' block above handles removal. This is extra safety on unmount.
-            // if (polylineRef.current) {
-            //     polylineRef.current.setMap(null);
-            // }
-            // Let the main effect logic handle removal based on mapData type.
-        };
-    }, [map, mapData]); // Depend on map instance and mapData
+    }, [map, routesLibrary, mapData]); // Re-run when map, library, or data changes
 
     if (!mapData) return null;
 
-    // Render only markers here, polyline is handled via the effect
+    // Render Markers
     return (
         <>
             {mapData.type === 'route' && (
                 <>
-                    {mapData.originCoords && <AdvancedMarker position={mapData.originCoords} title="Origin" />}
-                    {mapData.destinationCoords && <AdvancedMarker position={mapData.destinationCoords} title="Destination" />}
-                    {/* Polyline is now drawn directly using the JS API, not as a React component */}
+                    {mapData.originCoords && <AdvancedMarker position={mapData.originCoords} title="Origin">📍</AdvancedMarker>}
+                    {mapData.destinationCoords && <AdvancedMarker position={mapData.destinationCoords} title="Destination">🏁</AdvancedMarker>}
                 </>
             )}
-            {/* Add rendering logic for other types ('places', 'single_location') if needed */}
+            {/* Add marker rendering logic for other types if needed */}
         </>
     );
 }
 
 
 export default function MapDisplay({ mapData }) {
-    // Simple conditional rendering based on mapData presence
-    if (!mapData) {
-        return null; // Don't render anything if there's no map data
-    }
-
     if (!API_KEY) {
-        console.error("Google Maps API Key (VITE_GOOGLE_MAPS_API_KEY) is missing!");
-        return <div className="p-4 text-red-500 bg-red-100 dark:bg-red-900/30 rounded">Map display requires API Key configuration.</div>;
+        return <div className="p-4 text-red-500 bg-red-100 dark:bg-red-900/30 rounded h-full flex items-center justify-center">Map display requires API Key configuration.</div>;
     }
+    
+    // Provide a default center in case mapData is initially null or invalid for centering
+    const defaultCenter = { lat: 51.5074, lng: -0.1278 }; // Default to London
+    const center = mapData?.originCoords || mapData?.center || defaultCenter;
+    const zoom = mapData ? 12 : 9; // Start more zoomed out if no specific data yet
 
-    // Determine initial center (fallback needed if data is incomplete)
-    const initialCenter = mapData?.originCoords || mapData?.center || { lat: 51.5074, lng: -0.1278 }; // Default to London
-    const initialZoom = mapData?.type === 'route' ? 10 : 14; // Adjust default zoom
+    console.log("[MapDisplay] Rendering Map. Initial Center:", center, "Data:", mapData); // Log on render
 
     return (
-        <div className="h-full w-full border border-gray-300 dark:border-gray-700 rounded-lg overflow-hidden shadow-md">
-             <APIProvider apiKey={API_KEY} > {/* Removed libraries prop, not strictly needed for this approach */}
+        <div className="h-full w-full border border-gray-300 dark:border-gray-700 rounded-lg overflow-hidden shadow-md bg-gray-200 dark:bg-gray-800">
+             <APIProvider apiKey={API_KEY}>
                 <Map
-                    mapId={'apsara-map'}
+                    mapId={'apsara-map-live'} // Unique ID
                     style={{ width: '100%', height: '100%' }}
-                    defaultCenter={initialCenter}
-                    defaultZoom={initialZoom}
+                    center={center} // Use controlled center
+                    zoom={zoom}     // Use controlled zoom
                     gestureHandling={'greedy'}
                     disableDefaultUI={true}
                 >
-                   <MapViewUpdater mapData={mapData} />
+                   {/* Pass mapData only if it exists */}
+                   {mapData && <MapViewUpdater mapData={mapData} />}
                 </Map>
             </APIProvider>
         </div>
