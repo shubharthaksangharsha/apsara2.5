@@ -28,6 +28,12 @@ export function useLiveSession({ currentVoice }) {
   const [selectedVideoDeviceId, setSelectedVideoDeviceId] = useState(null); // <-- New state for selected video device
   const [mapDisplayData, setMapDisplayData] = useState(null); // <-- New state for map data
 
+  // --- ADD a useEffect to log state changes for mapDisplayData ---
+  useEffect(() => {
+    console.log("[useLiveSession] mapDisplayData state changed:", mapDisplayData);
+  }, [mapDisplayData]);
+  // --- End Add ---
+
   // Refs
   const liveWsConnection = useRef(null);
   const audioContextRef = useRef(null); // For Playback (24kHz)
@@ -65,6 +71,59 @@ export function useLiveSession({ currentVoice }) {
     setLiveMessages(prev => [...prev, { ...msg, id: msg.id || (Date.now() + Math.random() * 1000), timestamp: Date.now() }]);
   }, []);
 
+  // --- MODIFIED updateLiveMessage ---
+  const updateLiveMessage = useCallback((id, updates) => {
+    setLiveMessages(prevMessages => {
+      const index = prevMessages.findIndex(msg => msg.id === id);
+      if (index === -1) {
+        console.warn(`[Live WS] updateLiveMessage: Message with ID ${id} not found! Cannot update. Updates:`, updates);
+        return prevMessages;
+      }
+
+      const updatedMessages = [...prevMessages];
+      const currentMessage = updatedMessages[index];
+      const updatedMessage = { ...currentMessage }; // Clone the message
+
+      // Ensure parts array exists
+      updatedMessage.parts = updatedMessage.parts ? [...updatedMessage.parts] : [];
+
+      // Handle incoming text updates specifically for parts
+      if (updates.text) {
+          const lastPartIndex = updatedMessage.parts.length - 1;
+          // Check if the last part is a text part and append to it
+          if (lastPartIndex >= 0 && updatedMessage.parts[lastPartIndex].text !== undefined) {
+              updatedMessage.parts[lastPartIndex] = {
+                  ...updatedMessage.parts[lastPartIndex],
+                  text: updatedMessage.parts[lastPartIndex].text + updates.text
+              };
+              console.log(`[Live WS] Appended text to last part of message ${id}`);
+          } else {
+              // If no parts, or last part isn't text, add a new text part
+              updatedMessage.parts.push({ text: updates.text });
+              console.log(`[Live WS] Added new text part to message ${id}`);
+          }
+          // Remove the top-level text property from updates as it's handled in parts
+          delete updates.text;
+      }
+
+      // Handle incoming parts updates (like images, code blocks) - merge them
+      if (updates.parts) {
+          updatedMessage.parts = [...updatedMessage.parts, ...updates.parts];
+           console.log(`[Live WS] Added ${updates.parts.length} new parts to message ${id}`);
+          delete updates.parts; // Remove parts from general updates
+      }
+
+      // Apply any other remaining updates (e.g., metadata, though less common here)
+      updatedMessages[index] = {
+          ...updatedMessage,
+          ...Object.fromEntries(Object.entries(updates).filter(([key]) => key !== 'id'))
+      };
+
+      return updatedMessages;
+    });
+  }, []);
+  // --- END MODIFIED updateLiveMessage ---
+
   // --- NEW: Get Video Input Devices ---
   const getVideoInputDevices = useCallback(async () => {
     try {
@@ -90,51 +149,56 @@ export function useLiveSession({ currentVoice }) {
     }
   }, [addLiveMessage, selectedVideoDeviceId]);
 
-  const updateLiveMessage = useCallback((id, updates) => {
-    setLiveMessages(prevMessages => {
-      const index = prevMessages.findIndex(msg => msg.id === id);
-      if (index === -1) {
-        console.warn(`[Live WS] updateLiveMessage: Message with ID ${id} not found in prevMessages! Cannot update. Updates:`, updates);
-        return prevMessages;
-      }
-      const updatedMessages = [...prevMessages];
-      const currentMessage = updatedMessages[index];
-      const existingParts = currentMessage.parts || [];
-
-      if (updates.parts) {
-        updatedMessages[index] = {
-          ...currentMessage,
-          parts: [...existingParts, ...updates.parts],
-          ...Object.fromEntries(Object.entries(updates).filter(([key]) => key !== 'id' && key !== 'parts'))
-        };
-      } else {
-        updatedMessages[index] = {
-          ...currentMessage,
-          ...Object.fromEntries(Object.entries(updates).filter(([key]) => key !== 'id' && key !== 'parts'))
-        };
-      }
-      return updatedMessages;
-    });
-  }, []);
-
-  // --- NEW: Unified Message Update Logic ---
-  // This function handles adding/updating messages with potentially multiple parts
+  // --- Unified Message Update Logic (Handles potential multiple parts) ---
+  // MODIFY this to use the corrected updateLiveMessage logic for text
   const addOrUpdateLiveModelMessagePart = useCallback((part) => {
       setLiveMessages(prevMessages => {
           const streamId = liveStreamingMsgIdRef.current;
+
           if (!streamId) { // Start new message if no streaming ID exists
               const newMsgId = Date.now() + Math.random() + '_live_model';
               liveStreamingMsgIdRef.current = newMsgId;
               console.log(`✨ Starting new model message (ID: ${newMsgId}) with part:`, part);
+              // Ensure the first part is wrapped correctly
               return [...prevMessages, { role: 'model', parts: [part], id: newMsgId }];
-          } else { // Append part to existing message
-              console.log(`➡️ Appending part to model message (ID: ${streamId}):`, part);
-              return prevMessages.map(m =>
-                  m.id === streamId ? { ...m, parts: [...(m.parts || []), part] } : m
-              );
+          } else { // Append or update existing message
+              const index = prevMessages.findIndex(msg => msg.id === streamId);
+              if (index === -1) {
+                  console.warn(`[Live WS] addOrUpdateLiveModelMessagePart: Message with ID ${streamId} not found. Starting new.`);
+                   const newMsgId = Date.now() + Math.random() + '_live_model_fallback';
+                   liveStreamingMsgIdRef.current = newMsgId;
+                   return [...prevMessages, { role: 'model', parts: [part], id: newMsgId }];
+              }
+
+              const updatedMessages = [...prevMessages];
+              const currentMessage = updatedMessages[index];
+              const updatedMessage = { ...currentMessage };
+              updatedMessage.parts = updatedMessage.parts ? [...updatedMessage.parts] : [];
+
+              // If the incoming part is text, append to the last text part if possible
+              if (part.text) {
+                  const lastPartIndex = updatedMessage.parts.length - 1;
+                   if (lastPartIndex >= 0 && updatedMessage.parts[lastPartIndex].text !== undefined) {
+                       updatedMessage.parts[lastPartIndex] = {
+                           ...updatedMessage.parts[lastPartIndex],
+                           text: updatedMessage.parts[lastPartIndex].text + part.text
+                       };
+                       console.log(`➡️ Appended text part via addOrUpdate to message ${streamId}`);
+                   } else {
+                       updatedMessage.parts.push(part); // Add as new part if last wasn't text
+                       console.log(`➡️ Added new text part via addOrUpdate to message ${streamId}`);
+                   }
+              } else {
+                   // For non-text parts (images, code), just append
+                   updatedMessage.parts.push(part);
+                   console.log(`➡️ Added new non-text part via addOrUpdate to message ${streamId}:`, part);
+              }
+
+              updatedMessages[index] = updatedMessage;
+              return updatedMessages;
           }
       });
-  }, []); // No dependencies needed here, relies on refs and state setter
+  }, []);
 
   // --- Memoized Audio Context Management ---
   const initAudioContexts = useCallback(() => {
@@ -673,7 +737,7 @@ export function useLiveSession({ currentVoice }) {
 
           // --- Process Events FIRST (Including our new map event) ---
           if (data.event === 'map_display_update') {
-              console.log("🗺️ [Live WS] Processing 'map_display_update':", data.mapData);
+              console.log("🗺️ [Live WS - useLiveSession] Received 'map_display_update'. Data:", data.mapData);
               setMapDisplayData(data.mapData); // Update map state
           } else if (data.event === 'backend_connected') {
                 console.log("🔵 [Live WS] Processing 'backend_connected'.");
@@ -702,27 +766,15 @@ export function useLiveSession({ currentVoice }) {
                      console.log("💬 [Live WS] Processing modelTurn parts.");
                      let isAudioChunk = false;
                      data.serverContent.modelTurn.parts.forEach(part => {
-                         if (part.text) {
-                             // --- Aggregate Text (REVISED LOGIC) ---
-                             if (!liveStreamingMsgIdRef.current) {
-                                 // Start new message
-                                 const newMsgId = Date.now() + Math.random() + '_live_model';
-                                 liveStreamingMsgIdRef.current = newMsgId;
-                                 liveStreamingTextRef.current = part.text; // Store initial text in ref
-                                 addLiveMessage({ role: 'model', text: part.text, id: newMsgId }); // Add message with initial text
-                             } else {
-                                 // Append to existing
-                                 const newlyAppendedText = part.text; // Text from this chunk
-                                 const currentFullText = liveStreamingTextRef.current + newlyAppendedText; // Calculate new full text
-                                 liveStreamingTextRef.current = currentFullText; // Update ref *before* state update
-                                 updateLiveMessage(liveStreamingMsgIdRef.current, { text: currentFullText }); // Pass the calculated full text directly
-                             }
-                         } else if (part.inlineData?.mimeType?.startsWith('audio/')) {
-                              // --- Handle Audio ---
+                         // --- Use the unified addOrUpdate function ---
+                         addOrUpdateLiveModelMessagePart(part); // This now handles text aggregation correctly
+
+                         // Handle Audio separately for playback (only if modality allows)
+                         if (part.inlineData?.mimeType?.startsWith('audio/')) {
                               isAudioChunk = true;
                               if (liveModality === 'AUDIO') {
                                    if (!isModelSpeaking) setIsModelSpeaking(true);
-                                   if (!audioContextRef.current) initAudioContexts(); // Use the plural init
+                                   if (!audioContextRef.current) initAudioContexts();
                                    if (audioContextRef.current?.state === 'running') {
                                         try { const bs = window.atob(part.inlineData.data); const len = bs.length; const bytes = new Uint8Array(len); for (let i = 0; i < len; i++) bytes[i] = bs.charCodeAt(i); audioQueueRef.current.push(bytes.buffer); playAudioQueue(); }
                                         catch (e) { console.error("[Audio] Decode/Queue Error:", e); setAudioError("Audio processing error."); }
@@ -846,7 +898,7 @@ export function useLiveSession({ currentVoice }) {
       setSessionTimeLeft(null); // Reset timer on close
       setMapDisplayData(null); // Clear map on close
     };
-  }, [ liveModality, currentVoice, liveSystemInstruction, addLiveMessage, updateLiveMessage, initAudioContexts, playAudioQueue, closeAudioContexts, isRecording, stopRecordingInternal]); // Adjusted dependencies
+  }, [ liveModality, currentVoice, liveSystemInstruction, addLiveMessage, updateLiveMessage, addOrUpdateLiveModelMessagePart, initAudioContexts, playAudioQueue, closeAudioContexts, isRecording, stopRecordingInternal]); // Adjusted dependencies
 
   // --- Memoized Public Handlers ---
   const startLiveSession = useCallback(() => {

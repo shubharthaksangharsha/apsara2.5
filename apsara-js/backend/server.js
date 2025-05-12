@@ -690,11 +690,12 @@ async function handleLiveConnection(ws, req) {
                              if (toolHandlers[call.name]) {
                                  try {
                                      const result = await toolHandlers[call.name](call.args || {});
-                                     responsesToSend.push({ id: call.id, name: call.name, response: { result: result } }); // Send FULL result back to Google
+                                     console.log(`[Live Backend] Tool ${call.name} executed. Result:`, JSON.stringify(result));
+                                     responsesToSend.push({ id: call.id, name: call.name, response: { result: result } });
 
                                      // --- Check for Map Display Data and send separate event ---
                                      if (result?._mapDisplayData && ws.readyState === WebSocket.OPEN) {
-                                        console.log(`[Live Backend] Sending map_display_update event for tool ${call.name} <${sessionIdShort}>.`);
+                                        console.log(`[Live Backend] Sending map_display_update event for tool ${call.name} with data:`, JSON.stringify(result._mapDisplayData));
                                         ws.send(JSON.stringify({
                                             event: 'map_display_update',
                                             mapData: result._mapDisplayData // Send only the map-specific data
