@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Menu, MoreVertical, UserIcon, Edit2, Pin, PinOff, Trash2 } from 'lucide-react';
 
 export default function Sidebar({
@@ -32,6 +32,18 @@ export default function Sidebar({
   const handleEditCancel = () => {
     setEditingId(null);
   };
+
+  useEffect(() => {
+    if (sidebarLocked) {
+      document.body.classList.add('sidebar-locked');
+    } else {
+      document.body.classList.remove('sidebar-locked');
+    }
+    
+    return () => {
+      document.body.classList.remove('sidebar-locked');
+    };
+  }, [sidebarLocked]);
 
   return (
     <aside

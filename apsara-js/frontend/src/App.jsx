@@ -391,7 +391,7 @@ export default function App() {
         </div>
 
         {/* Fixed bottom container for file preview and input */}
-        <div className="flex-shrink-0 w-full border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+        <div className="fixed bottom-0 left-0 right-0 lg:left-auto w-full border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 z-20">
           {/* File Preview Bar - Renders if files are present */}
           <FilePreviewBar files={files} onRemoveFile={removeFile} />
 

@@ -1040,6 +1040,33 @@ export function useLiveSession({ currentVoice }) {
       };
   }, [closeAudioContexts]); // Adjusted dependency
 
+  // Add this function to the useLiveSession hook
+  const flipCamera = useCallback(async () => {
+    if (isStreamingVideo && videoDevices.length > 1) {
+      try {
+        // Find current device index
+        const currentIndex = videoDevices.findIndex(device => device.deviceId === selectedVideoDeviceId);
+        // Get next device (circular)
+        const nextIndex = (currentIndex + 1) % videoDevices.length;
+        const nextDeviceId = videoDevices[nextIndex].deviceId;
+        
+        // Stop current stream - use stopVideoStreamInternal instead of stopVideoStream
+        stopVideoStreamInternal();
+        
+        // Short delay to ensure clean switch
+        setTimeout(() => {
+          // Start with new device
+          setSelectedVideoDeviceId(nextDeviceId);
+          startVideoStreamInternal(nextDeviceId);
+        }, 300);
+        
+      } catch (error) {
+        console.error("Error switching camera:", error);
+        addLiveMessage({ role: 'error', text: `Camera switch error: ${error.message || 'Unknown error'}` });
+      }
+    }
+  }, [isStreamingVideo, videoDevices, selectedVideoDeviceId, stopVideoStreamInternal, setSelectedVideoDeviceId, startVideoStreamInternal, addLiveMessage]);
+
   return {
     // State
     liveMessages, liveConnectionStatus, liveModality, isModelSpeaking, isRecording, isStreamingVideo, audioError, sessionTimeLeft,
@@ -1065,5 +1092,6 @@ export function useLiveSession({ currentVoice }) {
     startVideoStream: startVideoStreamInternal, stopVideoStream: stopVideoStreamInternal, // Expose video handlers
     startScreenShare: startScreenShareInternal, // <-- New handler
     stopScreenShare: stopScreenShareInternal,   // <-- New handler
+    flipCamera,
   };
 }
