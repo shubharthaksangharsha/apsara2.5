@@ -254,3 +254,18 @@ input, select, textarea {
     font-size: inherit; /* Revert to default on larger screens */
   }
 }
+
+/* Add this to your CSS for dynamic sidebar width calculation */
+:root {
+  --sidebar-width: 0px;
+}
+
+@media (min-width: 1024px) {
+  :root {
+    --sidebar-width: 5rem; /* 20px (default collapsed width) */
+  }
+  
+  body.sidebar-locked {
+    --sidebar-width: 16rem; /* 64px (locked expanded width) */
+  }
+}
