@@ -716,21 +716,19 @@ export default function LivePopup({
                 > {isRecording ? <MicOff className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> : <Mic className="h-3.5 w-3.5 sm:h-4 sm:w-4" />} </button>
                 <button
                   onClick={handleVideoToggle}
-                  disabled={isStreamingScreen}
                   className={`p-1.5 sm:p-2 rounded-lg transition-colors group focus:outline-none focus:ring-1 focus:ring-indigo-400 ${
                     isStreamingVideo ? 'bg-blue-100 dark:bg-blue-700/50 text-blue-600 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-700/70 animate-pulse'
                                    : 'bg-gray-200 dark:bg-gray-600 text-gray-500 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-500'}
-                                   ${isStreamingScreen ? 'opacity-50 cursor-not-allowed' : ''}`}
-                  title={isStreamingVideo ? 'Stop Video' : (isStreamingScreen ? 'Video disabled' : 'Start Video')}
+                                   `}
+                  title={isStreamingVideo ? 'Stop Video' : 'Start Video'}
                 > {isStreamingVideo ? <VideoOff className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> : <Video className="h-3.5 w-3.5 sm:h-4 sm:w-4" />} </button>
                 <button
                   onClick={() => { if (isStreamingScreen) onStopScreenShare(); else onStartScreenShare(); }}
-                  disabled={isStreamingVideo}
                   className={`p-1.5 sm:p-2 rounded-lg transition-colors group focus:outline-none focus:ring-1 focus:ring-indigo-400 ${
                     isStreamingScreen ? 'bg-green-100 dark:bg-green-700/50 text-green-600 dark:text-green-300 hover:bg-green-200 dark:hover:bg-green-700/70 animate-pulse'
                                      : 'bg-gray-200 dark:bg-gray-600 text-gray-500 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-500'}
-                                     ${isStreamingVideo ? 'opacity-50 cursor-not-allowed' : ''}`}
-                  title={isStreamingScreen ? 'Stop Screen Share' : (isStreamingVideo ? 'Screen share disabled' : 'Start Screen Share')}
+                                     `}
+                  title={isStreamingScreen ? 'Stop Screen Share' : 'Start Screen Share'}
                 > {isStreamingScreen ? <ScreenShareOff className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> : <ScreenShare className="h-3.5 w-3.5 sm:h-4 sm:w-4" />} </button>
                 
                 <div className="relative flex-1">
