@@ -12,11 +12,11 @@ const getCurrentTimeSchema = {
   name: 'getCurrentTime',
   description: 'Returns current server time in ISO format',
   parameters: {
-    type: 'object',
+    type: 'OBJECT',
     properties: {
-      timezone: { type: 'string', description: 'Optional. Time zone ID (e.g. Asia/Adelaide)' }
+      timezone: { type: 'STRING', description: 'Optional. Time zone ID (e.g. Asia/Adelaide)' }
     },
-    required: []
+    // required: [] // Commented out
   }
 };
 
@@ -24,11 +24,11 @@ const echoSchema = {
   name: 'echo',
   description: 'Echoes the provided message',
   parameters: {
-    type: 'object',
+    type: 'OBJECT',
     properties: {
-      message: { type: 'string' }
+      message: { type: 'STRING', description: 'The message to echo. Optional.' }
     },
-    required: ['message']
+    // required: ['message'] // Commented out
   }
 };
 
@@ -37,9 +37,9 @@ const getBatteryStatusSchema = {
   name: 'getBatteryStatus',
   description: 'Gets the current battery level and charging status of the laptop hosting the server.',
   parameters: {
-    type: 'object',
+    type: 'OBJECT',
     properties: {}, // No parameters needed for this simple version
-    required: []
+    // required: [] // Commented out
   }
 };
 
@@ -50,13 +50,13 @@ const getWeatherSchema = {
   name: 'getWeather',
   description: 'Gets the current weather information for a specified city.',
   parameters: {
-    type: 'object',
+    type: 'OBJECT',
     properties: {
-      city: { type: 'string', description: 'The name of the city (e.g., "London").' },
-      countryCode: { type: 'string', description: 'Optional. The two-letter ISO country code (e.g., "GB" for Great Britain).' },
-      units: { type: 'string', enum: ['metric', 'imperial'], description: 'Optional. Units for temperature. Defaults to metric (Celsius).' }
+      city: { type: 'STRING', description: 'The name of the city (e.g., "London").' },
+      countryCode: { type: 'STRING', description: 'Optional. The two-letter ISO country code (e.g., "GB" for Great Britain).' },
+      units: { type: 'STRING', enum: ['metric', 'imperial'], description: 'Optional. Units for temperature. Defaults to metric (Celsius).' }
     },
-    required: ['city']
+    // required: ['city'] // Commented out
   }
 };
 
@@ -64,12 +64,12 @@ const captureScreenshotSchema = {
   name: 'captureScreenshot',
   description: 'Captures a "screenshot" (placeholder for server-side action). In a real scenario, this might involve a headless browser or specific server utility.',
   parameters: {
-    type: 'object',
+    type: 'OBJECT',
     properties: {
-      targetUrl: { type: 'string', description: 'Optional. If capturing a webpage, the URL to capture.' },
-      fileName: { type: 'string', description: 'Optional. Suggested filename for the screenshot.' }
+      targetUrl: { type: 'STRING', description: 'Optional. If capturing a webpage, the URL to capture.' },
+      fileName: { type: 'STRING', description: 'Optional. Suggested filename for the screenshot.' }
     },
-    required: []
+    // required: [] // Commented out
   }
 };
 
@@ -147,6 +147,12 @@ async function handleGetBatteryStatus() {
 
 
 async function handleGetWeather({ city, countryCode, units = 'metric' }) {
+  // It's important that this handler is robust if 'city' is not provided by the model,
+  // now that required: ['city'] is removed from the schema.
+  // For now, we assume the model will still attempt to provide it based on description.
+  if (!city) {
+    return { status: 'error', message: 'City is required to get weather information.' };
+  }
   console.log(`[Tool: getWeather] Request for weather: City: "${city}", Country: ${countryCode || 'N/A'}, Units: ${units}`);
   return {
     status: 'success',

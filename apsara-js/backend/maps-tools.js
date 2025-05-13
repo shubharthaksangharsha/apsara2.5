@@ -7,19 +7,23 @@ export const getGoogleMapsRouteSchema = {
   name: 'getGoogleMapsRoute',
   description: 'Gets travel duration, distance, and route details between two locations using Google Maps.',
   parameters: {
-    type: 'object',
+    type: 'OBJECT',
     properties: {
-      origin: { type: 'string', description: 'The starting address, place name, or coordinates (lat,lng).' },
-      destination: { type: 'string', description: 'The destination address, place name, or coordinates (lat,lng).' },
-      travelMode: { type: 'string', enum: ['DRIVING', 'WALKING', 'BICYCLING', 'TRANSIT'], description: 'Optional. The mode of travel. Defaults to DRIVING.' }
+      origin: { type: 'STRING', description: 'The starting address, place name, or coordinates (lat,lng).' },
+      destination: { type: 'STRING', description: 'The destination address, place name, or coordinates (lat,lng).' },
+      travelMode: { type: 'STRING', enum: ['DRIVING', 'WALKING', 'BICYCLING', 'TRANSIT'], description: 'Optional. The mode of travel. Defaults to DRIVING.' }
     },
-    required: ['origin', 'destination']
+    // required: ['origin', 'destination']
   }
 };
 
 // --- Tool Handlers for Maps ---
 
 export async function handleGetGoogleMapsRoute({ origin, destination, travelMode = 'DRIVING' }) {
+  if (!origin || !destination) {
+    return { status: 'error', message: 'Origin and destination are required to get a Google Maps route.' };
+  }
+
   const apiKey = process.env.GOOGLE_MAPS_API_KEY;
   // --- ADD LOG ---
   const apiKeySnippet = apiKey ? `${apiKey.substring(0, 4)}...${apiKey.substring(apiKey.length - 4)}` : 'Not Found!';

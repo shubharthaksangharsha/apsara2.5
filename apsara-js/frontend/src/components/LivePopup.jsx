@@ -237,7 +237,7 @@ export default function LivePopup({
         onClose(); // Use the onClose from props which should handle session end
      }
   }
-  
+
   const handleCopyContent = (text, id) => {
     navigator.clipboard.writeText(text);
     setCopiedContent(id);
@@ -433,13 +433,13 @@ export default function LivePopup({
                      const chatContent = renderChatMessageContent(msg);
                      if (!chatContent) return null; // Don't render the message container if no content
 
-                     return (
+                    return (
                        <div key={msg.id + '-chat'} className={`group flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'} w-full`}>
                          <div className={`max-w-[85%] px-3.5 py-1.5 rounded-xl shadow-md text-sm ${msg.role === 'user' ? 'bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 text-white rounded-br-lg' : msg.role === 'model' ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 border border-gray-200 dark:border-gray-600' : msg.role === 'error' ? 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300 border border-red-300 dark:border-red-600' : 'bg-gray-100 dark:bg-gray-600/50 text-gray-600 dark:text-gray-300 italic text-xs'} hover:shadow-lg`} style={{ minWidth: 70 }}>
                            {chatContent}
                          </div>
-                       </div>
-                     );
+                      </div>
+                    );
                     }).filter(Boolean) /* Remove null entries */}
                   <div ref={messagesEndRef} />
                 </div>
@@ -454,7 +454,7 @@ export default function LivePopup({
                             <span>{item.data.language?.toUpperCase() || 'CODE'}</span>
                             <button className="flex items-center gap-1 text-indigo-300 hover:text-white transition text-xs" onClick={() => handleCopyContent(item.data.code, item.id)} title="Copy code">
                               <ClipboardCopy className="w-3.5 h-3.5" /> {copiedContent === item.id ? 'Copied!' : 'Copy'}
-                            </button>
+                          </button>
                           </div>
                           <pre className="p-3.5 overflow-x-auto text-indigo-100 font-mono bg-gray-800/80 custom-scrollbar"><code>{item.data.code}</code></pre>
                         </div>
@@ -471,8 +471,8 @@ export default function LivePopup({
                                 </button>
                               </div>
                               <pre className="p-3 overflow-x-auto font-mono custom-scrollbar">{item.data.output}</pre>
-                            </div>
-                           );
+                      </div>
+                    );
                          })()
                       )}
                       {item.type === 'image' && (
@@ -498,8 +498,8 @@ export default function LivePopup({
                     ) : (
                       <p className="text-gray-500 dark:text-gray-400 text-sm p-4 text-center flex items-center justify-center h-full">Map data will appear here when available.</p>
                     )}
-                  </div>
-                </div>
+                      </div>
+              </div>
               )}
               {TABS.find(t => t.id === activeTab)?.isPlaceholder && (
                 <p className="text-gray-500 dark:text-gray-400 text-sm p-4 text-center">{TABS.find(t => t.id === activeTab)?.label} tab content (Placeholder).</p>

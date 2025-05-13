@@ -628,11 +628,11 @@ async function handleLiveConnection(ws, req) {
        tools: [
            { googleSearch: {} },        // Enable Google Search (native)
            { codeExecution: {} },       // Enable Code Execution (native)
-           { functionDeclarations: customToolDeclarations } // Use imported custom tool declarations
+           { functionDeclarations: customToolDeclarations } // RE-ENABLE custom tool declarations
        ],
    };
 
-   console.log('[Live Backend] Config prepared:', JSON.stringify(liveConnectConfig, null, 2));
+   console.log('[Live Backend] Config prepared (Custom tools ENABLED - echo only):', JSON.stringify(liveConnectConfig, null, 2));
 
 
    let session;

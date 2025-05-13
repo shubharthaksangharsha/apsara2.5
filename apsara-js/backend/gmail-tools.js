@@ -63,13 +63,13 @@ export const sendGmailSchema = {
   name: 'sendGmail',
   description: 'Sends an email message via Gmail using the pre-authorized server account. You can use predefined aliases like "me", "bro", "gf", "mom", "dad".',
   parameters: {
-    type: 'object',
+    type: 'OBJECT',
     properties: {
-      to: { type: 'string', description: 'The recipient\'s email address or a predefined alias (e.g., "mom", "bro@example.com").' },
-      subject: { type: 'string', description: 'The subject of the email.' },
-      body: { type: 'string', description: 'The plain text content of the email.' },
+      to: { type: 'STRING', description: 'The recipient\'s email address or a predefined alias (e.g., "mom", "bro@example.com").' },
+      subject: { type: 'STRING', description: 'The subject of the email.' },
+      body: { type: 'STRING', description: 'The plain text content of the email.' },
     },
-    required: ['to', 'subject', 'body']
+    // required: ['to', 'subject', 'body']
   }
 };
 
@@ -77,13 +77,13 @@ export const draftGmailSchema = {
   name: 'draftGmail',
   description: 'Creates a draft email message in Gmail using the pre-authorized server account. Does not send. You can use predefined aliases like "me", "bro", "gf", "mom", "dad".',
   parameters: {
-    type: 'object',
+    type: 'OBJECT',
     properties: {
-      to: { type: 'string', description: 'Optional. The recipient\'s email address or a predefined alias.' },
-      subject: { type: 'string', description: 'Optional. The subject of the draft.' },
-      body: { type: 'string', description: 'Optional. The plain text content of the draft.' },
+      to: { type: 'STRING', description: 'Optional. The recipient\'s email address or a predefined alias.' },
+      subject: { type: 'STRING', description: 'Optional. The subject of the draft.' },
+      body: { type: 'STRING', description: 'Optional. The plain text content of the draft.' },
     },
-    required: []
+    // required: []
   }
 };
 
@@ -91,12 +91,12 @@ export const listGmailMessagesSchema = {
   name: 'listGmailMessages',
   description: 'Lists recent email messages from the authenticated Gmail account.',
   parameters: {
-    type: 'object',
+    type: 'OBJECT',
     properties: {
-      maxResults: { type: 'integer', description: 'Optional. Maximum number of messages to return (e.g., 5 or 10). Defaults to 5.' },
-      query: { type: 'string', description: 'Optional. Gmail search query (e.g., "is:unread", "from:boss@example.com").' }
+      maxResults: { type: 'INTEGER', description: 'Optional. Maximum number of messages to return (e.g., 5 or 10). Defaults to 5.' },
+      query: { type: 'STRING', description: 'Optional. Gmail search query (e.g., "is:unread", "from:boss@example.com").' }
     },
-    required: []
+    // required: []
   }
 };
 
@@ -104,18 +104,25 @@ export const getGmailMessageSchema = {
   name: 'getGmailMessage',
   description: 'Retrieves the full content (or snippet) of a specific email by its ID.',
   parameters: {
-    type: 'object',
+    type: 'OBJECT',
     properties: {
-      messageId: { type: 'string', description: 'The ID of the Gmail message to retrieve.' },
-      format: { type: 'string', enum: ['full', 'metadata', 'raw'], description: 'Optional. Format of the message parts to retrieve. Defaults to "metadata". "full" includes payload.'}
+      messageId: { type: 'STRING', description: 'The ID of the Gmail message to retrieve.' },
+      format: { type: 'STRING', enum: ['full', 'metadata', 'raw'], description: 'Optional. Format of the message parts to retrieve. Defaults to "metadata". "full" includes payload.'}
     },
-    required: ['messageId']
+    // required: ['messageId']
   }
 };
 
 // --- Tool Handlers for Gmail ---
 
 export async function handleSendGmail({ to, subject, body }) {
+  if (!to || !subject || !body) {
+    let missing = [];
+    if (!to) missing.push('recipient (to)');
+    if (!subject) missing.push('subject');
+    if (!body) missing.push('body');
+    return { status: 'error', message: `Missing required information for sending email: ${missing.join(', ')}.` };
+  }
   const resolvedTo = resolveEmailAlias(to);
   if (!resolvedTo) {
       return { status: 'error', message: `Invalid recipient alias or email address provided: "${to}". Please use a known alias or a full email address.` };
