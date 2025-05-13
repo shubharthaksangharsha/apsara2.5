@@ -44,8 +44,8 @@ export function useLiveSession({ currentVoice }) {
   const scriptProcessorNodeRef = useRef(null); // For PCM capture
   const mediaStreamSourceRef = useRef(null); // Mic stream source
   const videoStreamRef = useRef(null); // Webcam stream
-  const videoElementRef = useRef(null); // Hidden video element
-  const canvasElementRef = useRef(null); // Canvas for snapshotting
+  const videoElementRef = useRef(null); // Hidden video element FOR WEBCAM
+  const canvasElementRef = useRef(null); // Canvas for snapshotting FOR WEBCAM
   const audioQueueRef = useRef([]);
   const isPlayingAudioRef = useRef(false);
   const mediaRecorderRef = useRef(null);
@@ -54,6 +54,8 @@ export function useLiveSession({ currentVoice }) {
   const sessionResumeHandleRef = useRef(null); // Ref to store the handle
   const isStreamingVideoRef = useRef(isStreamingVideo);
   const screenStreamRef = useRef(null); // <-- New ref for screen share stream
+  const screenVideoElementRef = useRef(null); // <-- Hidden video element FOR SCREEN SHARE
+  const screenCanvasElementRef = useRef(null); // <-- Canvas for snapshotting FOR SCREEN SHARE
   const isScreenSharingRef = useRef(isStreamingScreen); // <-- New ref for screen share status
 
   // --- Sync state to refs ---
@@ -415,10 +417,10 @@ export function useLiveSession({ currentVoice }) {
           videoElementRef.current.srcObject = null;
           videoElementRef.current.onloadedmetadata = null;
           videoElementRef.current.onerror = null;
-          console.log('[Video Stream] Detached stream and cleaned up video element listeners.');
+          console.log('[Video Stream] Detached stream and cleaned up video element listeners for webcam.');
        }
-
-  }, [addLiveMessage]); // Removed state dependency, rely on ref
+        // No need to destroy the videoElementRef itself, it can be reused.
+  }, [addLiveMessage]);
 
   const startVideoStreamInternal = useCallback(async (deviceId = null) => {
       const ws = liveWsConnection.current;
@@ -450,10 +452,16 @@ export function useLiveSession({ currentVoice }) {
           const currentDeviceLabel = currentTrack ? currentTrack.label : 'Unknown Camera';
           addLiveMessage({ role: 'system', text: `Webcam access granted (${currentDeviceLabel}).` });
 
-          // Ensure elements exist
-          if (!videoElementRef.current) videoElementRef.current = document.createElement('video');
+          // Ensure elements exist FOR WEBCAM
+          if (!videoElementRef.current) {
+            videoElementRef.current = document.createElement('video');
+            console.log('[Video Stream] Created videoElementRef for webcam.');
+          }
           videoElementRef.current.setAttribute('playsinline', ''); videoElementRef.current.muted = true;
-          if (!canvasElementRef.current) canvasElementRef.current = document.createElement('canvas');
+          if (!canvasElementRef.current) {
+            canvasElementRef.current = document.createElement('canvas');
+            console.log('[Video Stream] Created canvasElementRef for webcam.');
+          }
 
           const video = videoElementRef.current;
           const canvas = canvasElementRef.current;
@@ -563,19 +571,16 @@ export function useLiveSession({ currentVoice }) {
     });
     screenStreamRef.current = null;
 
-    // Note: We use the same videoElementRef and canvasElementRef for simplicity,
-    // assuming webcam and screen share are mutually exclusive or managed carefully.
-    // If they can run concurrently and display separately, they'd need distinct refs.
-    if (videoElementRef.current && videoElementRef.current.srcObject === screenStreamRef.current) { // Check if it was screen
-        videoElementRef.current.pause();
-        videoElementRef.current.srcObject = null;
-        videoElementRef.current.onloadedmetadata = null;
-        videoElementRef.current.onerror = null;
+    // Clean up screen share specific video element
+    if (screenVideoElementRef.current) {
+        screenVideoElementRef.current.pause();
+        screenVideoElementRef.current.srcObject = null;
+        screenVideoElementRef.current.onloadedmetadata = null;
+        screenVideoElementRef.current.onerror = null;
+        console.log('[Screen Share] Detached stream and cleaned up screenVideoElementRef listeners.');
     }
-     // We might not need to clean canvasElementRef here if it's reused by video
-     // or if screen sharing doesn't use the same canvas for local preview.
-     // For sending, it WILL use a canvas.
-
+    // No need to destroy screenVideoElementRef, it can be reused.
+    // screenCanvasElementRef does not hold resources directly that need explicit cleanup beyond its use.
   }, [addLiveMessage]);
 
   const startScreenShareInternal = useCallback(async () => {
@@ -594,14 +599,19 @@ export function useLiveSession({ currentVoice }) {
       screenStreamRef.current = stream;
       addLiveMessage({ role: 'system', text: 'Screen share access granted.' });
 
-      // Re-use video and canvas elements for capturing frames for sending
-      // Ensure elements exist (same as video stream)
-      if (!videoElementRef.current) videoElementRef.current = document.createElement('video');
-      videoElementRef.current.setAttribute('playsinline', ''); videoElementRef.current.muted = true;
-      if (!canvasElementRef.current) canvasElementRef.current = document.createElement('canvas');
+      // Ensure dedicated elements exist FOR SCREEN SHARE
+      if (!screenVideoElementRef.current) {
+        screenVideoElementRef.current = document.createElement('video');
+        console.log('[Screen Share] Created screenVideoElementRef.');
+      }
+      screenVideoElementRef.current.setAttribute('playsinline', ''); screenVideoElementRef.current.muted = true;
+      if (!screenCanvasElementRef.current) {
+        screenCanvasElementRef.current = document.createElement('canvas');
+        console.log('[Screen Share] Created screenCanvasElementRef.');
+      }
 
-      const video = videoElementRef.current; // This video element is for processing, not necessarily for display
-      const canvas = canvasElementRef.current;
+      const video = screenVideoElementRef.current; // Use screen-specific video element
+      const canvas = screenCanvasElementRef.current; // Use screen-specific canvas element
 
       video.onloadedmetadata = () => {
         console.log("[Screen Share] Stream metadata loaded.");
@@ -664,7 +674,7 @@ export function useLiveSession({ currentVoice }) {
       };
 
       video.onerror = (err) => { console.error("[Screen Share] Video element error (for processing):", err); addLiveMessage({ role: 'error', text: `Screen share processing error: ${err.message || 'Unknown'}`}); stopScreenShareInternal(); };
-      video.srcObject = stream; // Assign the screen share stream to the processing video element
+      video.srcObject = stream; // Assign the screen share stream to the screen-specific processing video element
       video.play().catch(err => { console.error("[Screen Share] Error playing processing video:", err); addLiveMessage({ role: 'error', text: `Screen share playback error: ${err.message}`}); stopScreenShareInternal(); });
 
       // Handle when the user stops sharing via the browser's native UI
@@ -1010,6 +1020,23 @@ export function useLiveSession({ currentVoice }) {
               liveWsConnection.current = null; // Clear ref on unmount
           }
           closeAudioContexts(); // Close both audio contexts on unmount
+          // Clean up video/canvas elements if they were created
+          if (videoElementRef.current) {
+              videoElementRef.current.remove(); // Remove from DOM if they were ever appended (they are not currently)
+              videoElementRef.current = null;
+          }
+          if (canvasElementRef.current) {
+              canvasElementRef.current.remove();
+              canvasElementRef.current = null;
+          }
+          if (screenVideoElementRef.current) {
+              screenVideoElementRef.current.remove();
+              screenVideoElementRef.current = null;
+          }
+          if (screenCanvasElementRef.current) {
+              screenCanvasElementRef.current.remove();
+              screenCanvasElementRef.current = null;
+          }
       };
   }, [closeAudioContexts]); // Adjusted dependency
 
