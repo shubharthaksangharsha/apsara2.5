@@ -36,8 +36,8 @@ export default function Sidebar({
   return (
     <aside
       className={`
-        relative inset-y-0 left-0 bg-white dark:bg-gray-800 shadow-lg
-        flex flex-col h-full z-40
+        fixed lg:relative inset-y-0 left-0 bg-white dark:bg-gray-800 shadow-lg
+        flex flex-col h-full z-50
         transition-all duration-500 ease-in-out
         ${isSidebarOpen ? 'w-64' : 'w-0 -translate-x-full'}  /* Mobile width */
         lg:translate-x-0                                    /* Ensure visible on large screens */
