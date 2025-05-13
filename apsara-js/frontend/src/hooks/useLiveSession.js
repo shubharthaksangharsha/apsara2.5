@@ -27,6 +27,9 @@ export function useLiveSession({ currentVoice }) {
   const [videoDevices, setVideoDevices] = useState([]); // <-- New state for video devices
   const [selectedVideoDeviceId, setSelectedVideoDeviceId] = useState(null); // <-- New state for selected video device
   const [mapDisplayData, setMapDisplayData] = useState(null); // <-- New state for map data
+  const [weatherUIData, setWeatherUIData] = useState(null); // <-- NEW: State for weather UI data
+  const [calendarEvents, setCalendarEvents] = useState([]); // <-- NEW: State for calendar events
+  const [calendarEventsLastUpdated, setCalendarEventsLastUpdated] = useState(0); // Use 0 as initial, can be a timestamp or counter
 
   // --- ADD a useEffect to log state changes for mapDisplayData ---
   useEffect(() => {
@@ -97,7 +100,7 @@ export function useLiveSession({ currentVoice }) {
                   text: updatedMessage.parts[lastPartIndex].text + updates.text
               };
               console.log(`[Live WS] Appended text to last part of message ${id}`);
-          } else {
+      } else {
               // If no parts, or last part isn't text, add a new text part
               updatedMessage.parts.push({ text: updates.text });
               console.log(`[Live WS] Added new text part to message ${id}`);
@@ -114,10 +117,10 @@ export function useLiveSession({ currentVoice }) {
       }
 
       // Apply any other remaining updates (e.g., metadata, though less common here)
-      updatedMessages[index] = {
+        updatedMessages[index] = {
           ...updatedMessage,
           ...Object.fromEntries(Object.entries(updates).filter(([key]) => key !== 'id'))
-      };
+        };
 
       return updatedMessages;
     });
@@ -700,7 +703,10 @@ export function useLiveSession({ currentVoice }) {
     addLiveMessage({ role: 'system', text: 'Preparing live session...' });
     liveStreamingTextRef.current = ''; liveStreamingMsgIdRef.current = null;
     setAudioError(null);
-    setMapDisplayData(null); // Clear map data when starting a new connection
+    setMapDisplayData(null); // Clear map data
+    setWeatherUIData(null); // <-- NEW: Clear weather data
+    setCalendarEvents([]); // <-- NEW: Clear calendar events
+    setCalendarEventsLastUpdated(0); // Reset on new connection
 
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const params = new URLSearchParams({ modalities: liveModality });
@@ -837,6 +843,31 @@ export function useLiveSession({ currentVoice }) {
             } else if (data.event === 'tool_call_result') {
                  console.log("✅ [Live WS] Tool call result:", data.name, data.result);
                  addLiveMessage({ role: 'system', text: `✅ Tool ${data.name} result: ${JSON.stringify(data.result)}`});
+                if (data.name === 'getWeather' && data.result?._weatherGUIData) {
+                    console.log("🌦️ [Live WS - useLiveSession] Received weather GUI data:", data.result._weatherGUIData);
+                    setWeatherUIData(data.result._weatherGUIData);
+                }
+                if (data.name === 'listCalendarEvents' && data.result?.status === 'success' && Array.isArray(data.result.events)) {
+                    console.log("🗓️ [Live WS - useLiveSession] Received calendar events:", data.result.events);
+                    setCalendarEvents(data.result.events);
+                    setCalendarEventsLastUpdated(Date.now());
+                } else if (data.name === 'listCalendarEvents' && data.result?.status !== 'success') {
+                    addLiveMessage({ role: 'error', text: `Error fetching calendar events: ${data.result?.message || 'Unknown error'}` });
+                    setCalendarEvents([]);
+                }
+                // --- NEW: Handle createCalendarEvent success and refresh list ---
+                if (data.name === 'createCalendarEvent' && data.result?.status === 'success') {
+                    addLiveMessage({ role: 'system', text: `🎉 Event "${data.result.summary || 'New Event'}" created successfully! Refreshing calendar...` });
+                    // Trigger a refresh of the calendar events list
+                    if (liveWsConnection.current && liveWsConnection.current.readyState === WebSocket.OPEN) {
+                        // Send a command to list events again
+                        // Using sendLiveMessageText which also clears weather/map data
+                        sendLiveMessageText("list my upcoming calendar events");
+                    }
+                } else if (data.name === 'createCalendarEvent' && data.result?.status !== 'success') {
+                     addLiveMessage({ role: 'error', text: `Error creating event: ${data.result?.message || 'Unknown error'}` });
+                }
+                // --- End NEW ---
             } else if (data.event === 'tool_call_error') {
                  console.error("❌ [Live WS] Tool call error:", data.name, data.error);
                  addLiveMessage({ role: 'error', text: `❌ Tool ${data.name} error: ${data.error}`});
@@ -885,6 +916,9 @@ export function useLiveSession({ currentVoice }) {
       setLiveConnectionStatus('error');
       setSessionTimeLeft(null); // Reset timer on error
       setMapDisplayData(null); // Clear map on error
+      setWeatherUIData(null); // <-- NEW: Clear weather data on error
+      setCalendarEvents([]); // <-- NEW: Clear calendar events on error
+      setCalendarEventsLastUpdated(0); // Reset
     };
 
     ws.onclose = (event) => {
@@ -897,18 +931,27 @@ export function useLiveSession({ currentVoice }) {
       setIsModelSpeaking(false); liveStreamingTextRef.current = ''; liveStreamingMsgIdRef.current = null;
       setSessionTimeLeft(null); // Reset timer on close
       setMapDisplayData(null); // Clear map on close
+      setWeatherUIData(null); // <-- NEW: Clear weather data on close
+      setCalendarEvents([]); // <-- NEW: Clear calendar events on close
+      setCalendarEventsLastUpdated(0); // Reset
     };
   }, [ liveModality, currentVoice, liveSystemInstruction, addLiveMessage, updateLiveMessage, addOrUpdateLiveModelMessagePart, initAudioContexts, playAudioQueue, closeAudioContexts, isRecording, stopRecordingInternal]); // Adjusted dependencies
 
   // --- Memoized Public Handlers ---
   const startLiveSession = useCallback(() => {
       setMapDisplayData(null); // Clear map when starting
+      setWeatherUIData(null); // <-- NEW: Clear weather data when starting new session
+      setCalendarEvents([]); // <-- NEW: Clear calendar events when starting new session
+      setCalendarEventsLastUpdated(0); // Reset
       initAudioContexts();
       setupLiveConnection();
   }, [liveModality, initAudioContexts, setupLiveConnection]);
 
   const endLiveSession = useCallback(() => {
     setMapDisplayData(null); // Clear map when ending
+    setWeatherUIData(null); // <-- NEW: Clear weather data
+    setCalendarEvents([]); // <-- NEW: Clear calendar events
+    setCalendarEventsLastUpdated(0); // Reset
     if (liveWsConnection.current) {
         addLiveMessage({ role: 'system', text: 'Ending session...' });
         liveWsConnection.current.close(1000, "User ended session"); // Normal closure
@@ -925,6 +968,7 @@ export function useLiveSession({ currentVoice }) {
 
   const sendLiveMessageText = useCallback((text) => {
     setMapDisplayData(null); // Clear map display when user sends a new text message
+    setWeatherUIData(null); // <-- NEW: Clear weather data when user sends a new message
     const ws = liveWsConnection.current;
     if (!ws || ws.readyState !== WebSocket.OPEN || !text.trim()) {
         console.warn("Cannot send live message, WS not ready or text empty."); return;
@@ -979,6 +1023,9 @@ export function useLiveSession({ currentVoice }) {
     videoDevices, // <-- New: expose video devices
     selectedVideoDeviceId, // <-- New: expose selected video device ID
     mapDisplayData, // <-- Expose map data state
+    weatherUIData, // <-- NEW: Expose weather UI data
+    calendarEvents, // <-- NEW: Expose calendar events
+    calendarEventsLastUpdated, // Expose this new state
 
     // Setters/Handlers
     setLiveModality,

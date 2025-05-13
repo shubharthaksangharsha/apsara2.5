@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { MessageSquare, X, Send, Mic, MicOff, Video, VideoOff, ScreenShare, ScreenShareOff, ClipboardCopy, Settings as SettingsIcon, Paperclip, Info, MapPin, Code2, Terminal, CalendarDays, Users, Sun, ChevronDown, ChevronUp, Volume2 } from 'lucide-react';
+import { MessageSquare, X, Send, Mic, MicOff, Video, VideoOff, ScreenShare, ScreenShareOff, ClipboardCopy, Settings as SettingsIcon, Paperclip, Info, MapPin, Code2, Terminal, CalendarDays, Users, Sun, ChevronDown, ChevronUp, Volume2, RefreshCw, PlusCircle, Calendar as CalendarIcon } from 'lucide-react';
 import VideoStreamDisplay from './VideoStreamDisplay';
 import ScreenShareDisplay from './ScreenShareDisplay';
 import MapDisplay from './MapDisplay';
@@ -139,9 +139,8 @@ const TABS = [
   { id: 'chat', label: 'Chat', icon: MessageSquare },
   { id: 'code', label: 'Code & Output', icon: Code2 },
   { id: 'map', label: 'Map', icon: MapPin },
-  { id: 'calendar', label: 'Calendar', icon: CalendarDays, isPlaceholder: true },
-  { id: 'meetings', label: 'Meetings', icon: Users, isPlaceholder: true },
-  { id: 'weather', label: 'Weather', icon: Sun, isPlaceholder: true },
+  { id: 'calendar', label: 'Calendar', icon: CalendarIcon },
+  { id: 'weather', label: 'Weather', icon: Sun },
 ];
 
 export default function LivePopup({
@@ -163,7 +162,10 @@ export default function LivePopup({
   videoDevices, // <-- New prop
   selectedVideoDeviceId, // <-- New prop
   mapDisplayData, // Assuming this is for the maps visualizer
+  weatherUIData, // <-- NEW PROP for weather data
   currentSessionHandle, // NEW PROP for session name/ID
+  calendarEvents, // <-- NEW PROP for calendar events
+  calendarEventsLastUpdated, // <-- NEW PROP
   
   // Handlers from App.jsx
   onVoiceChange, 
@@ -190,6 +192,19 @@ export default function LivePopup({
   const [showCameraSelector, setShowCameraSelector] = useState(false);
   const [activeTab, setActiveTab] = useState(TABS[0].id);
   const [isSystemInstructionExpanded, setIsSystemInstructionExpanded] = useState(false);
+  const prevCalendarEventsLastUpdatedRef = useRef(0); // Keep track of the previous update value
+
+  // --- NEW: State for Create Event Modal & Form ---
+  const [isCreateEventModalOpen, setIsCreateEventModalOpen] = useState(false);
+  const [newEventForm, setNewEventForm] = useState({
+    summary: '',
+    startDateTime: '', // Expect ISO 8601 format e.g., "2024-08-15T10:00:00-07:00"
+    endDateTime: '',   // Expect ISO 8601 format
+    description: '',
+    location: '',
+    attendees: '', // Comma-separated emails
+  });
+  // --- END NEW ---
 
   // Calculate isSessionActive here
   const isSessionActive = connectionStatus === 'connected' || connectionStatus === 'connecting';
@@ -218,6 +233,28 @@ export default function LivePopup({
     // This log fires whenever the mapDisplayData prop changes value
     console.log("[LivePopup] mapDisplayData prop updated in useEffect:", mapDisplayData);
   }, [mapDisplayData]);
+
+  // --- NEW: useEffect to switch to Weather tab when weatherUIData is available ---
+  useEffect(() => {
+    if (weatherUIData && Object.keys(weatherUIData).length > 0) { // Check if object is not empty
+        console.log("[LivePopup] Weather data received, switching to Weather tab.", weatherUIData);
+        setActiveTab('weather');
+    }
+  }, [weatherUIData]);
+  // --- END NEW ---
+
+  // --- REVISED: useEffect to switch to Calendar tab when calendarEventsLastUpdated changes ---
+  useEffect(() => {
+    // Only switch if calendarEventsLastUpdated has a new, non-initial (non-zero) value
+    // and the calendar tab is not already active.
+    if (calendarEventsLastUpdated && calendarEventsLastUpdated !== prevCalendarEventsLastUpdatedRef.current && activeTab !== 'calendar') {
+        console.log("[LivePopup] Calendar data updated, switching to Calendar tab. Timestamp:", calendarEventsLastUpdated);
+        setActiveTab('calendar');
+    }
+    // Update the ref to the current value for the next comparison
+    prevCalendarEventsLastUpdatedRef.current = calendarEventsLastUpdated;
+  }, [calendarEventsLastUpdated, activeTab]); // Depend on calendarEventsLastUpdated and activeTab
+  // --- END REVISED ---
 
   const handleSendMessage = () => {
     if (!inputText.trim() || connectionStatus !== 'connected') return;
@@ -343,26 +380,82 @@ export default function LivePopup({
   if(activeTab === 'map') {
       console.log("[LivePopup] Rendering Map tab. Current mapDisplayData:", mapDisplayData);
   }
+  // --- NEW: Log data when weather tab is active during render ---
+  if(activeTab === 'weather') {
+    console.log("[LivePopup] Rendering Weather tab. Current weatherUIData:", weatherUIData);
+  }
+  // --- END NEW ---
+
+  const handleRefreshCalendar = () => {
+    if (connectionStatus === 'connected') {
+      onSendMessage("list my upcoming calendar events");
+    }
+  };
+
+  // --- NEW: Handler for input changes in the create event form ---
+  const handleNewEventFormChange = (e) => {
+    const { name, value } = e.target;
+    setNewEventForm(prev => ({ ...prev, [name]: value }));
+  };
+  // --- END NEW ---
+
+  // --- NEW: Handler for submitting the create event form ---
+  const handleCreateEventSubmit = () => {
+    if (connectionStatus !== 'connected') return;
+    if (!newEventForm.summary.trim() || !newEventForm.startDateTime.trim() || !newEventForm.endDateTime.trim()) {
+      alert("Please fill in Summary, Start Date/Time, and End Date/Time."); // Basic validation
+      return;
+    }
+
+    // Construct a detailed message for the AI
+    // The AI will map this to the createCalendarEvent tool and its parameters
+    let command = `Create a calendar event.`;
+    command += ` Summary is "${newEventForm.summary.trim()}".`;
+    command += ` Start time is "${newEventForm.startDateTime.trim()}".`;
+    command += ` End time is "${newEventForm.endDateTime.trim()}".`;
+    if (newEventForm.description.trim()) {
+      command += ` Description is "${newEventForm.description.trim()}".`;
+    }
+    if (newEventForm.location.trim()) {
+      command += ` Location is "${newEventForm.location.trim()}".`;
+    }
+    if (newEventForm.attendees.trim()) {
+      // Split attendees by comma, trim whitespace, and filter out empty strings
+      const attendeeList = newEventForm.attendees.split(',')
+                                .map(email => email.trim())
+                                .filter(email => email);
+      if (attendeeList.length > 0) {
+        command += ` Attendees are ${attendeeList.join(', ')}.`;
+      }
+    }
+    
+    onSendMessage(command);
+
+    // Close modal and reset form
+    setIsCreateEventModalOpen(false);
+    setNewEventForm({ summary: '', startDateTime: '', endDateTime: '', description: '', location: '', attendees: '' });
+  };
+  // --- END NEW ---
 
   return (
     <div 
-      className="fixed inset-0 z-50 flex justify-center items-center bg-black/50 backdrop-blur-md"
+      className="fixed inset-0 z-50 flex justify-center items-center bg-black/50 backdrop-blur-md p-0 md:p-4"
       onClick={handleOverlayClick}
     >
       <div
-        className="w-[95vw] h-[95vh] max-w-[1600px] max-h-[1000px] bg-white/80 dark:bg-gray-900/85 backdrop-blur-xl border border-gray-300 dark:border-gray-700 rounded-xl shadow-2xl flex flex-col overflow-hidden"
+        className="w-full h-full md:w-[95vw] md:h-[95vh] md:max-w-[1600px] md:max-h-[1000px] bg-white/80 dark:bg-gray-900/85 backdrop-blur-xl md:border border-gray-300 dark:border-gray-700 md:rounded-xl shadow-2xl flex flex-col overflow-hidden"
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex justify-between items-center px-5 py-3 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
-          <div className="flex items-center gap-3">
-            <span className="bg-indigo-100 dark:bg-indigo-900/40 p-1.5 rounded-full shadow">
-              <MessageSquare className="h-5 w-5 text-indigo-500 dark:text-indigo-300" />
+        <div className="flex justify-between items-center px-3 sm:px-5 py-2.5 sm:py-3 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
+          <div className="flex items-center gap-2 sm:gap-3">
+            <span className="bg-indigo-100 dark:bg-indigo-900/40 p-1 sm:p-1.5 rounded-full shadow">
+              <MessageSquare className="h-4 w-4 sm:h-5 sm:w-5 text-indigo-500 dark:text-indigo-300" />
             </span>
-            <h2 className="text-xl font-semibold text-gray-800 dark:text-white">Apsara Live</h2>
+            <h2 className="text-lg sm:text-xl font-semibold text-gray-800 dark:text-white">Apsara Live</h2>
           </div>
-          <div className="flex items-center gap-3">
-            <span className={`px-2.5 py-1 rounded-full text-xs font-medium shadow-sm ${
+          <div className="flex items-center gap-2 sm:gap-3">
+            <span className={`px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-full text-xs font-medium shadow-sm ${
               connectionStatus === 'connected' ? 'bg-green-100 text-green-700' :
               connectionStatus === 'connecting' ? 'bg-yellow-100 text-yellow-700' :
               connectionStatus === 'error' ? 'bg-red-100 text-red-700' :
@@ -372,18 +465,18 @@ export default function LivePopup({
             </span>
             <button 
               onClick={onClose} 
-              className="p-1.5 rounded-full text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors group"
+              className="p-1 sm:p-1.5 rounded-full text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors group"
               aria-label="Close live session"
             >
-              <X className="h-5 w-5 transition-transform duration-150 ease-in-out group-hover:scale-110" />
+              <X className="h-4 w-4 sm:h-5 sm:w-5 transition-transform duration-150 ease-in-out group-hover:scale-110" />
             </button>
           </div>
         </div>
 
-        {/* Main Content Area */}
-        <div className="flex flex-1 overflow-hidden p-3 gap-3">
-          {/* Left Panel (Logs) */}
-          <div className="w-64 bg-gray-50 dark:bg-gray-800/50 p-3 rounded-lg border border-gray-200 dark:border-gray-700 flex-shrink-0 hidden md:flex flex-col">
+        {/* Main Content Area - Adjusted for mobile layout */}
+        <div className="flex flex-col md:flex-row flex-1 overflow-hidden p-2 sm:p-3 gap-2 sm:gap-3">
+          {/* Left Panel (Logs) - Hidden on mobile, shown on md+ */}
+          <div className="w-full md:w-64 bg-gray-50 dark:bg-gray-800/50 p-2 sm:p-3 rounded-lg border border-gray-200 dark:border-gray-700 flex-shrink-0 hidden md:flex flex-col">
             <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2 border-b pb-1.5 dark:border-gray-600">Event Logs</h3>
             <div className="text-xs text-gray-600 dark:text-gray-400 flex-grow overflow-y-auto custom-scrollbar space-y-1 pr-1">
               {logMessages.length > 0 ? logMessages.map(msg => (
@@ -395,7 +488,7 @@ export default function LivePopup({
           </div>
 
           {/* Center Panel (Tabs, Tab Content, Input) */}
-          <div className="flex-1 flex flex-col bg-white/70 dark:bg-gray-800/70 p-3 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
+          <div className="flex-1 flex flex-col bg-white/70 dark:bg-gray-800/70 p-2 sm:p-3 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
             {/* Tab Navigation */}
             <div className="flex-shrink-0 border-b border-gray-300 dark:border-gray-600 mb-2 custom-scrollbar overflow-x-auto">
               <nav className="flex space-x-1 -mb-px">
@@ -404,23 +497,23 @@ export default function LivePopup({
                     key={tab.id}
                     onClick={() => setActiveTab(tab.id)}
                     disabled={tab.isPlaceholder && connectionStatus !== 'connected'}
-                    className={`whitespace-nowrap flex items-center gap-1.5 py-2 px-3 border-b-2 font-medium text-xs
+                    className={`whitespace-nowrap flex items-center gap-1 sm:gap-1.5 py-1.5 px-2 sm:py-2 sm:px-3 border-b-2 font-medium text-xs
                       ${activeTab === tab.id
                         ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400'
                         : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-200 dark:hover:border-gray-500'}
                       ${(tab.isPlaceholder && connectionStatus !== 'connected') ? 'opacity-50 cursor-not-allowed' : ''}
                     `}
                   >
-                    <tab.icon className="h-3.5 w-3.5" /> {tab.label}
+                    <tab.icon className="h-3 w-3 sm:h-3.5 sm:w-3.5" /> {tab.label}
                   </button>
                 ))}
               </nav>
             </div>
 
             {/* Tab Content */}
-            <div className="flex-1 overflow-y-auto custom-scrollbar pr-2 mb-3">
+            <div className="flex-1 overflow-y-auto custom-scrollbar pr-1 sm:pr-2 mb-2 sm:mb-3">
               {activeTab === 'chat' && (
-                <div className="space-y-3">
+                <div className="space-y-2.5 sm:space-y-3">
                   {chatTabMessages.length === 0 && !isSessionActive && (
                     <div className="text-center text-gray-500 dark:text-gray-400 p-4 flex flex-col items-center justify-center h-full">
                        <Info size={32} className="mb-2 text-gray-400 dark:text-gray-500"/>
@@ -487,7 +580,7 @@ export default function LivePopup({
               {activeTab === 'map' && (
                 <div className="w-full h-full rounded-md overflow-hidden border-2 border-dashed border-red-500 dark:border-red-400 bg-red-100 dark:bg-red-900/20 flex flex-col">
                   <p className="flex-shrink-0 p-1 text-xs text-red-700 dark:text-red-200">Map Container Area</p>
-                  <div className="flex-grow min-h-0 border-t border-red-400">
+                  <div className="flex-grow min-h-[200px] sm:min-h-0 border-t border-red-400"> {/* Min height for mobile visibility */}
                     {mapDisplayData ? (
                       <>
                         <p className="flex-shrink-0 p-1 text-xs text-green-700 dark:text-green-200 bg-green-100 dark:bg-green-900/30"> MapDisplay component should render below:</p>
@@ -501,55 +594,160 @@ export default function LivePopup({
                       </div>
               </div>
               )}
-              {TABS.find(t => t.id === activeTab)?.isPlaceholder && (
+              {activeTab === 'weather' && (
+                <div className="p-2 sm:p-4 space-y-3 text-gray-800 dark:text-gray-200">
+                  {weatherUIData && Object.keys(weatherUIData).length > 0 ? (
+                    <div className="bg-white dark:bg-gray-800 shadow-lg rounded-lg p-3 sm:p-6">
+                      <div className="flex flex-col sm:flex-row items-center justify-between mb-3 sm:mb-4">
+                        <div className="text-center sm:text-left">
+                          <h2 className="text-xl sm:text-2xl font-bold">{weatherUIData.city}, {weatherUIData.country}</h2>
+                          <p className="text-xs sm:text-sm text-gray-500 dark:text-gray-400">{weatherUIData.condition_description}</p>
+                        </div>
+                        {weatherUIData.icon && (
+                          <img 
+                            src={`https://openweathermap.org/img/wn/${weatherUIData.icon}@2x.png`} 
+                            alt={weatherUIData.condition_description}
+                            className="w-12 h-12 sm:w-16 sm:h-16 mt-2 sm:mt-0"
+                          />
+                        )}
+                      </div>
+                      <div className="grid grid-cols-2 gap-3 sm:gap-4 mb-3 sm:mb-4 text-xs sm:text-sm">
+                        <div>
+                          <p className="font-semibold text-base sm:text-lg">{weatherUIData.temp_numeric?.toFixed(1)}{weatherUIData.temp_unit_char}</p>
+                          <p className="text-[10px] sm:text-xs text-gray-500 dark:text-gray-400">Temperature</p>
+                        </div>
+                        <div>
+                          <p className="font-semibold text-base sm:text-lg">{weatherUIData.humidity_percent}%</p>
+                          <p className="text-[10px] sm:text-xs text-gray-500 dark:text-gray-400">Humidity</p>
+                        </div>
+                        <div>
+                          <p className="font-semibold text-base sm:text-lg">{weatherUIData.wind_speed_numeric?.toFixed(1)} {weatherUIData.wind_speed_unit_text}</p>
+                          <p className="text-[10px] sm:text-xs text-gray-500 dark:text-gray-400">Wind</p>
+                        </div>
+                        {/* Add more details as desired */}
+                      </div>
+                       <p className="text-[10px] sm:text-xs text-gray-400 dark:text-gray-500 text-center">Weather data from OpenWeatherMap</p>
+                    </div>
+                  ) : (
+                    <div className="text-center text-gray-500 dark:text-gray-400 p-6 flex flex-col items-center justify-center h-full bg-white dark:bg-gray-800 rounded-lg shadow">
+                       <Sun size={40} className="mb-3 text-gray-400 dark:text-gray-500"/>
+                      <p className="font-semibold mb-1">Weather Information</p>
+                      <p className="text-xs">Ask Apsara about the weather for a specific city to see details here.</p>
+                    </div>
+                  )}
+                </div>
+              )}
+              {activeTab === 'calendar' && (
+                <div className="p-2 sm:p-4 space-y-3">
+                  <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-3 sm:mb-4 gap-2">
+                    <h2 className="text-lg sm:text-xl font-semibold text-gray-800 dark:text-gray-100 flex items-center gap-1.5 sm:gap-2">
+                        <CalendarIcon size={20} sm:size={24} className="text-indigo-500 dark:text-indigo-400"/>
+                        Calendar Events
+                    </h2>
+                    <div className="flex gap-1.5 sm:gap-2 w-full sm:w-auto">
+                        <button
+                          onClick={() => setIsCreateEventModalOpen(true)}
+                          disabled={connectionStatus !== 'connected'}
+                          className="flex-1 sm:flex-auto items-center justify-center gap-1 sm:gap-1.5 px-2.5 py-1 sm:px-3 sm:py-1.5 bg-green-500 text-white text-[11px] sm:text-xs font-medium rounded-md hover:bg-green-600 transition-colors disabled:opacity-50 flex"
+                        >
+                          <PlusCircle size={12} sm:size={14} />
+                          Create Event
+                        </button>
+                        <button
+                          onClick={handleRefreshCalendar}
+                          disabled={connectionStatus !== 'connected'}
+                          className="flex-1 sm:flex-auto items-center justify-center gap-1 sm:gap-1.5 px-2.5 py-1 sm:px-3 sm:py-1.5 bg-indigo-500 text-white text-[11px] sm:text-xs font-medium rounded-md hover:bg-indigo-600 transition-colors disabled:opacity-50 flex"
+                        >
+                          <RefreshCw size={12} sm:size={14} />
+                          Refresh
+                        </button>
+                    </div>
+                  </div>
+
+                  {connectionStatus !== 'connected' && (
+                     <div className="text-center text-gray-500 dark:text-gray-400 p-4 sm:p-6 bg-white dark:bg-gray-800 rounded-lg shadow">
+                        <CalendarDays size={32} sm:size={40} className="mb-2 sm:mb-3 text-gray-400 dark:text-gray-500 mx-auto"/>
+                        <p className="font-semibold mb-1 text-sm sm:text-base">Calendar Disconnected</p>
+                        <p className="text-xs sm:text-sm">Start a session to load and manage calendar events.</p>
+                      </div>
+                  )}
+
+                  {connectionStatus === 'connected' && calendarEvents.length > 0 && (
+                    <ul className="space-y-1.5 sm:space-y-2">
+                      {calendarEvents.map(event => (
+                        <li key={event.id} className="bg-white dark:bg-gray-800 shadow rounded-lg p-2 sm:p-3 text-xs sm:text-sm">
+                          <h3 className="font-semibold text-indigo-700 dark:text-indigo-300">{event.summary}</h3>
+                          <p className="text-[10px] sm:text-xs text-gray-500 dark:text-gray-400">
+                            {new Date(event.start).toLocaleString()} - {new Date(event.end).toLocaleString()}
+                          </p>
+                          {event.location && <p className="text-[10px] sm:text-xs text-gray-500 dark:text-gray-400">Location: {event.location}</p>}
+                          {event.description && <p className="text-[10px] sm:text-xs text-gray-600 dark:text-gray-300 mt-1 whitespace-pre-wrap">{event.description}</p>}
+                           {event.link && <a href={event.link} target="_blank" rel="noopener noreferrer" className="text-[10px] sm:text-xs text-blue-500 hover:underline dark:text-blue-400 mt-1 block">View on Google Calendar</a>}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  {connectionStatus === 'connected' && calendarEvents.length === 0 && (
+                    <div className="text-center text-gray-500 dark:text-gray-400 p-6 bg-white dark:bg-gray-800 rounded-lg shadow">
+                      <CalendarDays size={40} className="mb-3 text-gray-400 dark:text-gray-500 mx-auto"/>
+                      <p className="font-semibold mb-1">No Events Found</p>
+                      <p className="text-xs">Click "Refresh Events" to load your upcoming calendar entries, or there might be no events in the default range.</p>
+                    </div>
+                  )}
+                </div>
+              )}
+              {activeTab === 'meetings' && (
+                <div className="text-center text-gray-500 dark:text-gray-400 p-4 text-center">Meetings tab content (Placeholder).</div>
+              )}
+              {TABS.find(t => t.id === activeTab)?.isPlaceholder && activeTab !== 'calendar' && activeTab !== 'weather' && (
                 <p className="text-gray-500 dark:text-gray-400 text-sm p-4 text-center">{TABS.find(t => t.id === activeTab)?.label} tab content (Placeholder).</p>
               )}
             </div>
 
             {/* Input Bar */}
             {connectionStatus === 'connected' && (
-              <div className="flex items-center gap-1.5 bg-gray-50 dark:bg-gray-700/60 rounded-lg p-2 shadow-sm border-t dark:border-gray-600/50 mt-auto flex-shrink-0">
+              <div className="flex items-center gap-1 sm:gap-1.5 bg-gray-50 dark:bg-gray-700/60 rounded-lg p-1.5 sm:p-2 shadow-sm border-t dark:border-gray-600/50 mt-auto flex-shrink-0">
                 <button
                   onClick={() => { if (isRecording) onStopRecording(); else onStartRecording(); }}
-                  className={`p-2 rounded-lg transition-colors group focus:outline-none focus:ring-1 focus:ring-indigo-400 ${
+                  className={`p-1.5 sm:p-2 rounded-lg transition-colors group focus:outline-none focus:ring-1 focus:ring-indigo-400 ${
                     isRecording ? 'bg-red-100 dark:bg-red-700/50 text-red-600 dark:text-red-300 hover:bg-red-200 dark:hover:bg-red-700/70 animate-pulse'
                                 : 'bg-gray-200 dark:bg-gray-600 text-gray-500 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-500'}`}
                   title={isRecording ? 'Stop Recording' : 'Start Recording'}
-                > {isRecording ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />} </button>
+                > {isRecording ? <MicOff className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> : <Mic className="h-3.5 w-3.5 sm:h-4 sm:w-4" />} </button>
                 <button
                   onClick={handleVideoToggle}
                   disabled={isStreamingScreen}
-                  className={`p-2 rounded-lg transition-colors group focus:outline-none focus:ring-1 focus:ring-indigo-400 ${
+                  className={`p-1.5 sm:p-2 rounded-lg transition-colors group focus:outline-none focus:ring-1 focus:ring-indigo-400 ${
                     isStreamingVideo ? 'bg-blue-100 dark:bg-blue-700/50 text-blue-600 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-700/70 animate-pulse'
                                    : 'bg-gray-200 dark:bg-gray-600 text-gray-500 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-500'}
                                    ${isStreamingScreen ? 'opacity-50 cursor-not-allowed' : ''}`}
                   title={isStreamingVideo ? 'Stop Video' : (isStreamingScreen ? 'Video disabled' : 'Start Video')}
-                > {isStreamingVideo ? <VideoOff className="h-4 w-4" /> : <Video className="h-4 w-4" />} </button>
+                > {isStreamingVideo ? <VideoOff className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> : <Video className="h-3.5 w-3.5 sm:h-4 sm:w-4" />} </button>
                 <button
                   onClick={() => { if (isStreamingScreen) onStopScreenShare(); else onStartScreenShare(); }}
                   disabled={isStreamingVideo}
-                  className={`p-2 rounded-lg transition-colors group focus:outline-none focus:ring-1 focus:ring-indigo-400 ${
+                  className={`p-1.5 sm:p-2 rounded-lg transition-colors group focus:outline-none focus:ring-1 focus:ring-indigo-400 ${
                     isStreamingScreen ? 'bg-green-100 dark:bg-green-700/50 text-green-600 dark:text-green-300 hover:bg-green-200 dark:hover:bg-green-700/70 animate-pulse'
                                      : 'bg-gray-200 dark:bg-gray-600 text-gray-500 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-500'}
                                      ${isStreamingVideo ? 'opacity-50 cursor-not-allowed' : ''}`}
                   title={isStreamingScreen ? 'Stop Screen Share' : (isStreamingVideo ? 'Screen share disabled' : 'Start Screen Share')}
-                > {isStreamingScreen ? <ScreenShareOff className="h-4 w-4" /> : <ScreenShare className="h-4 w-4" />} </button>
+                > {isStreamingScreen ? <ScreenShareOff className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> : <ScreenShare className="h-3.5 w-3.5 sm:h-4 sm:w-4" />} </button>
                 
                 <div className="relative flex-1">
                   <input
                     type="text" value={inputText} onChange={(e) => setInputText(e.target.value)}
                     onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendMessage(); }}}
-                    className="w-full p-2.5 pl-10 pr-10 border border-gray-300 dark:border-gray-500 rounded-lg bg-white dark:bg-gray-600 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-indigo-500 text-sm"
+                    className="w-full p-2 sm:p-2.5 pl-8 sm:pl-10 pr-8 sm:pr-10 border border-gray-300 dark:border-gray-500 rounded-lg bg-white dark:bg-gray-600 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-indigo-500 text-xs sm:text-sm"
                     placeholder="Type a message..." disabled={connectionStatus !== 'connected'}
                   />
-                  <button title="Attach file" className="absolute left-2 top-1/2 transform -translate-y-1/2 p-1 text-gray-400 dark:text-gray-300 hover:text-indigo-500 dark:hover:text-indigo-400">
-                    <Paperclip className="h-4 w-4" />
+                  <button title="Attach file" className="absolute left-1.5 sm:left-2 top-1/2 transform -translate-y-1/2 p-1 text-gray-400 dark:text-gray-300 hover:text-indigo-500 dark:hover:text-indigo-400">
+                    <Paperclip className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                   </button>
                   <button
                     onClick={handleSendMessage} disabled={connectionStatus !== 'connected' || !inputText.trim()}
-                    className="absolute right-2 top-1/2 transform -translate-y-1/2 p-1.5 text-white bg-indigo-500 rounded-md hover:bg-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="absolute right-1.5 sm:right-2 top-1/2 transform -translate-y-1/2 p-1 sm:p-1.5 text-white bg-indigo-500 rounded-md hover:bg-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed"
                     title="Send Message"
-                  > <Send className="h-4 w-4" /> </button>
+                  > <Send className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> </button>
                 </div>
               </div>
             )}
@@ -560,8 +758,8 @@ export default function LivePopup({
           )}
         </div>
 
-          {/* Right Settings Panel */}
-          <div className={`w-72 bg-gray-50 dark:bg-gray-800/50 p-4 rounded-lg border border-gray-200 dark:border-gray-700 flex-shrink-0 flex flex-col text-sm`}>
+          {/* Right Settings Panel - Adjusted for mobile layout */}
+          <div className={`w-full md:w-72 bg-gray-50 dark:bg-gray-800/50 p-3 sm:p-4 rounded-lg border border-gray-200 dark:border-gray-700 flex-shrink-0 flex flex-col text-sm mt-2 md:mt-0`}> {/* Stack on mobile, side-by-side on md+ */}
             <h3 className="text-base font-semibold text-center text-gray-700 dark:text-gray-200 mb-2 border-b dark:border-gray-600 pb-2 flex-shrink-0">
               {isSessionActive ? "Session Active" : "Live Session Settings"}
             </h3>
@@ -577,7 +775,7 @@ export default function LivePopup({
                   </div>
                   {isSystemInstructionExpanded ? (
                 <textarea
-                      id="liveSystemInstruction" rows={5} 
+                      id="liveSystemInstruction" rows={window.innerWidth < 768 ? 3 : 5} // Shorter on mobile
                       className="w-full p-2 border rounded-md text-xs bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 focus:ring-1 focus:ring-indigo-400 custom-scrollbar"
                       value={tempSystemInstruction} onChange={(e) => setTempSystemInstruction(e.target.value)} placeholder="e.g., Respond concisely."
                 />
@@ -595,8 +793,8 @@ export default function LivePopup({
                       { value: 'AUDIO_TEXT', label: 'Audio + Text' },
                       { value: 'TEXT', label: 'Text Only' },
                     ].map(opt => (
-                      <label key={opt.value} className="flex items-center space-x-2 cursor-pointer text-xs p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded">
-                        <input type="radio" name="liveModality" value={opt.value} checked={liveModality === opt.value} onChange={() => onModalityChange(opt.value)} className="text-indigo-600 focus:ring-indigo-500 h-3 w-3"/>
+                      <label key={opt.value} className="flex items-center space-x-2 cursor-pointer text-xs p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded sm:p-1.5">
+                        <input type="radio" name="liveModality" value={opt.value} checked={liveModality === opt.value} onChange={() => onModalityChange(opt.value)} className="text-indigo-600 focus:ring-indigo-500 h-3 w-3 sm:h-3.5 sm:w-3.5"/>
                         <span>{opt.label}</span>
                   </label>
                     ))}
@@ -607,7 +805,7 @@ export default function LivePopup({
                     <label htmlFor="liveVoiceSelect" className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">AI Voice</label>
                   <select
                       id="liveVoiceSelect" value={currentVoice} onChange={(e) => onVoiceChange(e.target.value)}
-                      className="w-full p-2 border rounded-md text-xs bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 focus:ring-1 focus:ring-indigo-400"
+                      className="w-full p-1.5 sm:p-2 border rounded-md text-xs bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 focus:ring-1 focus:ring-indigo-400"
                   >
                     {voices.length > 0 ? voices.map(v => (<option key={v} value={v}>{v}</option>)) : <option disabled>Loading voices...</option>}
                   </select>
@@ -615,12 +813,12 @@ export default function LivePopup({
               )}
                 <div>
                   <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Advanced Settings</label>
-                  <div className="p-2 border rounded-md text-xs bg-gray-100 dark:bg-gray-700/50 border-gray-300 dark:border-gray-600 text-gray-500 dark:text-gray-400"> Placeholder for advanced settings. </div>
+                  <div className="p-1.5 sm:p-2 border rounded-md text-xs bg-gray-100 dark:bg-gray-700/50 border-gray-300 dark:border-gray-600 text-gray-500 dark:text-gray-400"> Placeholder for advanced settings. </div>
                 </div>
                 <div className="pt-2 flex-grow flex items-end">
                 <button
                     onClick={handleStartSession} disabled={connectionStatus === 'connecting'}
-                    className="w-full px-4 py-2.5 bg-green-500 text-white text-sm font-semibold rounded-lg shadow hover:bg-green-600 transition-colors disabled:opacity-60 flex items-center justify-center gap-1.5">
+                    className="w-full px-3 py-2 sm:px-4 sm:py-2.5 bg-green-500 text-white text-sm font-semibold rounded-lg shadow hover:bg-green-600 transition-colors disabled:opacity-60 flex items-center justify-center gap-1.5">
                   {connectionStatus === 'connecting' ? 'Connecting...' : 'Start Session'}
                 </button>
               </div>
@@ -631,14 +829,14 @@ export default function LivePopup({
                   <p><strong>Status:</strong> {getStatusIndicator(connectionStatus)}</p>
                   {liveModality && <p><strong>Mode:</strong> {liveModality.replace('_', ' + ')}</p>}
                   {(liveModality === 'AUDIO' || liveModality === 'AUDIO_TEXT') && currentVoice && <p><strong>Voice:</strong> {currentVoice}</p>}
-                  {currentSessionHandle && <p><strong>Session ID:</strong> <span className="font-mono text-indigo-600 dark:text-indigo-400">{currentSessionHandle.slice(0,12)}...</span></p>}
+                  {currentSessionHandle && <p><strong>Session ID:</strong> <span className="font-mono text-indigo-600 dark:text-indigo-400 break-all">{currentSessionHandle.slice(0,12)}...</span></p>}
                   {!currentSessionHandle && <p><strong>Session ID:</strong> N/A</p>}
                 </div>
 
-                {/* Media Area - Fixed Height Placeholder & Actual Streams */}
-                <div className="flex-grow space-y-2 my-2 overflow-hidden flex flex-col"> 
+                {/* Media Area - Adjusted for mobile, ensure visibility */}
+                <div className="flex-grow space-y-2 my-2 overflow-hidden flex flex-col min-h-[100px] sm:min-h-0"> 
                   {/* Video Stream Area */}
-                  <div className="w-full aspect-video bg-gray-200 dark:bg-gray-700/50 rounded border dark:border-gray-600/50 flex items-center justify-center overflow-hidden min-h-[9rem] max-h-36"> 
+                  <div className="w-full aspect-video bg-gray-200 dark:bg-gray-700/50 rounded border dark:border-gray-600/50 flex items-center justify-center overflow-hidden min-h-[4rem] sm:min-h-[6rem] md:max-h-36"> 
                     {isStreamingVideo && mediaStream ? (
                       <VideoStreamDisplay videoStream={mediaStream} isWebcamActive={isStreamingVideo} /> 
                     ) : (
@@ -646,7 +844,7 @@ export default function LivePopup({
                     )}
                   </div>
                   {/* Screen Share Area */}
-                   <div className="w-full aspect-video bg-gray-200 dark:bg-gray-700/50 rounded border dark:border-gray-600/50 flex items-center justify-center overflow-hidden min-h-[9rem] max-h-36"> 
+                   <div className="w-full aspect-video bg-gray-200 dark:bg-gray-700/50 rounded border dark:border-gray-600/50 flex items-center justify-center overflow-hidden min-h-[4rem] sm:min-h-[6rem] md:max-h-36"> 
                     {isStreamingScreen && screenStream ? (
                       <ScreenShareDisplay screenStream={screenStream} isScreenSharingActive={isStreamingScreen} /> 
                     ) : (
@@ -655,14 +853,14 @@ export default function LivePopup({
                   </div>
 
                   {/* Audio Visualizer - Below media placeholders/streams */}
-                  <div className="h-8 flex items-center justify-center mt-2 flex-shrink-0">
+                  <div className="h-6 sm:h-8 flex items-center justify-center mt-1 sm:mt-2 flex-shrink-0">
                     {(isModelSpeaking && (liveModality === 'AUDIO' || liveModality === 'AUDIO_TEXT')) && (
-                       <div className="flex items-center gap-1 px-2 py-1 bg-gray-100 dark:bg-gray-700/80 backdrop-blur-sm rounded-full shadow-inner">
-                         <Volume2 className="h-3 w-3 text-blue-500 animate-pulse"/>
-                         <div className="w-1 h-2.5 bg-blue-500 rounded-full animate-pulse-audio delay-75"></div>
-                         <div className="w-1 h-3.5 bg-blue-500 rounded-full animate-pulse-audio delay-150"></div>
-                         <div className="w-1 h-2.5 bg-blue-500 rounded-full animate-pulse-audio delay-300"></div>
-                         <span className="text-[10px] text-gray-600 dark:text-gray-300 ml-1">Speaking</span>
+                       <div className="flex items-center gap-0.5 sm:gap-1 px-1.5 py-0.5 sm:px-2 sm:py-1 bg-gray-100 dark:bg-gray-700/80 backdrop-blur-sm rounded-full shadow-inner">
+                         <Volume2 className="h-2.5 w-2.5 sm:h-3 sm:w-3 text-blue-500 animate-pulse"/>
+                         <div className="w-0.5 sm:w-1 h-2 sm:h-2.5 bg-blue-500 rounded-full animate-pulse-audio delay-75"></div>
+                         <div className="w-0.5 sm:w-1 h-3 sm:h-3.5 bg-blue-500 rounded-full animate-pulse-audio delay-150"></div>
+                         <div className="w-0.5 sm:w-1 h-2 sm:h-2.5 bg-blue-500 rounded-full animate-pulse-audio delay-300"></div>
+                         <span className="text-[9px] sm:text-[10px] text-gray-600 dark:text-gray-300 ml-0.5 sm:ml-1">Speaking</span>
             </div>
           )}
                   </div>
@@ -683,35 +881,141 @@ export default function LivePopup({
             onClick={() => setShowCameraSelector(false)}
           >
             <div 
-              className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-2xl w-full max-w-sm"
+              className="bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-xl shadow-2xl w-full max-w-xs sm:max-w-sm" // Adjusted max-width
               onClick={e => e.stopPropagation()}
             >
-              <h3 className="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-4">Select Camera Source</h3>
+              <h3 className="text-base sm:text-lg font-semibold text-gray-800 dark:text-gray-100 mb-3 sm:mb-4">Select Camera Source</h3>
               {videoDevices.length > 0 ? (
-                <ul className="space-y-2">
+                <ul className="space-y-1.5 sm:space-y-2">
                   {videoDevices.map(device => (
                     <li key={device.deviceId}>
-                      <button
+              <button
                         onClick={() => handleCameraSelect(device.deviceId)}
-                        className="w-full text-left px-4 py-2 rounded-md text-gray-700 dark:text-gray-300 hover:bg-indigo-100 dark:hover:bg-indigo-700/50 transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                        className="w-full text-left px-3 py-1.5 sm:px-4 sm:py-2 rounded-md text-sm text-gray-700 dark:text-gray-300 hover:bg-indigo-100 dark:hover:bg-indigo-700/50 transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-400"
                       >
                         {device.label || `Camera ${videoDevices.indexOf(device) + 1}`}
-                      </button>
+              </button>
                     </li>
                   ))}
                 </ul>
               ) : (
-                <p className="text-gray-500 dark:text-gray-400">No camera devices found.</p>
+                <p className="text-gray-500 dark:text-gray-400 text-sm">No camera devices found.</p>
               )}
               <button
                 onClick={() => setShowCameraSelector(false)}
-                className="mt-6 w-full px-4 py-2 rounded-md text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+                className="mt-4 sm:mt-6 w-full px-3 py-1.5 sm:px-4 sm:py-2 rounded-md text-sm text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
               >
                 Cancel
+                </button>
+              </div>
+            </div>
+          )}
+
+        {/* --- NEW: Create Event Modal --- */}
+        {isCreateEventModalOpen && (
+          <div 
+            className="absolute inset-0 z-[65] flex justify-center items-center bg-black/40 backdrop-blur-sm p-3 sm:p-4" // Increased z-index
+            onClick={() => setIsCreateEventModalOpen(false)}
+          >
+            <div 
+              className="bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-xl shadow-2xl w-full max-w-xs sm:max-w-lg overflow-y-auto max-h-[90vh]" // Allow scroll on small modals
+              onClick={e => e.stopPropagation()} // Prevent click from closing modal
+            >
+              <h3 className="text-base sm:text-lg font-semibold text-gray-800 dark:text-gray-100 mb-4 sm:mb-5">Create New Calendar Event</h3>
+              <form onSubmit={(e) => { e.preventDefault(); handleCreateEventSubmit(); }} className="space-y-3 sm:space-y-4 text-xs sm:text-sm">
+                <div>
+                  <label htmlFor="eventSummary" className="block text-[11px] sm:text-xs font-medium text-gray-700 dark:text-gray-300 mb-0.5 sm:mb-1">Summary*</label>
+                  <input
+                    type="text"
+                    name="summary"
+                    id="eventSummary"
+                    value={newEventForm.summary}
+                    onChange={handleNewEventFormChange}
+                    required
+                    className="w-full p-1.5 sm:p-2 border rounded-md bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 focus:ring-1 focus:ring-indigo-500 text-xs sm:text-sm"
+                  />
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
+                  <div>
+                    <label htmlFor="eventStartDateTime" className="block text-[11px] sm:text-xs font-medium text-gray-700 dark:text-gray-300 mb-0.5 sm:mb-1">Start Date & Time*</label>
+                    <input
+                      type="datetime-local"
+                      name="startDateTime"
+                      id="eventStartDateTime"
+                      value={newEventForm.startDateTime}
+                      onChange={handleNewEventFormChange}
+                      required
+                      className="w-full p-1.5 sm:p-2 border rounded-md bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 focus:ring-1 focus:ring-indigo-500 text-xs sm:text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="eventEndDateTime" className="block text-[11px] sm:text-xs font-medium text-gray-700 dark:text-gray-300 mb-0.5 sm:mb-1">End Date & Time*</label>
+                    <input
+                      type="datetime-local"
+                      name="endDateTime"
+                      id="eventEndDateTime"
+                      value={newEventForm.endDateTime}
+                      onChange={handleNewEventFormChange}
+                      required
+                      className="w-full p-1.5 sm:p-2 border rounded-md bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 focus:ring-1 focus:ring-indigo-500 text-xs sm:text-sm"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label htmlFor="eventDescription" className="block text-[11px] sm:text-xs font-medium text-gray-700 dark:text-gray-300 mb-0.5 sm:mb-1">Description</label>
+                  <textarea
+                    name="description"
+                    id="eventDescription"
+                    rows="2" // Shorter on mobile
+                    value={newEventForm.description}
+                    onChange={handleNewEventFormChange}
+                    className="w-full p-1.5 sm:p-2 border rounded-md bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 focus:ring-1 focus:ring-indigo-500 custom-scrollbar text-xs sm:text-sm"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="eventLocation" className="block text-[11px] sm:text-xs font-medium text-gray-700 dark:text-gray-300 mb-0.5 sm:mb-1">Location</label>
+                  <input
+                    type="text"
+                    name="location"
+                    id="eventLocation"
+                    value={newEventForm.location}
+                    onChange={handleNewEventFormChange}
+                    className="w-full p-1.5 sm:p-2 border rounded-md bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 focus:ring-1 focus:ring-indigo-500 text-xs sm:text-sm"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="eventAttendees" className="block text-[11px] sm:text-xs font-medium text-gray-700 dark:text-gray-300 mb-0.5 sm:mb-1">Attendees (comma-separated emails)</label>
+                  <input
+                    type="text"
+                    name="attendees"
+                    id="eventAttendees"
+                    value={newEventForm.attendees}
+                    onChange={handleNewEventFormChange}
+                    className="w-full p-1.5 sm:p-2 border rounded-md bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 focus:ring-1 focus:ring-indigo-500 text-xs sm:text-sm"
+                    placeholder="user1@example.com, user2@example.com"
+                  />
+                </div>
+                <div className="flex flex-col sm:flex-row justify-end gap-2 sm:gap-3 pt-2 sm:pt-3">
+                  <button
+                    type="button"
+                    onClick={() => setIsCreateEventModalOpen(false)}
+                    className="w-full sm:w-auto px-3 py-1.5 sm:px-4 sm:py-2 rounded-md text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+                  >
+                    Cancel
+                  </button>
+              <button
+                    type="submit"
+                    disabled={connectionStatus !== 'connected'}
+                    className="w-full sm:w-auto px-3 py-1.5 sm:px-4 sm:py-2 rounded-md text-xs sm:text-sm font-medium text-white bg-green-600 hover:bg-green-700 transition-colors disabled:opacity-50"
+              >
+                    Create Event
               </button>
+                </div>
+              </form>
             </div>
             </div>
           )}
+        {/* --- END NEW: Create Event Modal --- */}
       </div>
     </div>
   );
