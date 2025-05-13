@@ -6,6 +6,7 @@ import { gmailToolSchemas, gmailToolHandlers } from './gmail-tools.js';
 import { calendarToolSchemas, calendarToolHandlers } from './calendar-tools.js';
 // Import from maps-tools.js
 import { mapsToolSchemas, mapsToolHandlers } from './maps-tools.js';
+import fetch from 'node-fetch'; // Ensure fetch is available (used by maps-tools.js as well)
 
 // --- Tool Schemas ---
 const getCurrentTimeSchema = {
@@ -52,11 +53,11 @@ const getWeatherSchema = {
   parameters: {
     type: 'OBJECT',
     properties: {
-      city: { type: 'STRING', description: 'The name of the city (e.g., "London").' },
-      countryCode: { type: 'STRING', description: 'Optional. The two-letter ISO country code (e.g., "GB" for Great Britain).' },
-      units: { type: 'STRING', enum: ['metric', 'imperial'], description: 'Optional. Units for temperature. Defaults to metric (Celsius).' }
+      city: { type: 'STRING', description: 'The name of the city (e.g., "London"). This is essential.' },
+      countryCode: { type: 'STRING', description: 'Optional. The two-letter ISO country code (e.g., "GB" for Great Britain) to make the city search more specific.' },
+      units: { type: 'STRING', enum: ['metric', 'imperial'], description: 'Optional. Units for temperature. "metric" for Celsius, "imperial" for Fahrenheit. Defaults to metric.' }
     },
-    // required: ['city'] // Commented out
+    // required: ['city'] // Commented out, but handler will check for city
   }
 };
 
@@ -147,20 +148,81 @@ async function handleGetBatteryStatus() {
 
 
 async function handleGetWeather({ city, countryCode, units = 'metric' }) {
-  // It's important that this handler is robust if 'city' is not provided by the model,
-  // now that required: ['city'] is removed from the schema.
-  // For now, we assume the model will still attempt to provide it based on description.
   if (!city) {
     return { status: 'error', message: 'City is required to get weather information.' };
   }
-  console.log(`[Tool: getWeather] Request for weather: City: "${city}", Country: ${countryCode || 'N/A'}, Units: ${units}`);
-  return {
-    status: 'success',
-    city: city,
-    temperature: `20°${units === 'metric' ? 'C' : 'F'} (Mock Data)`,
-    condition: 'Sunny (Mock Data)',
-    humidity: '60% (Mock Data)'
-  };
+
+  const apiKey = process.env.OPENWEATHERMAP_API_KEY;
+  if (!apiKey) {
+    console.error("[Tool: getWeather] OpenWeatherMap API key not found in process.env.OPENWEATHERMAP_API_KEY.");
+    return { status: 'error', message: 'Weather service API key is not configured on the server.' };
+  }
+
+  let query = city;
+  if (countryCode) {
+    query += `,${countryCode}`;
+  }
+
+  const OWM_UNITS = (units === 'imperial') ? 'imperial' : 'metric'; // OpenWeatherMap uses 'metric' or 'imperial'
+  const apiUrl = `https://api.openweathermap.org/data/2.5/weather?q=${encodeURIComponent(query)}&appid=${apiKey}&units=${OWM_UNITS}`;
+
+  console.log(`[Tool: getWeather] Requesting weather for: "${query}", Units: ${OWM_UNITS}. API URL: ${apiUrl}`);
+
+  try {
+    const response = await fetch(apiUrl);
+    const data = await response.json();
+
+    if (response.status !== 200 || data.cod !== 200) { // data.cod is OpenWeatherMap's status code
+      console.error('[Tool: getWeather] OpenWeatherMap API Error:', data);
+      const errorMessage = data.message || `Weather API Error (HTTP ${response.status}, OWM Code ${data.cod || 'N/A'})`;
+      return { status: 'error', message: errorMessage };
+    }
+
+    const tempUnit = OWM_UNITS === 'metric' ? '°C' : '°F';
+    const windSpeedUnit = OWM_UNITS === 'metric' ? 'm/s' : 'mph';
+
+    // Prepare data for AI and potential GUI
+    const weatherResult = {
+      status: 'success',
+      location: data.name + (data.sys?.country ? `, ${data.sys.country}` : ''),
+      temperature: `${Math.round(data.main.temp)}${tempUnit}`,
+      feels_like: `${Math.round(data.main.feels_like)}${tempUnit}`,
+      min_temperature: `${Math.round(data.main.temp_min)}${tempUnit}`,
+      max_temperature: `${Math.round(data.main.temp_max)}${tempUnit}`,
+      condition: data.weather[0]?.main || 'N/A',
+      description: data.weather[0]?.description || 'N/A',
+      humidity: `${data.main.humidity}%`,
+      pressure: `${data.main.pressure} hPa`,
+      wind_speed: `${data.wind.speed} ${windSpeedUnit}`,
+      wind_direction: data.wind.deg, // degrees
+      clouds: `${data.clouds?.all || 0}%`,
+      visibility: data.visibility, // meters
+      sunrise: data.sys?.sunrise ? new Date(data.sys.sunrise * 1000).toLocaleTimeString() : 'N/A',
+      sunset: data.sys?.sunset ? new Date(data.sys.sunset * 1000).toLocaleTimeString() : 'N/A',
+      icon_code: data.weather[0]?.icon, // e.g., "01d" for clear sky day
+      icon_url: data.weather[0]?.icon ? `https://openweathermap.org/img/wn/${data.weather[0].icon}@2x.png` : null,
+      // Data specifically for a richer GUI display on the frontend
+      _weatherGUIData: {
+        city: data.name,
+        country: data.sys?.country,
+        temp_numeric: data.main.temp,
+        temp_unit_char: tempUnit.charAt(1), // 'C' or 'F'
+        condition_main: data.weather[0]?.main,
+        condition_description: data.weather[0]?.description,
+        icon: data.weather[0]?.icon, // e.g. "01d"
+        humidity_percent: data.main.humidity,
+        wind_speed_numeric: data.wind.speed,
+        wind_speed_unit_text: windSpeedUnit,
+        // You can add more structured data here as needed for UI components
+      }
+    };
+    console.log(`[Tool: getWeather] Successfully fetched weather for "${weatherResult.location}": ${weatherResult.condition}, ${weatherResult.temperature}`);
+    return weatherResult;
+
+  } catch (error) {
+    console.error('[Tool: getWeather] Error fetching or processing weather data:', error);
+    return { status: 'error', message: `Failed to get weather data: ${error.message}` };
+  }
 }
 
 async function handleCaptureScreenshot({ targetUrl, fileName }) {
