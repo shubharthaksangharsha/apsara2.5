@@ -184,6 +184,35 @@
     50% { content: '..'; }
     75%, 100% { content: '...'; }
   }
+
+  /* Mobile specific improvements */
+  .line-clamp-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  
+  /* Improved scrollbar for touch devices */
+  @media (max-width: 768px) {
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 4px; /* Thinner on mobile */
+    }
+    
+    /* Reduce side paddings on small screens */
+    .sm-reduce-padding {
+      padding-left: 0.5rem !important;
+      padding-right: 0.5rem !important;
+    }
+  }
+  
+  /* Prevent content shifting when keyboard appears on mobile */
+  @media (max-width: 768px) {
+    .keyboard-adjust {
+      min-height: 0;
+      max-height: 85vh;
+    }
+  }
 }
 
 /* Add transition to sidebar background */
@@ -196,4 +225,32 @@
 /* Ensure body takes full height for layout */
 html, body, #root {
   height: 100%;
+}
+
+/* Ensure proper z-index layering for mobile overlays */
+.mobile-z-high {
+  z-index: 50 !important;
+}
+
+/* Prevent Safari's elastic overscroll behavior which can cause UI issues */
+html {
+  overflow: hidden;
+  height: 100%;
+}
+
+body {
+  overflow: auto;
+  height: 100%;
+  -webkit-overflow-scrolling: touch; /* Smooth scrolling on iOS */
+}
+
+/* Fix for iOS input zoom */
+input, select, textarea {
+  font-size: 16px; /* Prevents iOS zoom on input focus */
+}
+
+@media (min-width: 768px) {
+  input, select, textarea {
+    font-size: inherit; /* Revert to default on larger screens */
+  }
 }

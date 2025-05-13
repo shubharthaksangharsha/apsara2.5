@@ -57,19 +57,19 @@ export default function RotatingPrompts({ allPrompts = [], onPromptClick }) {
   }
 
   return (
-    <div className="w-full max-w-xl">
-      <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-4">Try asking:</p>
-      <div className={`grid grid-cols-1 sm:grid-cols-2 gap-3 transition-opacity duration-300 ease-in-out ${isFading ? 'opacity-0' : 'opacity-100'}`}>
+    <div className="w-full max-w-xs sm:max-w-md md:max-w-xl">
+      <p className="text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 mb-3 sm:mb-4">Try asking:</p>
+      <div className={`grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3 transition-opacity duration-300 ease-in-out ${isFading ? 'opacity-0' : 'opacity-100'}`}>
         {visiblePrompts.map((prompt, index) => {
           const Icon = prompt.icon || BrainCircuit;
           return (
             <button
-              key={`${prompt.text}-${index}`} // Use text + index for potentially non-unique prompts
+              key={`${prompt.text}-${index}`}
               onClick={() => onPromptClick(prompt.text, prompt.modelId, prompt.toolUsage)}
-              className="flex items-center text-left px-4 py-3 bg-white dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/80 rounded-lg text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700/70 transition-all shadow-sm hover:shadow-lg transform hover:-translate-y-1 hover:border-indigo-300 dark:hover:border-indigo-700 group"
+              className="flex items-center text-left px-3 py-2 sm:px-4 sm:py-3 bg-white dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700/80 rounded-lg text-xs sm:text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700/70 transition-all shadow-sm hover:shadow-lg transform hover:-translate-y-1 hover:border-indigo-300 dark:hover:border-indigo-700 group"
             >
-              <Icon className="h-5 w-5 mr-3 text-indigo-500 dark:text-indigo-400 flex-shrink-0 transition-transform group-hover:scale-110" />
-              <span className="flex-1">{prompt.text.split('\n')[0]}</span>
+              <Icon className="h-4 w-4 sm:h-5 sm:w-5 mr-2 sm:mr-3 text-indigo-500 dark:text-indigo-400 flex-shrink-0 transition-transform group-hover:scale-110" />
+              <span className="flex-1 line-clamp-2">{prompt.text.split('\n')[0]}</span>
             </button>
           );
         })}

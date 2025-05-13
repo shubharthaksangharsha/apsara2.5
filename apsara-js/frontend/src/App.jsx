@@ -356,7 +356,7 @@ export default function App() {
           setIsSidebarOpen={setIsSidebarOpen}
         />
         
-        {/* Chat Messages Area (Now directly under header) */}
+        {/* Chat Messages Area - Now in scrollable container with FIXED height */}
         <div className="flex-1 flex flex-col overflow-y-auto p-2 sm:p-4 pb-0 bg-gray-100 dark:bg-gray-900 custom-scrollbar">
           {!activeConvoId ? (
             // No active chat: Show full Welcome Screen
@@ -390,19 +390,22 @@ export default function App() {
           )}
         </div>
 
-        {/* File Preview Bar - Renders if files are present */}
-        <FilePreviewBar files={files} onRemoveFile={removeFile} />
+        {/* Fixed bottom container for file preview and input */}
+        <div className="flex-shrink-0 w-full border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+          {/* File Preview Bar - Renders if files are present */}
+          <FilePreviewBar files={files} onRemoveFile={removeFile} />
 
-        {/* Message Input - Use Imported Component */}
-        <MessageInput
-          onSend={sendToBackend}
-          onStreamSend={startStreamChat}
-          isLoading={isChatLoading}
-          disabled={!activeConvoId}
-          onFileUploadClick={() => setFileUploadOpen(true)}
-          streamEnabled={streamToggleState}
-          onStreamToggleChange={setStreamToggleState}
-        />
+          {/* Message Input - Use Imported Component */}
+          <MessageInput
+            onSend={sendToBackend}
+            onStreamSend={startStreamChat}
+            isLoading={isChatLoading}
+            disabled={!activeConvoId}
+            onFileUploadClick={() => setFileUploadOpen(true)}
+            streamEnabled={streamToggleState}
+            onStreamToggleChange={setStreamToggleState}
+          />
+        </div>
       </main>
 
       {/* Settings Panel - Use Imported Component */}

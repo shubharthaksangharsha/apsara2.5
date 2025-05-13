@@ -50,16 +50,16 @@ export default function MessageInput({ onSend, onStreamSend, isLoading, disabled
   };
   
   return (
-    <div className="border-t border-gray-200 dark:border-gray-700 px-2 py-2 sm:px-4 sm:py-3 bg-white dark:bg-gray-800">
+    <div className="border-t border-gray-200 dark:border-gray-700 px-2 py-2 sm:px-4 sm:py-3 bg-white dark:bg-gray-800 sticky bottom-0 z-10">
       <div className="max-w-3xl mx-auto">
-        <div className="flex items-end gap-2 bg-white dark:bg-gray-700 rounded-xl border border-gray-300 dark:border-gray-600 shadow-sm overflow-hidden focus-within:ring-2 focus-within:ring-indigo-500">
+        <div className="flex items-end gap-1 sm:gap-2 bg-white dark:bg-gray-700 rounded-xl border border-gray-300 dark:border-gray-600 shadow-sm overflow-hidden focus-within:ring-2 focus-within:ring-indigo-500">
           <textarea
             ref={inputRef}
-            className="flex-1 w-full resize-none py-2 px-3 bg-transparent text-gray-900 dark:text-gray-100 focus:outline-none custom-scrollbar placeholder-gray-500 dark:placeholder-gray-400"
+            className="flex-1 w-full resize-none py-1.5 sm:py-2 px-2 sm:px-3 bg-transparent text-gray-900 dark:text-gray-100 focus:outline-none custom-scrollbar placeholder-gray-500 dark:placeholder-gray-400 text-sm"
             placeholder={
               disabled ? "Select a conversation..." :
               isLoading ? "Apsara is thinking..." : 
-              "Type your message..." // Simplified placeholder
+              "Type your message..."
             }
             value={text}
             onChange={(e) => setText(e.target.value)}
@@ -69,22 +69,22 @@ export default function MessageInput({ onSend, onStreamSend, isLoading, disabled
                 handleSend();
               }
             }}
-            rows={1} // Start with 1 row, height is controlled by style
+            rows={1}
             disabled={isLoading || disabled}
             style={{
               minHeight: `${BASE_TEXTAREA_HEIGHT_PX + PADDING_VERTICAL_PX}px`,
               maxHeight: `${(MAX_INPUT_ROWS * BASE_TEXTAREA_HEIGHT_PX) + PADDING_VERTICAL_PX}px`,
-              lineHeight: `${BASE_TEXTAREA_HEIGHT_PX}px`, // Explicit line height
+              lineHeight: `${BASE_TEXTAREA_HEIGHT_PX}px`,
             }}
           />
-          <div className="flex items-center gap-1 p-1 flex-shrink-0"> {/* Reduced padding */}
+          <div className="flex items-center gap-1 p-1 flex-shrink-0">
             <button
               onClick={onFileUploadClick}
               disabled={isLoading || disabled}
-              className="p-2 rounded-lg text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-600 transition group disabled:opacity-50"
+              className="p-1.5 sm:p-2 rounded-lg text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-600 transition group disabled:opacity-50"
               title="Attach File"
             >
-              <UploadCloud className="h-5 w-5" />
+              <UploadCloud className="h-4 w-4 sm:h-5 sm:w-5" />
             </button>
             <Switch.Group as="div" className="flex items-center">
               <Switch
@@ -92,26 +92,25 @@ export default function MessageInput({ onSend, onStreamSend, isLoading, disabled
                 onChange={onStreamToggleChange}
                 disabled={isLoading || disabled}
                 className={`${streamEnabled ? 'bg-indigo-600' : 'bg-gray-300 dark:bg-gray-500'}
-                  relative inline-flex h-[22px] w-[40px] shrink-0 cursor-pointer rounded-full border-2 border-transparent
+                  relative inline-flex h-[20px] w-[36px] sm:h-[22px] sm:w-[40px] shrink-0 cursor-pointer rounded-full border-2 border-transparent
                   transition-colors duration-200 ease-in-out focus:outline-none focus-visible:ring-2 
                   focus-visible:ring-white/75 disabled:opacity-50`}
               >
                 <span className="sr-only">Toggle Streaming</span>
-                <Zap className={`absolute top-0.5 left-0.5 h-4 w-4 text-yellow-300 transition-opacity ${streamEnabled ? 'opacity-100' : 'opacity-0'}`} />
-                <span className={`pointer-events-none inline-block h-[18px] w-[18px] transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${streamEnabled ? 'translate-x-[18px]' : 'translate-x-0'}`} />
+                <Zap className={`absolute top-0.5 left-0.5 h-3 w-3 sm:h-4 sm:w-4 text-yellow-300 transition-opacity ${streamEnabled ? 'opacity-100' : 'opacity-0'}`} />
+                <span className={`pointer-events-none inline-block h-[16px] w-[16px] sm:h-[18px] sm:w-[18px] transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${streamEnabled ? 'translate-x-[16px] sm:translate-x-[18px]' : 'translate-x-0'}`} />
               </Switch>
             </Switch.Group>
             <button
               onClick={handleSend}
               disabled={isLoading || disabled || !text.trim()}
-              className="p-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 transition group disabled:opacity-50"
+              className="p-1.5 sm:p-2 rounded-lg bg-indigo-600 text-white hover:bg-indigo-700 transition group disabled:opacity-50"
               title="Send Message"
             >
-              <Send className="h-5 w-5" />
+              <Send className="h-4 w-4 sm:h-5 sm:w-5" />
             </button>
           </div>
         </div>
-        {/* Removed the "Tip: Shift+Enter..." for a cleaner look, can be added back if desired */}
       </div>
     </div>
   );

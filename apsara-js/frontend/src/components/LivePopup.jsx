@@ -63,8 +63,8 @@ const renderMessageContent = (msg) => {
     );
   } else if (msg.role === 'model_code' && msg.code) {
     return (
-      <div className="my-1 p-2 bg-gray-100 dark:bg-gray-900/50 rounded-md overflow-x-auto custom-scrollbar text-xs">
-        <span className="text-gray-500 dark:text-gray-400 block text-xs mb-1">Executable Code ({msg.code.language || 'PYTHON'}):</span>
+      <div className="my-1 p-2 bg-gray-100 dark:bg-gray-900/50 rounded-md overflow-x-auto custom-scrollbar text-xs mb-1">
+        <span className="text-gray-500 dark:text-gray-400 block text-xs">Executable Code ({msg.code.language || 'PYTHON'}):</span>
         <pre><code className={`language-${msg.code.language?.toLowerCase() || 'python'}`}>
           {msg.code.code}
         </code></pre>
@@ -473,9 +473,9 @@ export default function LivePopup({
           </div>
         </div>
 
-        {/* Main Content Area - Adjusted for mobile layout */}
-        <div className="flex flex-col md:flex-row flex-1 overflow-hidden p-2 sm:p-3 gap-2 sm:gap-3">
-          {/* Left Panel (Logs) - Hidden on mobile, shown on md+ */}
+        {/* Main Content Area - Improve overall layout for mobile */}
+        <div className="flex flex-col md:flex-row flex-1 overflow-hidden p-1.5 sm:p-3 gap-1.5 sm:gap-3">
+          {/* Left Panel (Logs) - Hidden on mobile */}
           <div className="w-full md:w-64 bg-gray-50 dark:bg-gray-800/50 p-2 sm:p-3 rounded-lg border border-gray-200 dark:border-gray-700 flex-shrink-0 hidden md:flex flex-col">
             <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2 border-b pb-1.5 dark:border-gray-600">Event Logs</h3>
             <div className="text-xs text-gray-600 dark:text-gray-400 flex-grow overflow-y-auto custom-scrollbar space-y-1 pr-1">
@@ -487,31 +487,31 @@ export default function LivePopup({
             </div>
           </div>
 
-          {/* Center Panel (Tabs, Tab Content, Input) */}
-          <div className="flex-1 flex flex-col bg-white/70 dark:bg-gray-800/70 p-2 sm:p-3 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
-            {/* Tab Navigation */}
-            <div className="flex-shrink-0 border-b border-gray-300 dark:border-gray-600 mb-2 custom-scrollbar overflow-x-auto">
-              <nav className="flex space-x-1 -mb-px">
+          {/* Center Panel - More compact padding for mobile */}
+          <div className="flex-1 flex flex-col bg-white/70 dark:bg-gray-800/70 p-1.5 sm:p-3 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm overflow-hidden">
+            {/* Tab Navigation - Smaller text and padding on mobile */}
+            <div className="flex-shrink-0 border-b border-gray-300 dark:border-gray-600 mb-1.5 sm:mb-2 overflow-x-auto custom-scrollbar">
+              <nav className="flex space-x-1 -mb-px whitespace-nowrap">
                 {TABS.map(tab => (
                   <button
                     key={tab.id}
                     onClick={() => setActiveTab(tab.id)}
                     disabled={tab.isPlaceholder && connectionStatus !== 'connected'}
-                    className={`whitespace-nowrap flex items-center gap-1 sm:gap-1.5 py-1.5 px-2 sm:py-2 sm:px-3 border-b-2 font-medium text-xs
+                    className={`whitespace-nowrap flex items-center gap-1 py-1 px-1.5 sm:py-2 sm:px-3 border-b-2 font-medium text-[9px] sm:text-xs
                       ${activeTab === tab.id
                         ? 'border-indigo-500 text-indigo-600 dark:text-indigo-400'
                         : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-200 dark:hover:border-gray-500'}
                       ${(tab.isPlaceholder && connectionStatus !== 'connected') ? 'opacity-50 cursor-not-allowed' : ''}
                     `}
                   >
-                    <tab.icon className="h-3 w-3 sm:h-3.5 sm:w-3.5" /> {tab.label}
+                    <tab.icon className="h-2.5 w-2.5 sm:h-3.5 sm:w-3.5" /> {tab.label}
                   </button>
                 ))}
               </nav>
             </div>
 
-            {/* Tab Content */}
-            <div className="flex-1 overflow-y-auto custom-scrollbar pr-1 sm:pr-2 mb-2 sm:mb-3">
+            {/* Tab Content - More vertical space for content */}
+            <div className="flex-1 overflow-y-auto custom-scrollbar pr-1 mb-1.5 sm:mb-3">
               {activeTab === 'chat' && (
                 <div className="space-y-2.5 sm:space-y-3">
                   {chatTabMessages.length === 0 && !isSessionActive && (
@@ -538,18 +538,18 @@ export default function LivePopup({
                 </div>
               )}
               {activeTab === 'code' && (
-                <div className="space-y-2 p-1">
+                <div className="space-y-1.5 p-0.5 sm:p-1">
                   {combinedCodeOutputContent.length > 0 ? combinedCodeOutputContent.map(item => (
                     <div key={item.id}>
                       {item.type === 'code' && (
-                        <div className="my-1.5 bg-gray-800/95 rounded-md overflow-hidden shadow border-l-2 border-indigo-400 relative text-xs">
-                          <div className="flex items-center justify-between px-3 py-1.5 bg-gray-700/80 text-indigo-200 font-mono">
+                        <div className="my-1 bg-gray-800/95 rounded-md overflow-hidden shadow border-l-2 border-indigo-400 relative text-[10px] sm:text-xs">
+                          <div className="flex items-center justify-between px-2 py-1 sm:px-3 sm:py-1.5 bg-gray-700/80 text-indigo-200 font-mono">
                             <span>{item.data.language?.toUpperCase() || 'CODE'}</span>
-                            <button className="flex items-center gap-1 text-indigo-300 hover:text-white transition text-xs" onClick={() => handleCopyContent(item.data.code, item.id)} title="Copy code">
-                              <ClipboardCopy className="w-3.5 h-3.5" /> {copiedContent === item.id ? 'Copied!' : 'Copy'}
+                            <button className="flex items-center gap-1 text-indigo-300 hover:text-white transition text-[10px] sm:text-xs" onClick={() => handleCopyContent(item.data.code, item.id)} title="Copy code">
+                              <ClipboardCopy className="w-3 h-3 sm:w-3.5 sm:h-3.5" /> {copiedContent === item.id ? 'Copied!' : 'Copy'}
                           </button>
                           </div>
-                          <pre className="p-3.5 overflow-x-auto text-indigo-100 font-mono bg-gray-800/80 custom-scrollbar"><code>{item.data.code}</code></pre>
+                          <pre className="p-2 sm:p-3.5 overflow-x-auto text-indigo-100 font-mono bg-gray-800/80 custom-scrollbar text-[10px] sm:text-xs"><code>{item.data.code}</code></pre>
                         </div>
                       )}
                       {item.type === 'result' && (
@@ -574,7 +574,7 @@ export default function LivePopup({
                         </div>
                       )}
                     </div>
-                  )) : <p className="text-gray-500 dark:text-gray-400 text-sm p-4 text-center">No code snippets or outputs from the model yet.</p>}
+                  )) : <p className="text-gray-500 dark:text-gray-400 text-xs p-3 text-center">No code snippets or outputs from the model yet.</p>}
                 </div>
               )}
               {activeTab === 'map' && (
@@ -704,48 +704,46 @@ export default function LivePopup({
               )}
             </div>
 
-            {/* Input Bar */}
+            {/* Input Bar - Improved for mobile */}
             {connectionStatus === 'connected' && (
-              <div className="flex items-center gap-1 sm:gap-1.5 bg-gray-50 dark:bg-gray-700/60 rounded-lg p-1.5 sm:p-2 shadow-sm border-t dark:border-gray-600/50 mt-auto flex-shrink-0">
-                <button
-                  onClick={() => { if (isRecording) onStopRecording(); else onStartRecording(); }}
-                  className={`p-1.5 sm:p-2 rounded-lg transition-colors group focus:outline-none focus:ring-1 focus:ring-indigo-400 ${
-                    isRecording ? 'bg-red-100 dark:bg-red-700/50 text-red-600 dark:text-red-300 hover:bg-red-200 dark:hover:bg-red-700/70 animate-pulse'
-                                : 'bg-gray-200 dark:bg-gray-600 text-gray-500 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-500'}`}
-                  title={isRecording ? 'Stop Recording' : 'Start Recording'}
-                > {isRecording ? <MicOff className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> : <Mic className="h-3.5 w-3.5 sm:h-4 sm:w-4" />} </button>
-                <button
-                  onClick={handleVideoToggle}
-                  className={`p-1.5 sm:p-2 rounded-lg transition-colors group focus:outline-none focus:ring-1 focus:ring-indigo-400 ${
-                    isStreamingVideo ? 'bg-blue-100 dark:bg-blue-700/50 text-blue-600 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-700/70 animate-pulse'
-                                   : 'bg-gray-200 dark:bg-gray-600 text-gray-500 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-500'}
-                                   `}
-                  title={isStreamingVideo ? 'Stop Video' : 'Start Video'}
-                > {isStreamingVideo ? <VideoOff className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> : <Video className="h-3.5 w-3.5 sm:h-4 sm:w-4" />} </button>
-                <button
-                  onClick={() => { if (isStreamingScreen) onStopScreenShare(); else onStartScreenShare(); }}
-                  className={`p-1.5 sm:p-2 rounded-lg transition-colors group focus:outline-none focus:ring-1 focus:ring-indigo-400 ${
-                    isStreamingScreen ? 'bg-green-100 dark:bg-green-700/50 text-green-600 dark:text-green-300 hover:bg-green-200 dark:hover:bg-green-700/70 animate-pulse'
-                                     : 'bg-gray-200 dark:bg-gray-600 text-gray-500 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-500'}
-                                     `}
-                  title={isStreamingScreen ? 'Stop Screen Share' : 'Start Screen Share'}
-                > {isStreamingScreen ? <ScreenShareOff className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> : <ScreenShare className="h-3.5 w-3.5 sm:h-4 sm:w-4" />} </button>
+              <div className="flex items-center gap-1 sm:gap-1.5 bg-gray-50 dark:bg-gray-700/60 rounded-lg p-1 sm:p-2 shadow-sm border-t dark:border-gray-600/50 mt-auto flex-shrink-0">
+                <div className="flex gap-0.5 sm:gap-1">
+                  <button
+                    onClick={() => { if (isRecording) onStopRecording(); else onStartRecording(); }}
+                    className={`p-1 rounded-lg transition-colors focus:outline-none ${
+                      isRecording ? 'bg-red-100 dark:bg-red-700/50 text-red-600 dark:text-red-300 animate-pulse'
+                                  : 'bg-gray-200 dark:bg-gray-600 text-gray-500 dark:text-gray-300'}`}
+                  > <Mic className="h-3 w-3 sm:h-4 sm:w-4" /> </button>
+                  <button
+                    onClick={handleVideoToggle}
+                    className={`p-1 rounded-lg transition-colors focus:outline-none ${
+                      isStreamingVideo ? 'bg-blue-100 dark:bg-blue-700/50 text-blue-600 dark:text-blue-300 animate-pulse'
+                                      : 'bg-gray-200 dark:bg-gray-600 text-gray-500 dark:text-gray-300'}`}
+                  > <Video className="h-3 w-3 sm:h-4 sm:w-4" /> </button>
+                  <button
+                    onClick={() => { if (isStreamingScreen) onStopScreenShare(); else onStartScreenShare(); }}
+                    className={`p-1 rounded-lg transition-colors focus:outline-none ${
+                      isStreamingScreen ? 'bg-green-100 dark:bg-green-700/50 text-green-600 dark:text-green-300 animate-pulse'
+                                        : 'bg-gray-200 dark:bg-gray-600 text-gray-500 dark:text-gray-300'}`}
+                  > <ScreenShare className="h-3 w-3 sm:h-4 sm:w-4" /> </button>
+                </div>
                 
                 <div className="relative flex-1">
                   <input
                     type="text" value={inputText} onChange={(e) => setInputText(e.target.value)}
                     onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendMessage(); }}}
-                    className="w-full p-2 sm:p-2.5 pl-8 sm:pl-10 pr-8 sm:pr-10 border border-gray-300 dark:border-gray-500 rounded-lg bg-white dark:bg-gray-600 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-indigo-500 text-xs sm:text-sm"
-                    placeholder="Type a message..." disabled={connectionStatus !== 'connected'}
+                    className="w-full p-1.5 sm:p-2.5 pl-6 sm:pl-10 pr-6 sm:pr-10 border border-gray-300 dark:border-gray-500 rounded-lg bg-white dark:bg-gray-600 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-indigo-500 text-xs"
+                    placeholder="Type message..."
+                    disabled={connectionStatus !== 'connected'}
                   />
-                  <button title="Attach file" className="absolute left-1.5 sm:left-2 top-1/2 transform -translate-y-1/2 p-1 text-gray-400 dark:text-gray-300 hover:text-indigo-500 dark:hover:text-indigo-400">
-                    <Paperclip className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                  <button title="Attach file" className="absolute left-1 sm:left-2 top-1/2 transform -translate-y-1/2 p-0.5 sm:p-1 text-gray-400 dark:text-gray-300">
+                    <Paperclip className="h-3 w-3 sm:h-4 sm:w-4" />
                   </button>
                   <button
                     onClick={handleSendMessage} disabled={connectionStatus !== 'connected' || !inputText.trim()}
-                    className="absolute right-1.5 sm:right-2 top-1/2 transform -translate-y-1/2 p-1 sm:p-1.5 text-white bg-indigo-500 rounded-md hover:bg-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="absolute right-1 sm:right-2 top-1/2 transform -translate-y-1/2 p-1 text-white bg-indigo-500 rounded-md hover:bg-indigo-600 disabled:opacity-50"
                     title="Send Message"
-                  > <Send className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> </button>
+                  > <Send className="h-3 w-3 sm:h-4 sm:w-4" /> </button>
                 </div>
               </div>
             )}
@@ -756,14 +754,14 @@ export default function LivePopup({
           )}
         </div>
 
-          {/* Right Settings Panel - Adjusted for mobile layout */}
-          <div className={`w-full md:w-72 bg-gray-50 dark:bg-gray-800/50 p-3 sm:p-4 rounded-lg border border-gray-200 dark:border-gray-700 flex-shrink-0 flex flex-col text-sm mt-2 md:mt-0`}> {/* Stack on mobile, side-by-side on md+ */}
-            <h3 className="text-base font-semibold text-center text-gray-700 dark:text-gray-200 mb-2 border-b dark:border-gray-600 pb-2 flex-shrink-0">
-              {isSessionActive ? "Session Active" : "Live Session Settings"}
-            </h3>
-            
-            {!isSessionActive ? (
-              <div className="space-y-3 overflow-y-auto custom-scrollbar pr-1 flex-grow">
+        {/* Right Settings Panel - Collapsible on mobile */}
+        <div className={`w-full md:w-72 bg-gray-50 dark:bg-gray-800/50 p-2 sm:p-4 rounded-lg border border-gray-200 dark:border-gray-700 flex-shrink-0 flex flex-col text-xs mt-1.5 md:mt-0 max-h-[35vh] md:max-h-none overflow-y-auto md:overflow-visible`}>
+          <h3 className="text-sm md:text-base font-semibold text-center text-gray-700 dark:text-gray-200 mb-2 border-b dark:border-gray-600 pb-2 flex-shrink-0">
+            {isSessionActive ? "Session Active" : "Live Session Settings"}
+          </h3>
+          
+          {!isSessionActive ? (
+            <div className="space-y-2 sm:space-y-3 overflow-y-auto custom-scrollbar pr-1 flex-grow">
               <div>
                   <div className="flex justify-between items-center mb-1">
                     <label htmlFor="liveSystemInstruction" className="block text-xs font-medium text-gray-600 dark:text-gray-400">System Instruction</label>
@@ -823,54 +821,60 @@ export default function LivePopup({
             </div>
             ) : (
               <div className="flex flex-col flex-grow">
-                <div className="text-xs text-gray-600 dark:text-gray-300 mb-2 space-y-0.5 flex-shrink-0">
+                {/* Status info - Make more compact */}
+                <div className="text-[10px] sm:text-xs text-gray-600 dark:text-gray-300 mb-1.5 space-y-0.5 flex-shrink-0">
                   <p><strong>Status:</strong> {getStatusIndicator(connectionStatus)}</p>
                   {liveModality && <p><strong>Mode:</strong> {liveModality.replace('_', ' + ')}</p>}
                   {(liveModality === 'AUDIO' || liveModality === 'AUDIO_TEXT') && currentVoice && <p><strong>Voice:</strong> {currentVoice}</p>}
-                  {currentSessionHandle && <p><strong>Session ID:</strong> <span className="font-mono text-indigo-600 dark:text-indigo-400 break-all">{currentSessionHandle.slice(0,12)}...</span></p>}
-                  {!currentSessionHandle && <p><strong>Session ID:</strong> N/A</p>}
+                  {currentSessionHandle && <p><strong>Session ID:</strong> <span className="font-mono text-indigo-600 dark:text-indigo-400 break-all text-[8px] sm:text-xs">{currentSessionHandle.slice(0,8)}...</span></p>}
                 </div>
 
-                {/* Media Area - Adjusted for mobile, ensure visibility */}
-                <div className="flex-grow space-y-2 my-2 overflow-hidden flex flex-col min-h-[100px] sm:min-h-0"> 
-                  {/* Video Stream Area */}
-                  <div className="w-full aspect-video bg-gray-200 dark:bg-gray-700/50 rounded border dark:border-gray-600/50 flex items-center justify-center overflow-hidden min-h-[4rem] sm:min-h-[6rem] md:max-h-36"> 
-                    {isStreamingVideo && mediaStream ? (
-                      <VideoStreamDisplay videoStream={mediaStream} isWebcamActive={isStreamingVideo} /> 
-                    ) : (
-                      <span className="text-xs text-gray-400 dark:text-gray-500">Your Camera</span>
-                    )}
-                  </div>
-                  {/* Screen Share Area */}
-                   <div className="w-full aspect-video bg-gray-200 dark:bg-gray-700/50 rounded border dark:border-gray-600/50 flex items-center justify-center overflow-hidden min-h-[4rem] sm:min-h-[6rem] md:max-h-36"> 
-                    {isStreamingScreen && screenStream ? (
-                      <ScreenShareDisplay screenStream={screenStream} isScreenSharingActive={isStreamingScreen} /> 
-                    ) : (
-                       <span className="text-xs text-gray-400 dark:text-gray-500">Screen Share</span>
-                    )}
+                {/* Media Area - Mobile-optimized with horizontal layout */}
+                <div className="flex-grow space-y-2 my-2 overflow-hidden flex flex-col">
+                  {/* Mobile: Horizontal layout for camera and screen share */}
+                  <div className="flex flex-row md:flex-col gap-2 w-full">
+                    {/* Video Stream Area - Smaller and side-by-side on mobile */}
+                    <div className="w-1/2 md:w-full aspect-video bg-gray-200 dark:bg-gray-700/50 rounded border dark:border-gray-600/50 flex items-center justify-center overflow-hidden min-h-[5rem] md:min-h-0 md:max-h-36"> 
+                      {isStreamingVideo && mediaStream ? (
+                        <VideoStreamDisplay videoStream={mediaStream} isWebcamActive={isStreamingVideo} /> 
+                      ) : (
+                        <span className="text-[10px] md:text-xs text-gray-400 dark:text-gray-500">Your Camera</span>
+                      )}
+                    </div>
+                    
+                    {/* Screen Share Area - Smaller and side-by-side on mobile */}
+                    <div className="w-1/2 md:w-full aspect-video bg-gray-200 dark:bg-gray-700/50 rounded border dark:border-gray-600/50 flex items-center justify-center overflow-hidden min-h-[5rem] md:min-h-0 md:max-h-36"> 
+                      {isStreamingScreen && screenStream ? (
+                        <ScreenShareDisplay screenStream={screenStream} isScreenSharingActive={isStreamingScreen} /> 
+                      ) : (
+                        <span className="text-[10px] md:text-xs text-gray-400 dark:text-gray-500">Screen Share</span>
+                      )}
+                    </div>
                   </div>
 
                   {/* Audio Visualizer - Below media placeholders/streams */}
-                  <div className="h-6 sm:h-8 flex items-center justify-center mt-1 sm:mt-2 flex-shrink-0">
+                  <div className="h-6 sm:h-8 flex items-center justify-center mt-1 flex-shrink-0">
                     {(isModelSpeaking && (liveModality === 'AUDIO' || liveModality === 'AUDIO_TEXT')) && (
-                       <div className="flex items-center gap-0.5 sm:gap-1 px-1.5 py-0.5 sm:px-2 sm:py-1 bg-gray-100 dark:bg-gray-700/80 backdrop-blur-sm rounded-full shadow-inner">
-                         <Volume2 className="h-2.5 w-2.5 sm:h-3 sm:w-3 text-blue-500 animate-pulse"/>
-                         <div className="w-0.5 sm:w-1 h-2 sm:h-2.5 bg-blue-500 rounded-full animate-pulse-audio delay-75"></div>
-                         <div className="w-0.5 sm:w-1 h-3 sm:h-3.5 bg-blue-500 rounded-full animate-pulse-audio delay-150"></div>
-                         <div className="w-0.5 sm:w-1 h-2 sm:h-2.5 bg-blue-500 rounded-full animate-pulse-audio delay-300"></div>
-                         <span className="text-[9px] sm:text-[10px] text-gray-600 dark:text-gray-300 ml-0.5 sm:ml-1">Speaking</span>
+                      <div className="flex items-center gap-0.5 sm:gap-1 px-1.5 py-0.5 sm:px-2 sm:py-1 bg-gray-100 dark:bg-gray-700/80 backdrop-blur-sm rounded-full shadow-inner">
+                        <Volume2 className="h-2.5 w-2.5 sm:h-3 sm:w-3 text-blue-500 animate-pulse"/>
+                        <div className="w-0.5 sm:w-1 h-2 sm:h-2.5 bg-blue-500 rounded-full animate-pulse-audio delay-75"></div>
+                        <div className="w-0.5 sm:w-1 h-3 sm:h-3.5 bg-blue-500 rounded-full animate-pulse-audio delay-150"></div>
+                        <div className="w-0.5 sm:w-1 h-2 sm:h-2.5 bg-blue-500 rounded-full animate-pulse-audio delay-300"></div>
+                        <span className="text-[9px] sm:text-[10px] text-gray-600 dark:text-gray-300 ml-0.5 sm:ml-1">Speaking</span>
             </div>
           )}
                   </div>
                 </div>
                 
-                <div className="mt-auto flex-shrink-0"> {/* End Session Button */}
-                  <button onClick={onEndSession} className="w-full px-4 py-2.5 bg-red-500 text-white text-sm font-semibold rounded-lg shadow hover:bg-red-600 transition-colors"> End Session </button>
+                <div className="mt-auto flex-shrink-0"> {/* End Session Button - Fixed at bottom */}
+                  <button onClick={onEndSession} className="w-full px-3 py-1.5 sm:py-2.5 bg-red-500 text-white text-xs font-semibold rounded-lg shadow hover:bg-red-600 transition-colors">
+                    End Session
+                  </button>
                 </div>
               </div>
             )}
-              </div>
-            </div>
+          </div>
+        </div>
 
         {/* Camera Selector Modal */}
         {showCameraSelector && (
