@@ -537,6 +537,10 @@ async function handleLiveConnection(ws, req) {
    let requestedSystemInstruction = null;
    let requestedResumeHandle = null; // For session resumption
 
+   let slidingWindowEnabled = true;
+   let slidingWindowTokens = 4000;
+   let transcriptionEnabled = true;
+
    try {
        const parsedUrl = parse(req.url, true);
        console.log(`[Live Backend] Handling connection for URL: ${req.url}`);
@@ -593,6 +597,17 @@ async function handleLiveConnection(ws, req) {
            console.log("[Live Backend] Attempting session resumption with handle.");
        }
 
+       // --- Sliding Window and Transcription Parsing ---
+       if (parsedUrl.query.slidingWindowEnabled !== undefined) {
+         slidingWindowEnabled = parsedUrl.query.slidingWindowEnabled === 'true';
+       }
+       if (parsedUrl.query.slidingWindowTokens !== undefined) {
+         slidingWindowTokens = parseInt(parsedUrl.query.slidingWindowTokens, 10) || 4000;
+       }
+       if (parsedUrl.query.transcriptionEnabled !== undefined) {
+         transcriptionEnabled = parsedUrl.query.transcriptionEnabled === 'true';
+       }
+
    } catch (e) {
        console.error('[Live Backend] Error parsing query parameters:', e);
        try { ws.close(1003, "Invalid URL parameters"); } catch(e){}
@@ -605,26 +620,33 @@ async function handleLiveConnection(ws, req) {
    // --- Prepare Config based on Request ---
    const liveConnectConfig = {
        responseModalities: [requestedModality],
-       // Add speechConfig ONLY if AUDIO modality is requested AND a voice is set
        ...(requestedModality === Modality.AUDIO && requestedVoice && {
            speechConfig: {
                voiceConfig: { prebuiltVoiceConfig: { voiceName: requestedVoice } }
            }
        }),
-       // Add realtimeInputConfig if specific settings were requested
        ...(Object.keys(requestedRealtimeConfig).length > 0 && {
             realtimeInputConfig: requestedRealtimeConfig
        }),
-       // Add systemInstruction if provided
        ...(requestedSystemInstruction && {
            systemInstruction: { role: 'system', parts: [{ text: requestedSystemInstruction }] }
        }),
-       // Add sessionResumption config if handle provided or always enable transparent?
-       ...(requestedResumeHandle && {
-           sessionResumption: { handle: requestedResumeHandle, transparent: true } // Assuming transparent is desired
+       // Enable unlimited session with context window compression if enabled
+       ...(slidingWindowEnabled && {
+           contextWindowCompression: {
+               slidingWindow: {},
+               triggerTokens: String(slidingWindowTokens)
+           }
        }),
+       // Enable session resumption (always, or just when handle is provided)
+       sessionResumption: {
+           handle: requestedResumeHandle || null,
+       },
+       // Only enable output audio transcription if enabled
+       ...(transcriptionEnabled && { outputAudioTranscription: {} }),
+       // Set media resolution to medium by default
+       mediaResolution: "MEDIA_RESOLUTION_MEDIUM",
        // --- Add Tools Configuration ---
-       // Enable native tools and declare custom ones for the live session
        tools: [
            { googleSearch: {} },        // Enable Google Search (native)
            { codeExecution: {} },       // Enable Code Execution (native)
@@ -632,7 +654,8 @@ async function handleLiveConnection(ws, req) {
        ],
    };
 
-   console.log('[Live Backend] Config prepared (Custom tools ENABLED - echo only):', JSON.stringify(liveConnectConfig, null, 2));
+   // Add debug log for liveConnectConfig
+   console.log('[Live Backend] Final liveConnectConfig for ai.live.connect:', JSON.stringify(liveConnectConfig, null, 2));
 
 
    let session;
@@ -666,6 +689,9 @@ async function handleLiveConnection(ws, req) {
                     console.log(`[Live Backend] Google <${sessionIdShort}> 'onmessage' [${messageType}]:`, JSON.stringify(evt).substring(0, 150) + "...");
                     }
 
+                    if (evt.serverContent?.outputTranscription) {
+                        console.log(`[Live Backend] Received outputTranscription from Gemini <${sessionIdShort}>:`, evt.serverContent.outputTranscription);
+                    }
 
                     try {
                          if (ws.readyState === WebSocket.OPEN) {

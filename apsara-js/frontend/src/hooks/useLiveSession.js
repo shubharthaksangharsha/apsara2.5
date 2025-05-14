@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Mic, AudioLines } from 'lucide-react'; // Import icons
+import { Mic, AudioLines, Clock } from 'lucide-react'; // Import icons
 
 // Helper function to decode PCM audio data
 const decodePcm16ToFloat32 = (arrayBuffer) => {
@@ -11,7 +11,7 @@ const decodePcm16ToFloat32 = (arrayBuffer) => {
   return floatData;
 };
 
-export function useLiveSession({ currentVoice }) {
+export function useLiveSession({ currentVoice, transcriptionEnabled = true, slidingWindowEnabled = true, slidingWindowTokens = 4000 }) {
   // State
   const [liveMessages, setLiveMessages] = useState([]);
   const [liveConnectionStatus, setLiveConnectionStatus] = useState('disconnected');
@@ -57,6 +57,8 @@ export function useLiveSession({ currentVoice }) {
   const screenVideoElementRef = useRef(null); // <-- Hidden video element FOR SCREEN SHARE
   const screenCanvasElementRef = useRef(null); // <-- Canvas for snapshotting FOR SCREEN SHARE
   const isScreenSharingRef = useRef(isStreamingScreen); // <-- New ref for screen share status
+  const outputTranscriptionBufferRef = useRef("");
+  const lastTranscriptionChunkRef = useRef("");
 
   // --- Sync state to refs ---
   useEffect(() => {
@@ -777,7 +779,11 @@ export function useLiveSession({ currentVoice }) {
     const params = new URLSearchParams({ modalities: liveModality });
     if (liveModality === 'AUDIO' && currentVoice) params.append('voice', currentVoice);
     if (liveSystemInstruction?.trim()) params.append('systemInstruction', liveSystemInstruction.trim());
-    if (sessionResumeHandleRef.current) params.append('resumeHandle', sessionResumeHandleRef.current); // Add handle if exists
+    if (sessionResumeHandleRef.current) params.append('resumeHandle', sessionResumeHandleRef.current);
+    // Add these params for backend config
+    params.append('transcriptionEnabled', transcriptionEnabled ? 'true' : 'false');
+    params.append('slidingWindowEnabled', slidingWindowEnabled ? 'true' : 'false');
+    params.append('slidingWindowTokens', String(slidingWindowTokens));
     const wsUrl = `${protocol}//${window.location.host}/live?${params.toString()}`;
 
     console.log(`[Live Setup] Connecting: ${wsUrl}`);
@@ -882,7 +888,17 @@ export function useLiveSession({ currentVoice }) {
                     console.log("🛑 [Live WS] Interruption detected! Stopping playback.");
                     stopAndClearAudio(); // Stop playback and clear queue
                  }
-
+                 
+                 // --- Handle Transcriptions (Input and Output) ---
+                 if (data.serverContent.outputTranscription?.text) {
+                    if (transcriptionEnabled) {
+                        const chunk = data.serverContent.outputTranscription.text;
+                        if (chunk !== lastTranscriptionChunkRef.current) {
+                            outputTranscriptionBufferRef.current += chunk;
+                            lastTranscriptionChunkRef.current = chunk;
+                        }
+                    }
+                 }
             } // end if data.serverContent
 
             // --- Process Other Top-Level Events ---
@@ -937,24 +953,17 @@ export function useLiveSession({ currentVoice }) {
                  console.error("❌ [Live WS] Tool call error:", data.name, data.error);
                  addLiveMessage({ role: 'error', text: `❌ Tool ${data.name} error: ${data.error}`});
             }
-            // --- Handle Transcription Events ---
-            else if (data.inputTranscription) {
-                 if (data.inputTranscription.text) {
-                     addLiveMessage({ role: 'system', text: `🎤 You: ${data.inputTranscription.text}`, icon: Mic });
-                 }
-            } else if (data.outputTranscription) {
-                if (data.outputTranscription.text) {
-                    // Maybe less verbose for output? Or use a different icon?
-                    addLiveMessage({ role: 'system', text: `🔊 AI: ${data.outputTranscription.text}`, icon: AudioLines });
-                }
-            }
-            // --- Recognize Original Google Tool Call Message (Forwarded by Backend) ---
-            else if (data.toolCall) {
-                 // Backend already sent 'tool_call_started'. We just need to recognize this original message
-                 // to prevent the "Unhandled" warning. Log it differently if needed for deep debug.
-                 console.log("📞 [Live WS] Received original toolCall message structure (handled).");
-            } else if (data.goAway?.timeLeft) { // Handle GoAway for timer
-                 setSessionTimeLeft(data.goAway.timeLeft);
+            // --- Handle GoAway Message (session timeout warning) ---
+            else if (data.goAway) { 
+                console.log("⏰ [Live WS] GoAway message received with timeLeft:", data.goAway.timeLeft);
+                const timeLeftStr = data.goAway.timeLeft;
+                setSessionTimeLeft(timeLeftStr);
+                // Show warning to user
+                addLiveMessage({ 
+                    role: 'system', 
+                    text: `⚠️ Session will end in approximately ${timeLeftStr}. Please finish your current interaction.`,
+                    icon: Clock // Using clock icon to indicate time
+                });
             }
             // --- Catch Unhandled Structures ---
             else if (!data.event) { // Only warn if it's not one of the handled 'event' types
@@ -969,6 +978,26 @@ export function useLiveSession({ currentVoice }) {
                 liveStreamingMsgIdRef.current = null;
             }
 
+            // After handling outputTranscription chunk:
+            if (data.serverContent?.outputTranscription?.text) {
+              if (transcriptionEnabled) {
+                const chunk = data.serverContent.outputTranscription.text;
+                if (chunk !== lastTranscriptionChunkRef.current) {
+                  outputTranscriptionBufferRef.current += chunk;
+                  lastTranscriptionChunkRef.current = chunk;
+                }
+              }
+            }
+            // If a modelTurn is received, flush the buffer
+            if ((data.serverContent?.turnComplete || data.serverContent?.generationComplete) && transcriptionEnabled && outputTranscriptionBufferRef.current) {
+              addLiveMessage({
+                role: 'system',
+                text: `Transcript: ${outputTranscriptionBufferRef.current}`,
+                icon: AudioLines
+              });
+              outputTranscriptionBufferRef.current = "";
+              lastTranscriptionChunkRef.current = "";
+            }
         } catch (err) {
             console.error('[Live WS] JSON Parse Error or Processing Error:', err, 'Raw data:', event.data);
             addLiveMessage({ role: 'error', text: `Frontend error: ${err.message}` });
@@ -1000,7 +1029,7 @@ export function useLiveSession({ currentVoice }) {
       setCalendarEvents([]); // <-- NEW: Clear calendar events on close
       setCalendarEventsLastUpdated(0); // Reset
     };
-  }, [ liveModality, currentVoice, liveSystemInstruction, addLiveMessage, updateLiveMessage, addOrUpdateLiveModelMessagePart, initAudioContexts, playAudioQueue, closeAudioContexts, isRecording, stopRecordingInternal]); // Adjusted dependencies
+  }, [ liveModality, currentVoice, liveSystemInstruction, addLiveMessage, updateLiveMessage, addOrUpdateLiveModelMessagePart, initAudioContexts, playAudioQueue, closeAudioContexts, isRecording, stopRecordingInternal, transcriptionEnabled, slidingWindowEnabled, slidingWindowTokens]); // Adjusted dependencies
 
   // --- Memoized Public Handlers ---
   const startLiveSession = useCallback(() => {
