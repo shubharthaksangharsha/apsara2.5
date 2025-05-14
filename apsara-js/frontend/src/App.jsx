@@ -156,6 +156,7 @@ export default function App() {
     weatherUIData,
     calendarEvents,
     calendarEventsLastUpdated,
+    flipCamera,
   } = useLiveSession({ currentVoice }); // Pass dependencies
 
   // Settings panel
@@ -468,9 +469,11 @@ export default function App() {
           selectedVideoDeviceId={selectedVideoDeviceId}
           onSetSelectedVideoDeviceId={setSelectedVideoDeviceId}
           onGetVideoInputDevices={getVideoInputDevices}
+          flipCamera={flipCamera}
           weatherUIData={weatherUIData}
           calendarEvents={calendarEvents}
           calendarEventsLastUpdated={calendarEventsLastUpdated}
+          
         />
       )}
 

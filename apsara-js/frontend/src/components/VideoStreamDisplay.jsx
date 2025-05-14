@@ -49,8 +49,11 @@ function VideoStreamDisplay({ videoStream, isWebcamActive, onSwitchCamera }) {
   }, [videoStream, isWebcamActive]); // Re-run effect if stream or active state changes
 
   const handleSwitchCamera = () => {
+    console.log("Switch camera button clicked"); // Debug log
     if (typeof onSwitchCamera === 'function') {
       onSwitchCamera();
+    } else {
+      console.error("onSwitchCamera is not a function or undefined");
     }
   };
 
@@ -69,7 +72,7 @@ function VideoStreamDisplay({ videoStream, isWebcamActive, onSwitchCamera }) {
       <div className="absolute bottom-1.5 left-1.5 right-1.5 flex justify-between items-center">
         <span className="text-xs text-white bg-black/70 px-2 py-0.5 rounded-md shadow">Your Camera</span>
         
-        {/* Camera flip button - Only for mobile devices */}
+        {/* Camera flip button - Always show on mobile */}
         {isMobile && (
           <button 
             onClick={handleSwitchCamera}

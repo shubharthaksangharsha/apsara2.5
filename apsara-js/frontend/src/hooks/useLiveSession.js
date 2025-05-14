@@ -585,17 +585,45 @@ export function useLiveSession({ currentVoice }) {
 
   const startScreenShareInternal = useCallback(async () => {
     const ws = liveWsConnection.current;
-    if (isScreenSharingRef.current || !ws || ws.readyState !== WebSocket.OPEN || liveConnectionStatus !== 'connected') {
-      console.warn(`[Screen Share] Cannot start. Ref=${isScreenSharingRef.current}, ws=${ws?.readyState}, status=${liveConnectionStatus}`);
-      return;
-    }
-    addLiveMessage({ role: 'system', text: 'Requesting screen share...' });
+    if (!ws || isScreenSharingRef.current) return;
 
     try {
+      // Check if mobile device
+      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+      
+      if (isMobile) {
+        // For Samsung devices on newer Android/Chrome
+        const isChrome = /Chrome/i.test(navigator.userAgent);
+        const isSamsung = /SM-|Galaxy|samsung/i.test(navigator.userAgent);
+        
+        if (isChrome && isSamsung) {
+          console.log("[Screen Share] Attempting screen share on Samsung device with Chrome");
+          addLiveMessage({ 
+            role: 'system', 
+            text: 'Attempting screen share. Please accept permission prompt.'
+          });
+        } else {
+          // Show specific message for unsupported browser/device combinations
+          addLiveMessage({ 
+            role: 'error', 
+            text: 'Screen sharing is not supported on this mobile browser. Please try using Chrome on Android or a desktop browser.'
+          });
+          return;
+        }
+      }
+
+      console.log("[Screen Share] Requesting screen capture access");
+      
+      // Use proper screen capture API with best compatibility
       const stream = await navigator.mediaDevices.getDisplayMedia({
-        video: { mediaSource: "screen", width: { ideal: 1280 }, height: { ideal: 720 } }, // Added ideal dimensions
-        audio: false // Typically screen share doesn't include tab audio by default for this use case
+        video: { 
+          mediaSource: "screen",
+          width: { ideal: 1280 }, 
+          height: { ideal: 720 }
+        },
+        audio: false
       });
+      
       screenStreamRef.current = stream;
       addLiveMessage({ role: 'system', text: 'Screen share access granted.' });
 
@@ -604,24 +632,30 @@ export function useLiveSession({ currentVoice }) {
         screenVideoElementRef.current = document.createElement('video');
         console.log('[Screen Share] Created screenVideoElementRef.');
       }
-      screenVideoElementRef.current.setAttribute('playsinline', ''); screenVideoElementRef.current.muted = true;
+      screenVideoElementRef.current.setAttribute('playsinline', ''); 
+      screenVideoElementRef.current.muted = true;
+      
       if (!screenCanvasElementRef.current) {
         screenCanvasElementRef.current = document.createElement('canvas');
         console.log('[Screen Share] Created screenCanvasElementRef.');
       }
 
-      const video = screenVideoElementRef.current; // Use screen-specific video element
-      const canvas = screenCanvasElementRef.current; // Use screen-specific canvas element
+      const video = screenVideoElementRef.current;
+      const canvas = screenCanvasElementRef.current;
 
       video.onloadedmetadata = () => {
         console.log("[Screen Share] Stream metadata loaded.");
         if (!liveWsConnection.current || liveWsConnection.current.readyState !== WebSocket.OPEN) {
           console.log("[Screen Share] Aborting frame sending: WS closed.");
-          screenStreamRef.current?.getTracks().forEach(track => track.stop()); screenStreamRef.current = null;
-          setIsStreamingScreen(false); isScreenSharingRef.current = false;
+          screenStreamRef.current?.getTracks().forEach(track => track.stop());
+          screenStreamRef.current = null;
+          setIsStreamingScreen(false); 
+          isScreenSharingRef.current = false;
           return;
         }
-        canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+        
+        canvas.width = video.videoWidth; 
+        canvas.height = video.videoHeight;
         console.log(`[Screen Share] Canvas resized to ${canvas.width}x${canvas.height}`);
 
         setIsStreamingScreen(true);
@@ -673,32 +707,53 @@ export function useLiveSession({ currentVoice }) {
         sendScreenFrame();
       };
 
-      video.onerror = (err) => { console.error("[Screen Share] Video element error (for processing):", err); addLiveMessage({ role: 'error', text: `Screen share processing error: ${err.message || 'Unknown'}`}); stopScreenShareInternal(); };
-      video.srcObject = stream; // Assign the screen share stream to the screen-specific processing video element
-      video.play().catch(err => { console.error("[Screen Share] Error playing processing video:", err); addLiveMessage({ role: 'error', text: `Screen share playback error: ${err.message}`}); stopScreenShareInternal(); });
+      video.onerror = (err) => { 
+        console.error("[Screen Share] Video element error:", err); 
+        addLiveMessage({ 
+          role: 'error', 
+          text: `Screen share error: ${err.message || 'Unknown'}`
+        }); 
+        stopScreenShareInternal(); 
+      };
+      
+      video.srcObject = stream;
+      video.play().catch(err => { 
+        console.error("[Screen Share] Error playing video:", err); 
+        addLiveMessage({ 
+          role: 'error', 
+          text: `Screen share error: ${err.message}`
+        }); 
+        stopScreenShareInternal(); 
+      });
 
-      // Handle when the user stops sharing via the browser's native UI
+      // Handle user ending screen share
       stream.getVideoTracks()[0].onended = () => {
         console.log("[Screen Share] User stopped sharing via browser UI.");
-        stopScreenShareInternal(); // Call our internal stop function
+        stopScreenShareInternal();
       };
 
-
-    } catch (err) {
-      console.error('[Screen Share] Error starting screen share:', err);
-      let errorText = `Screen share error: ${err.message}`;
-      if (err.name === 'NotAllowedError') errorText = 'Screen share permission denied.';
-      // ... other specific errors for getDisplayMedia if needed
-      addLiveMessage({ role: 'error', text: errorText });
-      // Ensure state is reset
-      setIsStreamingScreen(false);
-      isScreenSharingRef.current = false;
-      if(screenStreamRef.current) { // If stream was partially acquired
-           screenStreamRef.current.getTracks().forEach(track => track.stop());
-           screenStreamRef.current = null;
+    } catch (error) {
+      console.error("[Screen Share] Error:", error);
+      
+      let errorMessage = "Failed to start screen sharing";
+      
+      // Provide more specific error messages for mobile
+      if (error.name === "NotAllowedError") {
+        errorMessage = "Screen sharing permission denied";
+      } else if (error.name === "NotReadableError") {
+        errorMessage = "Cannot access the screen content";
+      } else if (error.name === "NotSupportedError" || error.message.includes("getDisplayMedia is not defined")) {
+        errorMessage = "Screen sharing is not supported on this device or browser";
+      } else if (/iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+        errorMessage = "iOS devices don't support screen sharing in browsers";
+      } else {
+        errorMessage = `Screen sharing error: ${error.message || 'Unknown error'}`;
       }
+      
+      addLiveMessage({ role: 'error', text: errorMessage });
+      isScreenSharingRef.current = false;
     }
-  }, [liveConnectionStatus, addLiveMessage, stopScreenShareInternal ]);
+  }, [addLiveMessage, stopScreenShareInternal]);
 
   // --- Memoized WebSocket Logic ---
   const setupLiveConnection = useCallback(() => {
