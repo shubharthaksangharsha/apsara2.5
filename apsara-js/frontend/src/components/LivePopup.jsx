@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { MessageSquare, X, Send, Mic, MicOff, Video, VideoOff, ScreenShare, ScreenShareOff, ClipboardCopy, Settings as SettingsIcon, Paperclip, Info, MapPin, Code2, Terminal, CalendarDays, Users, Sun, ChevronDown, ChevronUp, Volume2, RefreshCw, PlusCircle, Calendar as CalendarIcon } from 'lucide-react';
+import { MessageSquare, X, Send, Mic, MicOff, Video, VideoOff, ScreenShare, ScreenShareOff, ClipboardCopy, Settings as SettingsIcon, Paperclip, Info, MapPin, Code2, Terminal, CalendarDays, Users, Sun, ChevronDown, ChevronUp, Volume2, RefreshCw, PlusCircle, Calendar as CalendarIcon, Clock, AudioLines } from 'lucide-react';
 import VideoStreamDisplay from './VideoStreamDisplay';
 import ScreenShareDisplay from './ScreenShareDisplay';
 import MapDisplay from './MapDisplay';
@@ -143,6 +143,13 @@ const TABS = [
   { id: 'weather', label: 'Weather', icon: Sun },
 ];
 
+// Add the media resolution options as a constant
+const MEDIA_RESOLUTIONS = [
+  { value: 'MEDIA_RESOLUTION_LOW', label: 'Low' },
+  { value: 'MEDIA_RESOLUTION_MEDIUM', label: 'Medium' },
+  { value: 'MEDIA_RESOLUTION_HIGH', label: 'High' },
+];
+
 export default function LivePopup({
   // State from App.jsx
   connectionStatus, 
@@ -184,6 +191,9 @@ export default function LivePopup({
   onSetSelectedVideoDeviceId, // <-- New handler
   onGetVideoInputDevices, // <-- New handler
   flipCamera,
+  transcriptionEnabled, setTranscriptionEnabled,
+  slidingWindowEnabled, setSlidingWindowEnabled,
+  slidingWindowTokens, setSlidingWindowTokens,
 }) {
   const [inputText, setInputText] = useState('');
   const messagesEndRef = useRef(null);
@@ -822,7 +832,28 @@ export default function LivePopup({
               )}
                 <div>
                   <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Advanced Settings</label>
-                  <div className="p-1.5 sm:p-2 border rounded-md text-xs bg-gray-100 dark:bg-gray-700/50 border-gray-300 dark:border-gray-600 text-gray-500 dark:text-gray-400"> Placeholder for advanced settings. </div>
+                  <div className="space-y-2 p-2 border rounded-md text-xs bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600"> 
+                    <div>
+                      <label className="block text-[10px] font-medium text-gray-600 dark:text-gray-400 mb-1">Media Resolution</label>
+                      <select className="w-full p-1 border rounded-md text-xs bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 focus:ring-1 focus:ring-indigo-400">
+                        {MEDIA_RESOLUTIONS.map(res => (
+                          <option key={res.value} value={res.value}>{res.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="flex items-center gap-1.5 pt-1">
+                      <input type="checkbox" id="transcriptionEnabled" className="h-3 w-3 text-indigo-600 focus:ring-indigo-500" checked={transcriptionEnabled} onChange={e => setTranscriptionEnabled(e.target.checked)} />
+                      <label htmlFor="transcriptionEnabled" className="text-xs text-gray-700 dark:text-gray-300">Enable Transcription</label>
+                    </div>
+                    <div className="flex items-center gap-2 pt-1">
+                      <input type="checkbox" id="slidingWindowEnabled" className="h-3 w-3 text-indigo-600 focus:ring-indigo-500" checked={slidingWindowEnabled} onChange={e => setSlidingWindowEnabled(e.target.checked)} />
+                      <label htmlFor="slidingWindowEnabled" className="text-xs text-gray-700 dark:text-gray-300">Enable Sliding Window Compression</label>
+                      {slidingWindowEnabled && (
+                        <input type="number" min="1000" max="16000" step="100" value={slidingWindowTokens} onChange={e => setSlidingWindowTokens(Number(e.target.value))} className="ml-2 w-16 p-1 border rounded text-xs bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600" />
+                      )}
+                      {slidingWindowEnabled && <span className="text-xs text-gray-500 ml-1">Trigger Tokens</span>}
+                    </div>
+                  </div>
                 </div>
                 <div className="pt-2 flex-grow flex items-end">
                 <button
@@ -834,12 +865,19 @@ export default function LivePopup({
             </div>
             ) : (
               <div className="flex flex-col flex-grow">
-                {/* Status info - Make more compact */}
+                {/* Status info with session time remaining */}
                 <div className="text-[10px] sm:text-xs text-gray-600 dark:text-gray-300 mb-1.5 space-y-0.5 flex-shrink-0">
                   <p><strong>Status:</strong> {getStatusIndicator(connectionStatus)}</p>
                   {liveModality && <p><strong>Mode:</strong> {liveModality.replace('_', ' + ')}</p>}
                   {(liveModality === 'AUDIO' || liveModality === 'AUDIO_TEXT') && currentVoice && <p><strong>Voice:</strong> {currentVoice}</p>}
                   {currentSessionHandle && <p><strong>Session ID:</strong> <span className="font-mono text-indigo-600 dark:text-indigo-400 break-all text-[8px] sm:text-xs">{currentSessionHandle.slice(0,8)}...</span></p>}
+                  
+                  {/* Add Session Time Display */}
+                  {sessionTimeLeft && (
+                    <p className="bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-300 px-1.5 py-0.5 rounded font-medium flex items-center gap-1 mt-1">
+                      <Clock size={10} /> Session time remaining: {sessionTimeLeft}
+                    </p>
+                  )}
                 </div>
 
                 {/* Media Area - Mobile-optimized with horizontal layout */}
@@ -923,7 +961,7 @@ export default function LivePopup({
               <button
                 onClick={() => setShowCameraSelector(false)}
                 className="mt-4 sm:mt-6 w-full px-3 py-1.5 sm:px-4 sm:py-2 rounded-md text-sm text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
-              >
+                >
                 Cancel
                 </button>
               </div>

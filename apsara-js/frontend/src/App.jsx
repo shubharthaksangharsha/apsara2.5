@@ -122,6 +122,10 @@ export default function App() {
     clearUploadedFiles: () => setFiles([]), // <-- Pass a function to clear them
   });
 
+  const [transcriptionEnabled, setTranscriptionEnabled] = useState(true); // default ON
+  const [slidingWindowEnabled, setSlidingWindowEnabled] = useState(true); // default ON
+  const [slidingWindowTokens, setSlidingWindowTokens] = useState(4000); // default 4000
+
   const {
     // Live State
     liveMessages,
@@ -157,7 +161,12 @@ export default function App() {
     calendarEvents,
     calendarEventsLastUpdated,
     flipCamera,
-  } = useLiveSession({ currentVoice }); // Pass dependencies
+  } = useLiveSession({
+    currentVoice,
+    transcriptionEnabled,
+    slidingWindowEnabled,
+    slidingWindowTokens,
+  });
 
   // Settings panel
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -395,17 +404,17 @@ export default function App() {
         <div className="fixed bottom-0 left-0 right-0 lg:left-auto w-full border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 z-20">
           {/* File Preview Bar - Renders if files are present */}
           <FilePreviewBar files={files} onRemoveFile={removeFile} />
-
-          {/* Message Input - Use Imported Component */}
-          <MessageInput
-            onSend={sendToBackend}
-            onStreamSend={startStreamChat}
-            isLoading={isChatLoading}
-            disabled={!activeConvoId}
-            onFileUploadClick={() => setFileUploadOpen(true)}
+        
+        {/* Message Input - Use Imported Component */}
+        <MessageInput
+          onSend={sendToBackend}
+          onStreamSend={startStreamChat}
+          isLoading={isChatLoading}
+          disabled={!activeConvoId}
+          onFileUploadClick={() => setFileUploadOpen(true)}
             streamEnabled={streamToggleState}
             onStreamToggleChange={setStreamToggleState}
-          />
+        />
         </div>
       </main>
 
@@ -473,7 +482,12 @@ export default function App() {
           weatherUIData={weatherUIData}
           calendarEvents={calendarEvents}
           calendarEventsLastUpdated={calendarEventsLastUpdated}
-          
+          transcriptionEnabled={transcriptionEnabled}
+          setTranscriptionEnabled={setTranscriptionEnabled}
+          slidingWindowEnabled={slidingWindowEnabled}
+          setSlidingWindowEnabled={setSlidingWindowEnabled}
+          slidingWindowTokens={slidingWindowTokens}
+          setSlidingWindowTokens={setSlidingWindowTokens}
         />
       )}
 
