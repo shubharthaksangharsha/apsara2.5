@@ -833,12 +833,21 @@ export function useLiveSession({ currentVoice, transcriptionEnabled = true, slid
         role: 'system', 
         text: 'Resuming previous session...', 
       });
+      
+      // When resuming a session, we don't clear the messages or context
+      // This ensures that maps, weather, and calendar data are preserved
     } else {
-      // Starting a new fresh session
+      // Starting a new fresh session - cleared messages already in startLiveSession
       addLiveMessage({ 
         role: 'system', 
         text: 'Starting new session...', 
       });
+      
+      // Make sure context-specific data is cleared for a new session
+      setMapDisplayData(null);     // Clear map display data
+      setWeatherUIData(null);      // Clear weather UI data
+      setCalendarEvents([]);       // Clear calendar events
+      setCalendarEventsLastUpdated(0); // Reset calendar timestamp
     }
 
     // Create WebSocket connection
@@ -979,7 +988,8 @@ export function useLiveSession({ currentVoice, transcriptionEnabled = true, slid
                      sessionResumeHandleRef.current = data.sessionResumptionUpdate.newHandle;
                      console.log("[Live WS] Stored new session resume handle.");
                      
-                     // NEW: Save to localStorage for persistence
+                     // Backend feature: The AI service automatically provides a resumption handle
+                     // which we save to allow resuming interrupted sessions
                      try {
                        updateSessionWithHandle(data.sessionResumptionUpdate.newHandle, {
                          modality: liveModality,
@@ -987,7 +997,7 @@ export function useLiveSession({ currentVoice, transcriptionEnabled = true, slid
                          systemInstruction: liveSystemInstruction,
                          timestamp: Date.now()
                        });
-                       console.log("[Live WS] Auto-saved session handle to localStorage");
+                       console.log("[Live WS] Auto-saved session handle from backend to localStorage");
                      } catch (err) {
                        console.error("[Live WS] Error auto-saving session handle to localStorage:", err);
                      }
@@ -1129,19 +1139,22 @@ export function useLiveSession({ currentVoice, transcriptionEnabled = true, slid
       return;
     }
     
-    // Clear any existing visualization data
-    setMapDisplayData(null); // Clear map when starting
-    setWeatherUIData(null); // Clear weather data when starting new session
-    setCalendarEvents([]); // Clear calendar events when starting new session
-    setCalendarEventsLastUpdated(0); // Reset timestamps
+    // Only clear messages if we're not resuming an existing session
+    // If session handle exists, we're resuming and should keep the messages
+    if (!sessionResumeHandleRef.current) {
+      console.log('[Live WS] Starting fresh session, clearing previous messages');
+      // Clear all previous messages and data
+      setLiveMessages([]); // Clear all previous messages when starting a new session
+    } else {
+      console.log('[Live WS] Resuming existing session, keeping messages');
+    }
     
     // Initialize audio before connecting
     initAudioContexts();
     
     console.log(`[Live WS] Starting a new live session. Modality: ${liveModality}`);
     setupLiveConnection(mainChatContext);
-  }, [liveConnectionStatus, liveModality, setupLiveConnection, initAudioContexts, 
-      setMapDisplayData, setWeatherUIData, setCalendarEvents, setCalendarEventsLastUpdated]);
+  }, [liveConnectionStatus, liveModality, setupLiveConnection, initAudioContexts]);
 
   const endLiveSession = useCallback(() => {
     setMapDisplayData(null); // Clear map when ending

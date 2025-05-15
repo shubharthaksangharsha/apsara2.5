@@ -317,7 +317,7 @@ export default function App() {
     await startStreamChat(promptText, id, initialConvoData, modelToUse, shouldEnableSearch, shouldEnableCodeExec); // Pass overrides
   }, [models, currentModel, setCurrentModel, setEnableGoogleSearch, setEnableCodeExecution, setStreamToggleState, closeSidebar, startStreamChat]); // Added setters to dependencies, removed sendToBackend as it's not used here
 
-  // NEW: Function to load a saved live session
+  // Function to load a saved live session
   const loadLiveSession = useCallback((resumeHandle, modality, voice, systemInstruction) => {
     if (!resumeHandle) {
       console.error("Cannot load session: No resume handle provided");
@@ -332,13 +332,16 @@ export default function App() {
     // Open live popup if not already open
     if (!liveOpen) setLiveOpen(true);
     
+    // Set the session resume handle before starting
+    setSessionResumeHandle(resumeHandle);
+    
     // Wait a short time for UI to update before starting the session
     setTimeout(() => {
       console.log("Loading saved session with handle:", resumeHandle);
-      // The useLiveSession hook will automatically use the handle to resume
+      // The useLiveSession hook will use the handle we just set to resume the session
       startLiveSession();
     }, 300);
-  }, [liveOpen, setLiveOpen, setLiveModality, setCurrentVoice, setLivePrompt, startLiveSession]);
+  }, [liveOpen, setLiveOpen, setLiveModality, setCurrentVoice, setLivePrompt, startLiveSession, setSessionResumeHandle]);
 
   // NEW: Function to start a live chat with the current main chat context
   const startLiveWithMainContext = useCallback(() => {
@@ -575,7 +578,7 @@ export default function App() {
           onStartWithMainContext={startLiveWithMainContext} // NEW: Add prop for starting with main chat context
           currentSessionHandle={currentSessionHandle} // Pass the properly exposed value from useLiveSession hook
           startedWithMainContext={activeConvoId != null} // Set true if opened from main chat
-          setSessionResumeHandle={setSessionResumeHandle} // Make sure this prop is passed to LivePopup
+          setSessionResumeHandle={setSessionResumeHandle} // Pass the session resume handler
         />
       )}
 
