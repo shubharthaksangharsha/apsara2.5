@@ -197,7 +197,7 @@ export const getSessionById = (sessionId) => {
 };
 
 // Delete all sessions
-export const deleteAllSessions = () => {
+export const clearAllSessions = () => {
   try {
     localStorage.removeItem(STORAGE_KEY);
     return true;
@@ -206,6 +206,9 @@ export const deleteAllSessions = () => {
     return false;
   }
 };
+
+// For backwards compatibility, also export as deleteAllSessions
+export const deleteAllSessions = clearAllSessions;
 
 // Export session as a JSON file
 export const exportSession = (sessionId) => {

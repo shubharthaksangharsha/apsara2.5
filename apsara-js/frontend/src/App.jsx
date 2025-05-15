@@ -332,13 +332,13 @@ export default function App() {
     // Open live popup if not already open
     if (!liveOpen) setLiveOpen(true);
     
-    // Set the session resume handle before starting
+    // Explicitly set the session resume handle to restore the previous session
     setSessionResumeHandle(resumeHandle);
     
     // Wait a short time for UI to update before starting the session
     setTimeout(() => {
       console.log("Loading saved session with handle:", resumeHandle);
-      // The useLiveSession hook will use the handle we just set to resume the session
+      // Now startLiveSession will use the handle we just set
       startLiveSession();
     }, 300);
   }, [liveOpen, setLiveOpen, setLiveModality, setCurrentVoice, setLivePrompt, startLiveSession, setSessionResumeHandle]);
@@ -478,13 +478,15 @@ export default function App() {
           
           {/* Action Buttons Row - NEW */}
           <div className="flex justify-between items-center mb-1">
-            {/* Live Chat Button - Left side */}
-            <button 
-              onClick={startLiveWithMainContext} 
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-indigo-500 to-purple-500 text-white text-xs font-medium rounded-lg shadow-sm hover:from-indigo-600 hover:to-purple-600 transition-colors"
-            >
-              <AudioLines className="w-3.5 h-3.5" /> Start Live Chat
-            </button>
+            {/* Live Chat Button - Left side - Only show when there's an active conversation */}
+            {activeConvoId && (
+              <button 
+                onClick={startLiveWithMainContext} 
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-indigo-500 to-purple-500 text-white text-xs font-medium rounded-lg shadow-sm hover:from-indigo-600 hover:to-purple-600 transition-colors"
+              >
+                <AudioLines className="w-3.5 h-3.5" /> Start Live Chat
+              </button>
+            )}
             
             {/* Right side - future actions could go here */}
             <div></div>

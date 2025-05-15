@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, Calendar, Clock, MessageSquare, Trash2, Volume2, AudioLines, MessageSquareText } from 'lucide-react';
-import { loadSessions, deleteSession } from '../utils/liveSessionStorage';
+import { loadSessions, deleteSession, clearAllSessions } from '../utils/liveSessionStorage';
 
 /**
  * Component to display and manage saved live sessions
@@ -9,6 +9,7 @@ export default function SavedSessionsPanel({ onClose, onSelectSession }) {
   const [sessions, setSessions] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
+  const [showDeleteAllConfirm, setShowDeleteAllConfirm] = useState(false);
 
   useEffect(() => {
     loadSavedSessions();
@@ -35,6 +36,20 @@ export default function SavedSessionsPanel({ onClose, onSelectSession }) {
       setDeleteConfirmId(sessionId);
       // Auto-reset confirmation after 3 seconds
       setTimeout(() => setDeleteConfirmId(null), 3000);
+    }
+  };
+
+  const handleDeleteAllSessions = () => {
+    if (showDeleteAllConfirm) {
+      // User confirmed, delete all sessions
+      clearAllSessions();
+      setSessions([]);
+      setShowDeleteAllConfirm(false);
+    } else {
+      // First click, show confirmation
+      setShowDeleteAllConfirm(true);
+      // Auto-reset confirmation after 3 seconds
+      setTimeout(() => setShowDeleteAllConfirm(false), 3000);
     }
   };
 
@@ -149,7 +164,16 @@ export default function SavedSessionsPanel({ onClose, onSelectSession }) {
           )}
         </div>
 
-        <div className="mt-4 pt-3 border-t border-gray-200 dark:border-gray-700">
+        <div className="mt-4 pt-3 border-t border-gray-200 dark:border-gray-700 space-y-2">
+          {sessions.length > 0 && (
+            <button
+              onClick={handleDeleteAllSessions}
+              className={`w-full px-4 py-2 ${showDeleteAllConfirm ? 'bg-red-600 hover:bg-red-700' : 'bg-red-500 hover:bg-red-600'} text-white text-sm font-medium rounded-lg transition-colors`}
+            >
+              {showDeleteAllConfirm ? 'Confirm Delete All Sessions' : 'Delete All Sessions'}
+            </button>
+          )}
+          
           <button
             onClick={onClose}
             className="w-full px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 text-sm font-medium rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
