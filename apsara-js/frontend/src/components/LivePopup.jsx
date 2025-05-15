@@ -282,6 +282,77 @@ export default function LivePopup({
   }, [calendarEventsLastUpdated, activeTab]); // Depend on calendarEventsLastUpdated and activeTab
   // --- END REVISED ---
 
+  // --- NEW: Add ref for tracking code content length changes ---
+  const prevCodeContentLengthRef = useRef(0);
+  // --- END NEW ---
+
+  // Create combined & de-duplicated list for Code & Output Tab
+  const combinedCodeOutputContent = [];
+  const uniqueContentKeys = new Set();
+
+  messages.forEach(msg => {
+    if ((msg.role === 'model' && msg.parts) || msg.role === 'system_code_result') {
+      // Handle Model parts
+      msg.parts?.forEach((part, index) => {
+        const partId = `${msg.id}-part-${index}`;
+        let contentKey = null;
+        let contentData = null;
+
+        if (part.executableCode) {
+          contentKey = `code-${part.executableCode.language}-${part.executableCode.code}`;
+          contentData = { type: 'code', data: part.executableCode, id: partId };
+          console.log("[LivePopup] Executable code detected:", part.executableCode.language);
+        } else if (part.codeExecutionResult) {
+          contentKey = `result-${part.codeExecutionResult.outcome}-${part.codeExecutionResult.output}`;
+          contentData = { type: 'result', data: part.codeExecutionResult, id: partId };
+          console.log("[LivePopup] Code execution result detected:", part.codeExecutionResult.outcome);
+        } else if (part.inlineData && part.inlineData.mimeType?.startsWith('image/')) {
+          // Use a shorter key for images if data string is too long
+          const imageDataSubstr = part.inlineData.data.substring(0, 100);
+          contentKey = `image-${imageDataSubstr}`;
+          contentData = { type: 'image', data: part.inlineData, id: partId };
+        }
+
+        if (contentKey && !uniqueContentKeys.has(contentKey)) {
+          combinedCodeOutputContent.push(contentData);
+          uniqueContentKeys.add(contentKey);
+        }
+      });
+
+      // Handle legacy system_code_result
+      if (msg.role === 'system_code_result' && msg.result) {
+        const resultKey = `legacy-result-${msg.result.outcome}-${msg.result.output}`;
+        const partId = `${msg.id}-legacyresult`;
+         if (!uniqueContentKeys.has(resultKey)) {
+           combinedCodeOutputContent.push({ type: 'result', data: msg.result, id: partId });
+           uniqueContentKeys.add(resultKey);
+         }
+      }
+    }
+  });
+
+  // --- NEW: useEffect to switch to Code tab when code execution content is received ---
+  useEffect(() => {
+    // Only switch if new code content is added and the code tab is not already active
+    if (combinedCodeOutputContent.length > prevCodeContentLengthRef.current && activeTab !== 'code') {
+      console.log("[LivePopup] Code execution or result received, switching to Code & Output tab.");
+      setActiveTab('code');
+    }
+    // Update the ref for next comparison
+    prevCodeContentLengthRef.current = combinedCodeOutputContent.length;
+  }, [combinedCodeOutputContent.length, activeTab]);
+  // --- END NEW ---
+
+  // Log data specifically when map tab is active during render
+  if(activeTab === 'map') {
+      console.log("[LivePopup] Rendering Map tab. Current mapDisplayData:", mapDisplayData);
+  }
+  // --- NEW: Log data when weather tab is active during render ---
+  if(activeTab === 'weather') {
+    console.log("[LivePopup] Rendering Weather tab. Current weatherUIData:", weatherUIData);
+  }
+  // --- END NEW ---
+
   const handleSendMessage = () => {
     if (!inputText.trim() || connectionStatus !== 'connected') return;
     onSendMessage(inputText.trim());
@@ -424,59 +495,6 @@ export default function LivePopup({
     if (msg.role === 'model') return true;
     return false;
   });
-
-  // Create combined & de-duplicated list for Code & Output Tab
-  const combinedCodeOutputContent = [];
-  const uniqueContentKeys = new Set();
-
-  messages.forEach(msg => {
-    if ((msg.role === 'model' && msg.parts) || msg.role === 'system_code_result') {
-      // Handle Model parts
-      msg.parts?.forEach((part, index) => {
-        const partId = `${msg.id}-part-${index}`;
-        let contentKey = null;
-        let contentData = null;
-
-        if (part.executableCode) {
-          contentKey = `code-${part.executableCode.language}-${part.executableCode.code}`;
-          contentData = { type: 'code', data: part.executableCode, id: partId };
-        } else if (part.codeExecutionResult) {
-          contentKey = `result-${part.codeExecutionResult.outcome}-${part.codeExecutionResult.output}`;
-          contentData = { type: 'result', data: part.codeExecutionResult, id: partId };
-        } else if (part.inlineData && part.inlineData.mimeType?.startsWith('image/')) {
-          // Use a shorter key for images if data string is too long
-          const imageDataSubstr = part.inlineData.data.substring(0, 100);
-          contentKey = `image-${imageDataSubstr}`;
-          contentData = { type: 'image', data: part.inlineData, id: partId };
-        }
-
-        if (contentKey && !uniqueContentKeys.has(contentKey)) {
-          combinedCodeOutputContent.push(contentData);
-          uniqueContentKeys.add(contentKey);
-        }
-      });
-
-      // Handle legacy system_code_result
-      if (msg.role === 'system_code_result' && msg.result) {
-        const resultKey = `legacy-result-${msg.result.outcome}-${msg.result.output}`;
-        const partId = `${msg.id}-legacyresult`;
-         if (!uniqueContentKeys.has(resultKey)) {
-           combinedCodeOutputContent.push({ type: 'result', data: msg.result, id: partId });
-           uniqueContentKeys.add(resultKey);
-         }
-      }
-    }
-  });
-
-  // Log data specifically when map tab is active during render
-  if(activeTab === 'map') {
-      console.log("[LivePopup] Rendering Map tab. Current mapDisplayData:", mapDisplayData);
-  }
-  // --- NEW: Log data when weather tab is active during render ---
-  if(activeTab === 'weather') {
-    console.log("[LivePopup] Rendering Weather tab. Current weatherUIData:", weatherUIData);
-  }
-  // --- END NEW ---
 
   const handleRefreshCalendar = () => {
     if (connectionStatus === 'connected') {
