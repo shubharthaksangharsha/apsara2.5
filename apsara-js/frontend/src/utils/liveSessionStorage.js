@@ -196,6 +196,42 @@ export const getSessionById = (sessionId) => {
   }
 };
 
+/**
+ * Save a session before disconnection
+ * @param {string} resumeHandle - The session resume handle
+ * @param {Object} sessionData - Additional session data
+ * @returns {boolean} - Whether the save was successful
+ */
+export const saveDisconnectedSession = (resumeHandle, sessionData = {}) => {
+  try {
+    if (!resumeHandle) return false;
+    
+    const existingSessions = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+    
+    // Create a timestamp for the session name
+    const date = new Date();
+    const formattedTime = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const formattedDate = date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+    
+    // Create new session entry with special disconnection title
+    existingSessions.push({
+      id: Date.now().toString(),
+      title: `SESSION DISCONNECTED: ${formattedDate}, ${formattedTime}`,
+      messageCount: sessionData.messageCount || 0,
+      resumeHandle,
+      timestamp: Date.now(),
+      sessionType: 'disconnected', // Tag this session as a disconnected session
+      ...sessionData
+    });
+    
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(existingSessions));
+    return true;
+  } catch (error) {
+    console.error('Error saving disconnected session:', error);
+    return false;
+  }
+};
+
 // Delete all sessions
 export const clearAllSessions = () => {
   try {

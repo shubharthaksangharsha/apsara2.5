@@ -164,6 +164,8 @@ export default function App() {
     flipCamera,
     handleAutoSessionResume,
     setSessionResumeHandle, // NEW: Expose function to set the session resume handle directly
+    activeTab,
+    setActiveTab,
   } = useLiveSession({
     currentVoice,
     transcriptionEnabled,
@@ -470,7 +472,7 @@ export default function App() {
             })()
           )}
         </div>
-
+        
         {/* Bottom Flex Container for File & Input */}
         <div className="w-full p-2 sm:p-3 border-t border-gray-200 dark:border-gray-700 flex flex-col gap-2 relative flex-shrink-0 bg-white dark:bg-gray-800">
           {/* File Preview Bar */}
@@ -493,15 +495,15 @@ export default function App() {
           </div>
 
           {/* Chat Input Area */}
-          <MessageInput
-            onSend={sendToBackend}
-            onStreamSend={startStreamChat}
-            isLoading={isChatLoading}
-            disabled={!activeConvoId}
-            onFileUploadClick={() => setFileUploadOpen(true)}
+        <MessageInput
+          onSend={sendToBackend}
+          onStreamSend={startStreamChat}
+          isLoading={isChatLoading}
+          disabled={!activeConvoId}
+          onFileUploadClick={() => setFileUploadOpen(true)}
             streamEnabled={streamToggleState}
             onStreamToggleChange={setStreamToggleState}
-          />
+        />
         </div>
       </main>
 
@@ -575,6 +577,8 @@ export default function App() {
           setSlidingWindowEnabled={setSlidingWindowEnabled}
           slidingWindowTokens={slidingWindowTokens}
           setSlidingWindowTokens={setSlidingWindowTokens}
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
           onAutoResumeSession={handleAutoSessionResume}
           onLoadSession={loadLiveSession} // Add new prop for loading saved sessions
           onStartWithMainContext={startLiveWithMainContext} // NEW: Add prop for starting with main chat context

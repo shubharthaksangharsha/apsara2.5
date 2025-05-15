@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { Mic, AudioLines, Clock, RefreshCw } from 'lucide-react'; // Import icons
-import { updateSessionWithHandle, getMostRecentSessionHandle } from '../utils/liveSessionStorage'; // Import for session persistence
+import { updateSessionWithHandle, getMostRecentSessionHandle, saveDisconnectedSession } from '../utils/liveSessionStorage'; // Import for session persistence
 
 // Helper function to decode PCM audio data
 const decodePcm16ToFloat32 = (arrayBuffer) => {
@@ -31,6 +31,7 @@ export function useLiveSession({ currentVoice, transcriptionEnabled = true, slid
   const [weatherUIData, setWeatherUIData] = useState(null); // <-- NEW: State for weather UI data
   const [calendarEvents, setCalendarEvents] = useState([]); // <-- NEW: State for calendar events
   const [calendarEventsLastUpdated, setCalendarEventsLastUpdated] = useState(0); // Use 0 as initial, can be a timestamp or counter
+  const [activeTab, setActiveTab] = useState('chat'); // NEW: State for the active tab
 
   // --- ADD a useEffect to log state changes for mapDisplayData ---
   useEffect(() => {
@@ -624,8 +625,8 @@ export function useLiveSession({ currentVoice, transcriptionEnabled = true, slid
             role: 'error', 
             text: 'Screen sharing is not supported on this mobile browser. Please try using Chrome on Android or a desktop browser.'
           });
-          return;
-        }
+      return;
+    }
       }
 
       console.log("[Screen Share] Requesting screen capture access");
@@ -768,7 +769,7 @@ export function useLiveSession({ currentVoice, transcriptionEnabled = true, slid
       
       addLiveMessage({ role: 'error', text: errorMessage });
       isScreenSharingRef.current = false;
-    }
+      }
   }, [addLiveMessage, stopScreenShareInternal]);
 
   // --- Core Connection Handling ---
@@ -961,7 +962,7 @@ export function useLiveSession({ currentVoice, transcriptionEnabled = true, slid
                     console.log("🛑 [Live WS] Interruption detected! Stopping playback.");
                     stopAndClearAudio(); // Stop playback and clear queue
                  }
-                 
+
                  // --- Handle Transcriptions (Input and Output) ---
                  if (data.serverContent.outputTranscription?.text) {
                     if (transcriptionEnabled) {
@@ -1023,6 +1024,51 @@ export function useLiveSession({ currentVoice, transcriptionEnabled = true, slid
                     addLiveMessage({ role: 'error', text: `Error fetching calendar events: ${data.result?.message || 'Unknown error'}` });
                     setCalendarEvents([]);
                 }
+                // --- Handle switchTab action ---
+                if (data.name === 'switchTab' && data.result?.status === 'success' && data.result?.tab) {
+                    console.log(`🔄 [Live WS] Tab switching requested to: ${data.result.tab}`);
+                    setActiveTab(data.result.tab);
+                    addLiveMessage({ role: 'system', text: `Switched to ${data.result.tab} tab.` });
+                }
+                // --- Handle takeNotes result ---
+                if (data.name === 'takeNotes' && data.result?.status === 'success') {
+                    console.log(`📝 [Live WS] Note saved successfully: ${data.result.message}`);
+                    
+                    // Show success message with note details
+                    addLiveMessage({ 
+                        role: 'system', 
+                        text: `📝 ${data.result.message}` 
+                    });
+                }
+                // --- Handle loadNotes result ---
+                if (data.name === 'loadNotes' && data.result?.status === 'success') {
+                    console.log(`📋 [Live WS] Notes loaded successfully: ${data.result.total_notes} notes`);
+                    
+                    // Format the notes into a readable message for the model
+                    if (data.result.notes && data.result.notes.length > 0) {
+                        // Create a formatted message with the notes content
+                        const notesContent = data.result.notes.map((note, index) => {
+                            const title = note.title ? `"${note.title}"` : "Untitled";
+                            return `Note ${index + 1} (${title} - ${note.timestamp}):\n${note.content}`;
+                        }).join('\n\n---\n\n');
+                        
+                        // Add a message with all notes content
+                        addLiveMessage({
+                            role: 'system',
+                            text: `📋 Loaded ${data.result.notes.length} notes:\n\n${notesContent}`
+                        });
+                    } else {
+                        addLiveMessage({
+                            role: 'system',
+                            text: 'No notes found in the file.'
+                        });
+                    }
+                } else if (data.name === 'loadNotes' && data.result?.status !== 'success') {
+                    addLiveMessage({
+                        role: 'error',
+                        text: `Error loading notes: ${data.result?.message || 'Unknown error'}`
+                    });
+                }
                 // --- NEW: Handle createCalendarEvent success and refresh list ---
                 if (data.name === 'createCalendarEvent' && data.result?.status === 'success') {
                     addLiveMessage({ role: 'system', text: `🎉 Event "${data.result.summary || 'New Event'}" created successfully! Refreshing calendar...` });
@@ -1035,7 +1081,6 @@ export function useLiveSession({ currentVoice, transcriptionEnabled = true, slid
                 } else if (data.name === 'createCalendarEvent' && data.result?.status !== 'success') {
                      addLiveMessage({ role: 'error', text: `Error creating event: ${data.result?.message || 'Unknown error'}` });
                 }
-                // --- End NEW ---
             } else if (data.event === 'tool_call_error') {
                  console.error("❌ [Live WS] Tool call error:", data.name, data.error);
                  addLiveMessage({ role: 'error', text: `❌ Tool ${data.name} error: ${data.error}`});
@@ -1049,20 +1094,39 @@ export function useLiveSession({ currentVoice, transcriptionEnabled = true, slid
                 // Show warning to user
                 addLiveMessage({ 
                     role: 'system', 
-                    text: `⚠️ Session will end in approximately ${timeLeftStr}. Preparing automatic resumption.`,
+                    text: `⚠️ Session will end in approximately ${timeLeftStr}. Session will be saved before disconnection.`,
                     icon: Clock 
                 });
                 
-                // Trigger auto-resume when we get close to timeout
+                // Save the session when we get close to timeout, instead of auto-resuming
                 // Only if we have a valid resume handle
                 if (sessionResumeHandleRef.current) {
-                    // Auto-resume when we have around 15s left (adjust timing as needed)
-                    const shouldAutoResume = timeLeftStr.includes("15s") || 
-                                             timeLeftStr.includes("10s");
+                    // Save when we have around 15s left (adjust timing as needed)
+                    const shouldSaveBeforeDisconnect = timeLeftStr.includes("15s") || 
+                                                       timeLeftStr.includes("10s");
                     
-                    if (shouldAutoResume) {
-                        console.log("[Live WS] Auto-resuming session due to imminent timeout");
-                        handleAutoSessionResume();
+                    if (shouldSaveBeforeDisconnect) {
+                        console.log("[Live WS] Saving session before disconnection due to timeout");
+                        try {
+                            // Save the session with the disconnected tag
+                            saveDisconnectedSession(sessionResumeHandleRef.current, {
+                                modality: liveModality,
+                                voice: currentVoice,
+                                systemInstruction: liveSystemInstruction,
+                                messageCount: liveMessages.length,
+                                timestamp: Date.now()
+                            });
+                            
+                            addLiveMessage({ 
+                                role: 'system', 
+                                text: '💾 Session saved before disconnection. You can resume it from the Saved Sessions panel.',
+                                icon: RefreshCw 
+                            });
+                            
+                            console.log("[Live WS] Successfully saved session before disconnection");
+                        } catch (error) {
+                            console.error("[Live WS] Error saving session before disconnection:", error);
+                        }
                     }
                 }
             }
@@ -1150,7 +1214,7 @@ export function useLiveSession({ currentVoice, transcriptionEnabled = true, slid
     }
     
     // Initialize audio before connecting
-    initAudioContexts();
+      initAudioContexts();
     
     console.log(`[Live WS] Starting a new live session. Modality: ${liveModality}`);
     setupLiveConnection(mainChatContext);
@@ -1313,6 +1377,7 @@ export function useLiveSession({ currentVoice, transcriptionEnabled = true, slid
     calendarEvents, // <-- NEW: Expose calendar events
     calendarEventsLastUpdated, // Expose this new state
     currentSessionHandle: sessionResumeHandleRef.current, // Expose the current session handle
+    activeTab, // NEW: Expose the active tab state
 
     // Setters/Handlers
     setLiveModality,
@@ -1328,5 +1393,6 @@ export function useLiveSession({ currentVoice, transcriptionEnabled = true, slid
     flipCamera,
     handleAutoSessionResume,
     setSessionResumeHandle, // NEW: Add function to set the session resume handle directly
+    setActiveTab, // NEW: Add function to set the active tab
   };
 }

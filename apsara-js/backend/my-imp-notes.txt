@@ -1,0 +1,60 @@
+
+
+--- 2025-05-15 15:13:27 - Poem Idea ---
+Write a poem for girlfriend Pranchal
+
+--- 2025-05-15 15:17:24 - Bubble Sort Visualization Code ---
+
+import matplotlib.pyplot as plt
+import numpy as np
+
+def bubble_sort(arr):
+    n = len(arr)
+    swapped = True
+    iterations = []
+    
+    # Add the initial state
+    temp_arr = arr[:]
+    iterations.append(temp_arr)
+
+    for i in range(n-1):
+        if not swapped:
+            break
+        swapped = False
+        for j in range(n-i-1):
+            if arr[j] > arr[j+1]:
+                arr[j], arr[j+1] = arr[j+1], arr[j]
+                swapped = True
+                #After swap
+                temp_arr = arr[:]
+                iterations.append(temp_arr)
+
+    return iterations
+
+# Example array
+arr = [5, 3, 8, 6, 1, 4, 9, 2, 1, 7]
+iterations = bubble_sort(arr)
+
+# Key iterations to display
+num_iterations = len(iterations)
+indices = [0, num_iterations // 4, num_iterations // 2, 3 * num_iterations // 4, num_iterations - 1]
+
+# Create subplots
+fig, axes = plt.subplots(1, len(indices), figsize=(15, 5))
+fig.suptitle("Bubble Sort Visualization", fontsize=16)
+
+for i, ax in enumerate(axes):
+    iteration_index = indices[i]
+    data = iterations[iteration_index]
+    
+    ax.bar(range(len(data)), data, color='green')
+    ax.set_title(f"Iteration {iteration_index+1}")
+    ax.set_xlabel("Index")
+    ax.set_ylabel("Value")
+
+plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+plt.show()
+
+
+--- 2025-05-15 16:05:15 - Saving code again ---
+I am saving the code in the notes again

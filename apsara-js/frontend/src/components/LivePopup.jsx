@@ -178,6 +178,8 @@ export default function LivePopup({
   transcriptionEnabled, // <-- NEW PROP for audio transcription
   slidingWindowEnabled, // <-- NEW PROP for context compression
   slidingWindowTokens, // <-- NEW PROP for token limit
+  activeTab, // NEW: prop for active tab from useLiveSession
+  setActiveTab, // NEW: function to set active tab in useLiveSession
   
   // Handlers from App.jsx
   onVoiceChange, 
@@ -211,7 +213,6 @@ export default function LivePopup({
   const [tempSystemInstruction, setTempSystemInstruction] = useState(liveSystemInstruction);
   const [copiedContent, setCopiedContent] = useState(null);
   const [showCameraSelector, setShowCameraSelector] = useState(false);
-  const [activeTab, setActiveTab] = useState(TABS[0].id);
   const [isSystemInstructionExpanded, setIsSystemInstructionExpanded] = useState(false);
   const prevCalendarEventsLastUpdatedRef = useRef(0); // Keep track of the previous update value
 
@@ -254,38 +255,9 @@ export default function LivePopup({
     }
   }, [onGetVideoInputDevices, connectionStatus, isSessionActive]);
 
-  // --- Log map data when it changes ---
-  useEffect(() => {
-    // This log fires whenever the mapDisplayData prop changes value
-    console.log("[LivePopup] mapDisplayData prop updated in useEffect:", mapDisplayData);
-  }, [mapDisplayData]);
-
-  // --- NEW: useEffect to switch to Weather tab when weatherUIData is available ---
-  useEffect(() => {
-    if (weatherUIData && Object.keys(weatherUIData).length > 0) { // Check if object is not empty
-        console.log("[LivePopup] Weather data received, switching to Weather tab.", weatherUIData);
-        setActiveTab('weather');
-    }
-  }, [weatherUIData]);
-  // --- END NEW ---
-
-  // --- REVISED: useEffect to switch to Calendar tab when calendarEventsLastUpdated changes ---
-  useEffect(() => {
-    // Only switch if calendarEventsLastUpdated has a new, non-initial (non-zero) value
-    // and the calendar tab is not already active.
-    if (calendarEventsLastUpdated && calendarEventsLastUpdated !== prevCalendarEventsLastUpdatedRef.current && activeTab !== 'calendar') {
-        console.log("[LivePopup] Calendar data updated, switching to Calendar tab. Timestamp:", calendarEventsLastUpdated);
-        setActiveTab('calendar');
-    }
-    // Update the ref to the current value for the next comparison
-    prevCalendarEventsLastUpdatedRef.current = calendarEventsLastUpdated;
-  }, [calendarEventsLastUpdated, activeTab]); // Depend on calendarEventsLastUpdated and activeTab
-  // --- END REVISED ---
-
-  // --- NEW: Add ref for tracking code content length changes ---
+  // Keep track of code content length for potential future use
   const prevCodeContentLengthRef = useRef(0);
-  // --- END NEW ---
-
+  
   // Create combined & de-duplicated list for Code & Output Tab
   const combinedCodeOutputContent = [];
   const uniqueContentKeys = new Set();
@@ -299,17 +271,20 @@ export default function LivePopup({
         let contentData = null;
 
         if (part.executableCode) {
-          contentKey = `code-${part.executableCode.language}-${part.executableCode.code}`;
+          // Include message ID to make each code execution unique even with identical code
+          contentKey = `code-${msg.id}-${part.executableCode.language}-${part.executableCode.code}`;
           contentData = { type: 'code', data: part.executableCode, id: partId };
           console.log("[LivePopup] Executable code detected:", part.executableCode.language);
         } else if (part.codeExecutionResult) {
-          contentKey = `result-${part.codeExecutionResult.outcome}-${part.codeExecutionResult.output}`;
+          // Include message ID to make each result unique
+          contentKey = `result-${msg.id}-${part.codeExecutionResult.outcome}-${part.codeExecutionResult.output}`;
           contentData = { type: 'result', data: part.codeExecutionResult, id: partId };
           console.log("[LivePopup] Code execution result detected:", part.codeExecutionResult.outcome);
         } else if (part.inlineData && part.inlineData.mimeType?.startsWith('image/')) {
           // Use a shorter key for images if data string is too long
           const imageDataSubstr = part.inlineData.data.substring(0, 100);
-          contentKey = `image-${imageDataSubstr}`;
+          // Include message ID for images as well
+          contentKey = `image-${msg.id}-${imageDataSubstr}`;
           contentData = { type: 'image', data: part.inlineData, id: partId };
         }
 
@@ -321,7 +296,7 @@ export default function LivePopup({
 
       // Handle legacy system_code_result
       if (msg.role === 'system_code_result' && msg.result) {
-        const resultKey = `legacy-result-${msg.result.outcome}-${msg.result.output}`;
+        const resultKey = `legacy-result-${msg.id}-${msg.result.outcome}-${msg.result.output}`;
         const partId = `${msg.id}-legacyresult`;
          if (!uniqueContentKeys.has(resultKey)) {
            combinedCodeOutputContent.push({ type: 'result', data: msg.result, id: partId });
@@ -330,18 +305,6 @@ export default function LivePopup({
       }
     }
   });
-
-  // --- NEW: useEffect to switch to Code tab when code execution content is received ---
-  useEffect(() => {
-    // Only switch if new code content is added and the code tab is not already active
-    if (combinedCodeOutputContent.length > prevCodeContentLengthRef.current && activeTab !== 'code') {
-      console.log("[LivePopup] Code execution or result received, switching to Code & Output tab.");
-      setActiveTab('code');
-    }
-    // Update the ref for next comparison
-    prevCodeContentLengthRef.current = combinedCodeOutputContent.length;
-  }, [combinedCodeOutputContent.length, activeTab]);
-  // --- END NEW ---
 
   // Log data specifically when map tab is active during render
   if(activeTab === 'map') {
@@ -952,7 +915,7 @@ export default function LivePopup({
                 
                 {/* NEW: Load Session Button */}
                 <div className="pt-2 flex flex-col gap-2">
-                  <button
+                <button
                     onClick={() => setShowSavedSessions(true)}
                     className="w-full px-3 py-1.5 bg-blue-500 text-white text-xs font-medium rounded-lg shadow hover:bg-blue-600 transition-colors flex items-center justify-center gap-1.5"
                   >
@@ -962,9 +925,9 @@ export default function LivePopup({
                   <button
                     onClick={handleStartSession} disabled={connectionStatus === 'connecting'}
                     className="w-full px-3 py-2 sm:px-4 sm:py-2.5 bg-green-500 text-white text-sm font-semibold rounded-lg shadow hover:bg-green-600 transition-colors disabled:opacity-60 flex items-center justify-center gap-1.5">
-                    {connectionStatus === 'connecting' ? 'Connecting...' : 'Start Session'}
-                  </button>
-                </div>
+                  {connectionStatus === 'connecting' ? 'Connecting...' : 'Start Session'}
+                </button>
+              </div>
             </div>
             ) : (
               <div className="flex flex-col flex-grow">
@@ -1027,7 +990,7 @@ export default function LivePopup({
                 <div className="mt-auto flex-shrink-0"> 
                   {/* Add Save Session button */}
                   <div className="flex flex-col gap-2">
-                    <button 
+              <button
                       onClick={handleSaveCurrentSession}
                       disabled={!currentSessionHandle}
                       className="w-full px-3 py-1.5 bg-blue-500 text-white text-xs font-medium rounded-lg shadow hover:bg-blue-600 transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5"
@@ -1038,7 +1001,7 @@ export default function LivePopup({
                     {/* End Session Button */}
                     <button onClick={onEndSession} className="w-full px-3 py-1.5 sm:py-2.5 bg-red-500 text-white text-xs font-semibold rounded-lg shadow hover:bg-red-600 transition-colors">
                       End Session
-                    </button>
+              </button>
                   </div>
                 </div>
               </div>
@@ -1078,7 +1041,7 @@ export default function LivePopup({
                 className="mt-4 sm:mt-6 w-full px-3 py-1.5 sm:px-4 sm:py-2 rounded-md text-sm text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
                 >
                 Cancel
-                </button>
+              </button>
               </div>
             </div>
           )}
