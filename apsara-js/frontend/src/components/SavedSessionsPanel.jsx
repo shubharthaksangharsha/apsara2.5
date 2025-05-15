@@ -10,6 +10,7 @@ export default function SavedSessionsPanel({ onClose, onSelectSession }) {
   const [isLoading, setIsLoading] = useState(true);
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
   const [showDeleteAllConfirm, setShowDeleteAllConfirm] = useState(false);
+  const [activeTab, setActiveTab] = useState('all'); // New state for active tab
 
   useEffect(() => {
     loadSavedSessions();
@@ -72,6 +73,22 @@ export default function SavedSessionsPanel({ onClose, onSelectSession }) {
     }
   };
 
+  // Filter sessions based on active tab
+  const filteredSessions = sessions.filter(session => {
+    switch (activeTab) {
+      case 'all':
+        return true; // Show all sessions
+      case 'manual':
+        return !session.title?.includes('Auto-saved Session') && !session.sessionType?.includes('disconnected');
+      case 'auto':
+        return session.title?.includes('Auto-saved Session');
+      case 'disconnected':
+        return session.sessionType === 'disconnected' || session.title?.includes('SESSION DISCONNECTED');
+      default:
+        return true;
+    }
+  });
+
   return (
     <div 
       className="fixed inset-0 z-60 flex justify-center items-center bg-black/30 backdrop-blur-sm p-4"
@@ -96,20 +113,58 @@ export default function SavedSessionsPanel({ onClose, onSelectSession }) {
           </button>
         </div>
 
+        {/* Tabs Navigation */}
+        <div className="flex border-b border-gray-200 dark:border-gray-700 mb-4">
+          <button 
+            className={`px-4 py-2 text-sm font-medium ${activeTab === 'all' 
+              ? 'text-indigo-600 dark:text-indigo-400 border-b-2 border-indigo-600 dark:border-indigo-400' 
+              : 'text-gray-500 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400'}`}
+            onClick={() => setActiveTab('all')}
+          >
+            All
+          </button>
+          <button 
+            className={`px-4 py-2 text-sm font-medium ${activeTab === 'manual' 
+              ? 'text-indigo-600 dark:text-indigo-400 border-b-2 border-indigo-600 dark:border-indigo-400' 
+              : 'text-gray-500 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400'}`}
+            onClick={() => setActiveTab('manual')}
+          >
+            Manual Saves
+          </button>
+          <button 
+            className={`px-4 py-2 text-sm font-medium ${activeTab === 'auto' 
+              ? 'text-indigo-600 dark:text-indigo-400 border-b-2 border-indigo-600 dark:border-indigo-400' 
+              : 'text-gray-500 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400'}`}
+            onClick={() => setActiveTab('auto')}
+          >
+            Auto-Saved
+          </button>
+          <button 
+            className={`px-4 py-2 text-sm font-medium ${activeTab === 'disconnected' 
+              ? 'text-indigo-600 dark:text-indigo-400 border-b-2 border-indigo-600 dark:border-indigo-400' 
+              : 'text-gray-500 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400'}`}
+            onClick={() => setActiveTab('disconnected')}
+          >
+            Disconnected
+          </button>
+        </div>
+
         <div className="overflow-y-auto flex-grow custom-scrollbar pr-1">
           {isLoading ? (
             <div className="flex justify-center items-center py-8">
               <div className="animate-spin rounded-full h-6 w-6 border-t-2 border-b-2 border-indigo-500"></div>
             </div>
-          ) : sessions.length === 0 ? (
+          ) : filteredSessions.length === 0 ? (
             <div className="text-center py-8 text-gray-500 dark:text-gray-400">
               <MessageSquare className="w-10 h-10 mx-auto mb-3 opacity-30" />
-              <p className="text-sm">No saved sessions found</p>
-              <p className="text-xs mt-1">Start a new session and click "Save" to save it for later.</p>
+              <p className="text-sm">No {activeTab !== 'all' ? activeTab : ''} sessions found</p>
+              {activeTab === 'all' && (
+                <p className="text-xs mt-1">Start a new session and click "Save" to save it for later.</p>
+              )}
             </div>
           ) : (
             <ul className="space-y-2">
-              {sessions.map(session => (
+              {filteredSessions.map(session => (
                 <li 
                   key={session.id} 
                   className="bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg p-3 hover:shadow-md transition-shadow relative group"

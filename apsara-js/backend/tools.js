@@ -63,17 +63,67 @@ const getWeatherSchema = {
 
 const captureScreenshotSchema = {
   name: 'captureScreenshot',
-  description: 'Captures a "screenshot" (placeholder for server-side action). In a real scenario, this might involve a headless browser or specific server utility.',
+  description: 'Captures a screenshot of the current screen or a specific window. The screenshot will be displayed to the user.',
   parameters: {
     type: 'OBJECT',
     properties: {
-      targetUrl: { type: 'STRING', description: 'Optional. If capturing a webpage, the URL to capture.' },
-      fileName: { type: 'STRING', description: 'Optional. Suggested filename for the screenshot.' }
-    },
-    // required: [] // Commented out
+      description: { type: 'STRING', description: 'Optional. A brief description or title for the screenshot.' },
+      selector: { type: 'STRING', description: 'Optional. A CSS selector to capture a specific element (e.g., "#map-container").' }
+    }
   }
 };
 
+// New tool for switching tabs in the UI
+const switchTabSchema = {
+  name: 'switchTab',
+  description: 'Switches the active tab in the UI to the specified tab. Use this to help the user navigate between different views in the interface.',
+  parameters: {
+    type: 'OBJECT',
+    properties: {
+      tab: { 
+        type: 'STRING', 
+        description: 'The tab to switch to.', 
+        enum: ['chat', 'code', 'map', 'calendar', 'weather'] 
+      }
+    },
+    required: ['tab']
+  }
+};
+
+// New tool for taking notes
+const takeNotesSchema = {
+  name: 'takeNotes',
+  description: 'Saves user notes to a file. The notes will be saved to "my-imp-notes.txt" for future reference.',
+  parameters: {
+    type: 'OBJECT',
+    properties: {
+      content: { 
+        type: 'STRING', 
+        description: 'The content of the note to save. Can include any text, including code snippets, lists, etc.' 
+      },
+      title: { 
+        type: 'STRING', 
+        description: 'Optional. A title or header for the note.' 
+      }
+    },
+    // required: ['content']
+  }
+};
+
+// New tool for loading saved notes
+const loadNotesSchema = {
+  name: 'loadNotes',
+  description: 'Loads previously saved notes from the notes file.',
+  parameters: {
+    type: 'OBJECT',
+    properties: {
+      limit: { 
+        type: 'NUMBER', 
+        description: 'Optional. Maximum number of notes to retrieve. Defaults to all notes.' 
+      }
+    }
+  }
+};
 
 // Array of tool schemas for Gemini configuration
 // Combine imported schemas from all tool files
@@ -85,7 +135,9 @@ export const customToolDeclarations = [
   ...calendarToolSchemas, // Spread Calendar tool schemas
   ...mapsToolSchemas, // Spread Maps tool schemas
   getWeatherSchema,
-  captureScreenshotSchema,
+  switchTabSchema,
+  takeNotesSchema,
+  loadNotesSchema
 ];
 
 
@@ -225,15 +277,252 @@ async function handleGetWeather({ city, countryCode, units = 'metric' }) {
   }
 }
 
-async function handleCaptureScreenshot({ targetUrl, fileName }) {
-  console.log(`[Tool: captureScreenshot] Request to capture screenshot. Target: ${targetUrl || 'N/A'}, FileName: ${fileName || 'screenshot.png'}`);
+async function handleCaptureScreenshot({ description, selector }) {
+  console.log(`[Tool: captureScreenshot] Request to capture screenshot. Description: ${description || 'N/A'}, Selector: ${selector || 'N/A'}`);
+  
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+  const filename = `screenshot-${timestamp}.png`;
+  
+  // Instead of actually capturing here (which would require native OS access),
+  // we'll send an action to the frontend to handle the capture
   return {
     status: 'success',
-    message: `Screenshot capture for "${targetUrl || 'desktop'}" logged. Real capture not implemented.`,
-    filePath: `/path/to/mock/${fileName || 'screenshot.png'} (Mock Path)`
+    message: `Screenshot requested for "${description || 'current screen'}"`,
+    action: 'captureScreenshot',
+    description: description || 'Screenshot',
+    selector: selector || null,
+    timestamp: Date.now(),
+    filename: filename
   };
 }
 
+// Handler for switching tabs in the UI
+function handleSwitchTab({ tab }) {
+  if (!tab) {
+    return { 
+      status: 'error', 
+      message: 'Tab name is required.' 
+    };
+  }
+  
+  const validTabs = ['chat', 'code', 'map', 'calendar', 'weather'];
+  if (!validTabs.includes(tab)) {
+    return { 
+      status: 'error', 
+      message: `Invalid tab name: ${tab}. Valid options are: ${validTabs.join(', ')}` 
+    };
+  }
+  
+  console.log(`[Tool: switchTab] Switching UI tab to: ${tab}`);
+  
+  // This action will be handled by the frontend through websocket communication
+  return { 
+    status: 'success', 
+    message: `UI tab switched to "${tab}"`, 
+    tab: tab, 
+    action: 'switchTab'  // This will be used by the frontend to identify the action
+  };
+}
+
+// Handler for taking notes
+async function handleTakeNotes({ content, title }) {
+  if (!content) {
+    return { 
+      status: 'error', 
+      message: 'Note content is required.' 
+    };
+  }
+  
+  console.log(`[Tool: takeNotes] Saving note${title ? ` titled "${title}"` : ''}`);
+  
+  try {
+    // Format the note with timestamp and title if provided
+    const timestamp = new Date().toISOString().replace(/T/, ' ').replace(/\..+/, '');
+    const formattedNote = `\n\n--- ${timestamp} ${title ? `- ${title}` : ''} ---\n${content}`;
+    
+    // Use Python to append the note to the file
+    const pythonCode = `
+import os
+
+# File to save notes to
+notes_file = 'my-imp-notes.txt'
+
+# Note content to append
+note_content = '''${formattedNote}'''
+
+# Create the file if it doesn't exist or append to it
+with open(notes_file, 'a+') as f:
+    f.write(note_content)
+
+# Verify file exists and get its size
+file_exists = os.path.exists(notes_file)
+file_size = os.path.getsize(notes_file) if file_exists else 0
+
+print(f"Note saved successfully to {notes_file}. File size: {file_size} bytes.")
+`;
+
+    // Run the Python code
+    const { spawn } = await import('child_process');
+    const pythonProcess = spawn('python3', ['-c', pythonCode]);
+    
+    let output = '';
+    let errorOutput = '';
+    
+    pythonProcess.stdout.on('data', (data) => {
+      output += data.toString();
+    });
+    
+    pythonProcess.stderr.on('data', (data) => {
+      errorOutput += data.toString();
+    });
+    
+    return new Promise((resolve) => {
+      pythonProcess.on('close', (code) => {
+        if (code !== 0 || errorOutput) {
+          console.error(`[Tool: takeNotes] Error executing Python (Code: ${code}): ${errorOutput}`);
+          resolve({
+            status: 'error',
+            message: `Failed to save note: ${errorOutput || `Exit code ${code}`}`
+          });
+        } else {
+          console.log(`[Tool: takeNotes] Python output: ${output}`);
+          resolve({
+            status: 'success',
+            message: `Note ${title ? `titled "${title}" ` : ''}saved successfully to my-imp-notes.txt`,
+            action: 'notesSaved',
+            output: output.trim()
+          });
+        }
+      });
+    });
+  } catch (error) {
+    console.error(`[Tool: takeNotes] Error: ${error.message}`);
+    return {
+      status: 'error',
+      message: `Failed to save note: ${error.message}`
+    };
+  }
+}
+
+// Handler for loading saved notes
+async function handleLoadNotes({ limit }) {
+  console.log(`[Tool: loadNotes] Loading notes${limit ? ` (limit: ${limit})` : ''}`);
+  
+  try {
+    // Use Python to read the notes file
+    const pythonCode = `
+import os
+
+# File to read notes from
+notes_file = 'my-imp-notes.txt'
+
+# Check if file exists
+if not os.path.exists(notes_file):
+    print(json.dumps({
+        "status": "error",
+        "message": "No saved notes found. Use the takeNotes tool to save notes first."
+    }))
+    exit(0)
+
+# Read the file content
+with open(notes_file, 'r') as f:
+    content = f.read()
+
+# Get file stats
+file_stats = os.stat(notes_file)
+file_size = file_stats.st_size
+last_modified = file_stats.st_mtime
+
+import json
+import time
+from datetime import datetime
+
+# Extract notes by splitting on the timestamp markers
+# Each note starts with "--- YYYY-MM-DD HH:MM:SS"
+notes = []
+if content.strip():
+    # Split by the marker pattern
+    import re
+    note_pattern = r'---\\s+(\\d{4}-\\d{2}-\\d{2}\\s+\\d{2}:\\d{2}:\\d{2})(?:\\s+-\\s+(.+?))?\\s+---\\n([\\s\\S]+?)(?=\\n\\n---\\s+\\d{4}|$)'
+    matches = re.findall(note_pattern, content)
+    
+    for match in matches:
+        timestamp, title, note_content = match
+        notes.append({
+            "timestamp": timestamp,
+            "title": title.strip() if title else None,
+            "content": note_content.strip()
+        })
+
+# Reverse so newest are first
+notes.reverse()
+
+# Apply limit if specified
+limit_val = ${limit || 'None'}
+if limit_val is not None and limit_val > 0:
+    notes = notes[:limit_val]
+
+# Prepare result
+result = {
+    "status": "success",
+    "notes": notes,
+    "total_notes": len(notes),
+    "file_size": file_size,
+    "last_modified": datetime.fromtimestamp(last_modified).isoformat()
+}
+
+print(json.dumps(result))
+`;
+
+    // Run the Python code
+    const { spawn } = await import('child_process');
+    const pythonProcess = spawn('python3', ['-c', pythonCode]);
+    
+    let output = '';
+    let errorOutput = '';
+    
+    pythonProcess.stdout.on('data', (data) => {
+      output += data.toString();
+    });
+    
+    pythonProcess.stderr.on('data', (data) => {
+      errorOutput += data.toString();
+    });
+    
+    return new Promise((resolve) => {
+      pythonProcess.on('close', (code) => {
+        if (code !== 0 || errorOutput) {
+          console.error(`[Tool: loadNotes] Error executing Python (Code: ${code}): ${errorOutput}`);
+          resolve({
+            status: 'error',
+            message: `Failed to load notes: ${errorOutput || `Exit code ${code}`}`
+          });
+        } else {
+          console.log(`[Tool: loadNotes] Python output: ${output}`);
+          try {
+            const result = JSON.parse(output.trim());
+            resolve({
+              ...result,
+              action: 'notesLoaded'
+            });
+          } catch (parseError) {
+            console.error(`[Tool: loadNotes] Error parsing Python output: ${parseError}`);
+            resolve({
+              status: 'error',
+              message: `Failed to parse notes data: ${parseError.message}`
+            });
+          }
+        }
+      });
+    });
+  } catch (error) {
+    console.error(`[Tool: loadNotes] Error: ${error.message}`);
+    return {
+      status: 'error',
+      message: `Failed to load notes: ${error.message}`
+    };
+  }
+}
 
 // Map of tool names to their handler functions
 // Combine imported handlers from all tool files
@@ -245,7 +534,9 @@ export const toolHandlers = {
   ...calendarToolHandlers, // Spread Calendar handlers
   ...mapsToolHandlers, // Spread Maps handlers
   getWeather: handleGetWeather,
-  captureScreenshot: handleCaptureScreenshot,
+  switchTab: handleSwitchTab,
+  takeNotes: handleTakeNotes,
+  loadNotes: handleLoadNotes
 };
 
 // Export just the names for the system prompt
