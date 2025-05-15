@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Mic, AudioLines, Clock } from 'lucide-react'; // Import icons
+import { Mic, AudioLines, Clock, RefreshCw } from 'lucide-react'; // Import icons
+import { updateSessionWithHandle, getMostRecentSessionHandle } from '../utils/liveSessionStorage'; // Import for session persistence
 
 // Helper function to decode PCM audio data
 const decodePcm16ToFloat32 = (arrayBuffer) => {
@@ -69,6 +70,19 @@ export function useLiveSession({ currentVoice, transcriptionEnabled = true, slid
     isScreenSharingRef.current = isStreamingScreen; // <-- Sync screen share state
   }, [isStreamingScreen]);
   // --- End Sync ---
+
+  // --- Check localStorage for the most recent session handle on initialization ---
+  useEffect(() => {
+    // Initialize sessionResumeHandleRef with the most recent handle from localStorage
+    // but don't do this automatically anymore - only when explicitly requested
+    // We still get the handle but don't set it as the current one
+    const mostRecentHandle = getMostRecentSessionHandle();
+    if (mostRecentHandle) {
+      console.log("[useLiveSession] Found recent session handle in localStorage:", mostRecentHandle);
+      // We no longer auto-set this: sessionResumeHandleRef.current = mostRecentHandle;
+    }
+  }, []);
+  // --- End localStorage check ---
 
   // --- Memoized Utility Functions ---
   const addLiveMessage = useCallback((msg) => {
@@ -757,44 +771,94 @@ export function useLiveSession({ currentVoice, transcriptionEnabled = true, slid
     }
   }, [addLiveMessage, stopScreenShareInternal]);
 
-  // --- Memoized WebSocket Logic ---
-  const setupLiveConnection = useCallback(() => {
+  // --- Core Connection Handling ---
+  const setupLiveConnection = useCallback((mainChatContext = null) => {
     if (liveWsConnection.current) {
-      console.warn("[Live Setup] Closing previous connection before starting new.");
+      console.warn('[Live WS] Connection already exists - cleaning up first.');
       liveWsConnection.current.close(1000, "Starting new session");
-      liveWsConnection.current = null; // Clear ref immediately
+      // Let the onclose handler clean up properly first
+      setTimeout(() => setupLiveConnection(mainChatContext), 250);
+      return;
     }
 
+    // Only use resumeHandle if explicitly requested via loadSession
+    // We'll clear it after use to prevent auto-resuming on subsequent connections
+    const resumeHandle = sessionResumeHandleRef.current;
+    
+    // Clear the handle immediately so we don't reuse it accidentally
+    // This ensures that new sessions are always fresh unless explicitly 
+    // requesting a session resume
+    sessionResumeHandleRef.current = null;
+
+    // Selected video device, if available, for camera
+    const videoDeviceId = selectedVideoDeviceId || '';
+
+    // Build the correct WS URL with optional query parameters for modality and voice
+    const baseUrl = import.meta.env.VITE_API_BASE_URL || window.location.origin;
+    // Use URL object to build the URL
+    const wsUrl = new URL("/live", baseUrl);
+    wsUrl.protocol = baseUrl.startsWith('https') ? 'wss:' : 'ws:';
+
+    // Add modality as query parameter
+    wsUrl.searchParams.append('modalities', liveModality);
+
+    // Set voice parameter if audio is requested
+    if (liveModality === 'AUDIO' || liveModality === 'AUDIO_TEXT') {
+      wsUrl.searchParams.append('voice', currentVoice || 'Ember');
+    }
+
+    // Set system instruction if available
+    if (liveSystemInstruction) {
+      wsUrl.searchParams.append('systemInstruction', liveSystemInstruction);
+    }
+
+    // Get transcription preference
+    if (transcriptionEnabled !== undefined) {
+      wsUrl.searchParams.append('transcriptionEnabled', transcriptionEnabled.toString());
+    }
+
+    // Add sliding window settings if applicable
+    if (slidingWindowEnabled !== undefined) {
+      wsUrl.searchParams.append('slidingWindowEnabled', slidingWindowEnabled.toString());
+      wsUrl.searchParams.append('slidingWindowTokens', slidingWindowTokens.toString());
+    }
+
+    // Add session resumption handle if available (from previous connection)
+    if (resumeHandle) {
+      console.log("[Live WS] Attempting to resume session with handle:", resumeHandle);
+      wsUrl.searchParams.append('resumeHandle', resumeHandle);
+      
+      // Log that we're resuming a session
+      addLiveMessage({ 
+        role: 'system', 
+        text: 'Resuming previous session...', 
+      });
+    } else {
+      // Starting a new fresh session
+      addLiveMessage({ 
+        role: 'system', 
+        text: 'Starting new session...', 
+      });
+    }
+
+    // Create WebSocket connection
+    console.log(`[Live WS] Connecting to: ${wsUrl.toString()}`);
     setLiveConnectionStatus('connecting');
-    setLiveMessages([]);
-    addLiveMessage({ role: 'system', text: 'Preparing live session...' });
-    liveStreamingTextRef.current = ''; liveStreamingMsgIdRef.current = null;
-    setAudioError(null);
-    setMapDisplayData(null); // Clear map data
-    setWeatherUIData(null); // <-- NEW: Clear weather data
-    setCalendarEvents([]); // <-- NEW: Clear calendar events
-    setCalendarEventsLastUpdated(0); // Reset on new connection
-
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const params = new URLSearchParams({ modalities: liveModality });
-    if (liveModality === 'AUDIO' && currentVoice) params.append('voice', currentVoice);
-    if (liveSystemInstruction?.trim()) params.append('systemInstruction', liveSystemInstruction.trim());
-    if (sessionResumeHandleRef.current) params.append('resumeHandle', sessionResumeHandleRef.current);
-    // Add these params for backend config
-    params.append('transcriptionEnabled', transcriptionEnabled ? 'true' : 'false');
-    params.append('slidingWindowEnabled', slidingWindowEnabled ? 'true' : 'false');
-    params.append('slidingWindowTokens', String(slidingWindowTokens));
-    const wsUrl = `${protocol}//${window.location.host}/live?${params.toString()}`;
-
-    console.log(`[Live Setup] Connecting: ${wsUrl}`);
-    addLiveMessage({ role: 'system', text: `Initiating connection (${liveModality})...` });
-
     const ws = new WebSocket(wsUrl);
     liveWsConnection.current = ws;
 
     ws.onopen = () => {
       console.log('[Live WS] Browser-Backend WS Connection established.');
       addLiveMessage({ role: 'system', text: 'Browser-Backend WS connected. Waiting for AI...' });
+
+      // If we have main chat context, send it after connection is established
+      if (mainChatContext && !resumeHandle) {
+        setTimeout(() => {
+          if (ws.readyState === WebSocket.OPEN) {
+            sendLiveMessageText(mainChatContext);
+          }
+        }, 1500); // Give a moment for the backend to be fully ready
+      }
     };
 
     ws.onmessage = (event) => {
@@ -914,6 +978,19 @@ export function useLiveSession({ currentVoice, transcriptionEnabled = true, slid
                  if (data.sessionResumptionUpdate.newHandle) {
                      sessionResumeHandleRef.current = data.sessionResumptionUpdate.newHandle;
                      console.log("[Live WS] Stored new session resume handle.");
+                     
+                     // NEW: Save to localStorage for persistence
+                     try {
+                       updateSessionWithHandle(data.sessionResumptionUpdate.newHandle, {
+                         modality: liveModality,
+                         voice: currentVoice,
+                         systemInstruction: liveSystemInstruction,
+                         timestamp: Date.now()
+                       });
+                       console.log("[Live WS] Auto-saved session handle to localStorage");
+                     } catch (err) {
+                       console.error("[Live WS] Error auto-saving session handle to localStorage:", err);
+                     }
                  }
             }
             // --- Handle Tool Call Notifications ---
@@ -958,12 +1035,26 @@ export function useLiveSession({ currentVoice, transcriptionEnabled = true, slid
                 console.log("⏰ [Live WS] GoAway message received with timeLeft:", data.goAway.timeLeft);
                 const timeLeftStr = data.goAway.timeLeft;
                 setSessionTimeLeft(timeLeftStr);
+                
                 // Show warning to user
                 addLiveMessage({ 
                     role: 'system', 
-                    text: `⚠️ Session will end in approximately ${timeLeftStr}. Please finish your current interaction.`,
-                    icon: Clock // Using clock icon to indicate time
+                    text: `⚠️ Session will end in approximately ${timeLeftStr}. Preparing automatic resumption.`,
+                    icon: Clock 
                 });
+                
+                // Trigger auto-resume when we get close to timeout
+                // Only if we have a valid resume handle
+                if (sessionResumeHandleRef.current) {
+                    // Auto-resume when we have around 15s left (adjust timing as needed)
+                    const shouldAutoResume = timeLeftStr.includes("15s") || 
+                                             timeLeftStr.includes("10s");
+                    
+                    if (shouldAutoResume) {
+                        console.log("[Live WS] Auto-resuming session due to imminent timeout");
+                        handleAutoSessionResume();
+                    }
+                }
             }
             // --- Catch Unhandled Structures ---
             else if (!data.event) { // Only warn if it's not one of the handled 'event' types
@@ -1029,17 +1120,28 @@ export function useLiveSession({ currentVoice, transcriptionEnabled = true, slid
       setCalendarEvents([]); // <-- NEW: Clear calendar events on close
       setCalendarEventsLastUpdated(0); // Reset
     };
-  }, [ liveModality, currentVoice, liveSystemInstruction, addLiveMessage, updateLiveMessage, addOrUpdateLiveModelMessagePart, initAudioContexts, playAudioQueue, closeAudioContexts, isRecording, stopRecordingInternal, transcriptionEnabled, slidingWindowEnabled, slidingWindowTokens]); // Adjusted dependencies
+  }, [liveModality, currentVoice, liveSystemInstruction, addLiveMessage, updateLiveMessage, addOrUpdateLiveModelMessagePart, initAudioContexts, playAudioQueue, closeAudioContexts, isRecording, stopRecordingInternal, transcriptionEnabled, slidingWindowEnabled, slidingWindowTokens, selectedVideoDeviceId]);
 
-  // --- Memoized Public Handlers ---
-  const startLiveSession = useCallback(() => {
-      setMapDisplayData(null); // Clear map when starting
-      setWeatherUIData(null); // <-- NEW: Clear weather data when starting new session
-      setCalendarEvents([]); // <-- NEW: Clear calendar events when starting new session
-      setCalendarEventsLastUpdated(0); // Reset
-      initAudioContexts();
-      setupLiveConnection();
-  }, [liveModality, initAudioContexts, setupLiveConnection]);
+  // --- Public Handlers ---
+  const startLiveSession = useCallback((mainChatContext = null) => {
+    if (liveConnectionStatus === 'connected') {
+      console.warn('[Live WS] Already connected. Use endLiveSession first.');
+      return;
+    }
+    
+    // Clear any existing visualization data
+    setMapDisplayData(null); // Clear map when starting
+    setWeatherUIData(null); // Clear weather data when starting new session
+    setCalendarEvents([]); // Clear calendar events when starting new session
+    setCalendarEventsLastUpdated(0); // Reset timestamps
+    
+    // Initialize audio before connecting
+    initAudioContexts();
+    
+    console.log(`[Live WS] Starting a new live session. Modality: ${liveModality}`);
+    setupLiveConnection(mainChatContext);
+  }, [liveConnectionStatus, liveModality, setupLiveConnection, initAudioContexts, 
+      setMapDisplayData, setWeatherUIData, setCalendarEvents, setCalendarEventsLastUpdated]);
 
   const endLiveSession = useCallback(() => {
     setMapDisplayData(null); // Clear map when ending
@@ -1151,6 +1253,39 @@ export function useLiveSession({ currentVoice, transcriptionEnabled = true, slid
     }
   }, [isStreamingVideo, videoDevices, selectedVideoDeviceId, stopVideoStreamInternal, setSelectedVideoDeviceId, startVideoStreamInternal, addLiveMessage]);
 
+  // Add this function inside useLiveSession hook
+  const handleAutoSessionResume = useCallback(() => {
+    if (!sessionResumeHandleRef.current) {
+      console.warn("[Live Session] Cannot auto-resume: No session handle available");
+      return;
+    }
+    
+    addLiveMessage({ 
+      role: 'system', 
+      text: 'Session timeout approaching. Automatically resuming session...',
+      icon: RefreshCw 
+    });
+    
+    // End current session but keep UI elements intact
+    if (liveWsConnection.current) {
+      liveWsConnection.current.close(1000, "Auto-resuming session");
+      // Don't reset liveWsConnection.current to null yet
+    }
+    
+    // Brief delay to ensure clean closure
+    setTimeout(() => {
+      // Start a new session with the saved handle
+      console.log('[Live Session] Auto-resuming with handle:', sessionResumeHandleRef.current);
+      setupLiveConnection(); // This function already uses sessionResumeHandleRef
+    }, 500);
+  }, [addLiveMessage, setupLiveConnection]);
+
+  // --- Add a setter for the session resume handle (NEW) ---
+  const setSessionResumeHandle = useCallback((handle) => {
+    console.log(`[useLiveSession] Setting session resume handle to:`, handle);
+    sessionResumeHandleRef.current = handle;
+  }, []);
+
   return {
     // State
     liveMessages, liveConnectionStatus, liveModality, isModelSpeaking, isRecording, isStreamingVideo, audioError, sessionTimeLeft,
@@ -1164,6 +1299,7 @@ export function useLiveSession({ currentVoice, transcriptionEnabled = true, slid
     weatherUIData, // <-- NEW: Expose weather UI data
     calendarEvents, // <-- NEW: Expose calendar events
     calendarEventsLastUpdated, // Expose this new state
+    currentSessionHandle: sessionResumeHandleRef.current, // Expose the current session handle
 
     // Setters/Handlers
     setLiveModality,
@@ -1177,5 +1313,7 @@ export function useLiveSession({ currentVoice, transcriptionEnabled = true, slid
     startScreenShare: startScreenShareInternal, // <-- New handler
     stopScreenShare: stopScreenShareInternal,   // <-- New handler
     flipCamera,
+    handleAutoSessionResume,
+    setSessionResumeHandle, // NEW: Add function to set the session resume handle directly
   };
 }

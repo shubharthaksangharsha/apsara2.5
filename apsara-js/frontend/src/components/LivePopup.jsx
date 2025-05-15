@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { MessageSquare, X, Send, Mic, MicOff, Video, VideoOff, ScreenShare, ScreenShareOff, ClipboardCopy, Settings as SettingsIcon, Paperclip, Info, MapPin, Code2, Terminal, CalendarDays, Users, Sun, ChevronDown, ChevronUp, Volume2, RefreshCw, PlusCircle, Calendar as CalendarIcon, Clock, AudioLines } from 'lucide-react';
+import { MessageSquare, X, Send, Mic, MicOff, Video, VideoOff, ScreenShare, ScreenShareOff, ClipboardCopy, Settings as SettingsIcon, Paperclip, Info, MapPin, Code2, Terminal, CalendarDays, Users, Sun, ChevronDown, ChevronUp, Volume2, RefreshCw, PlusCircle, Calendar as CalendarIcon, Clock, AudioLines, Save, FolderOpen, Play } from 'lucide-react';
 import VideoStreamDisplay from './VideoStreamDisplay';
 import ScreenShareDisplay from './ScreenShareDisplay';
 import MapDisplay from './MapDisplay';
+import SavedSessionsPanel from './SavedSessionsPanel';
+import { saveSession } from '../utils/liveSessionStorage';
 
 // Helper to render message content for CHAT tab specifically
 const renderChatMessageContent = (msg) => {
@@ -173,6 +175,9 @@ export default function LivePopup({
   currentSessionHandle, // NEW PROP for session name/ID
   calendarEvents, // <-- NEW PROP for calendar events
   calendarEventsLastUpdated, // <-- NEW PROP
+  transcriptionEnabled, // <-- NEW PROP for audio transcription
+  slidingWindowEnabled, // <-- NEW PROP for context compression
+  slidingWindowTokens, // <-- NEW PROP for token limit
   
   // Handlers from App.jsx
   onVoiceChange, 
@@ -191,9 +196,14 @@ export default function LivePopup({
   onSetSelectedVideoDeviceId, // <-- New handler
   onGetVideoInputDevices, // <-- New handler
   flipCamera,
-  transcriptionEnabled, setTranscriptionEnabled,
-  slidingWindowEnabled, setSlidingWindowEnabled,
-  slidingWindowTokens, setSlidingWindowTokens,
+  setTranscriptionEnabled,
+  setSlidingWindowEnabled,
+  setSlidingWindowTokens,
+  onAutoResumeSession,
+  onLoadSession,
+  onStartWithMainContext, // NEW: Handler for starting with main chat context
+  startedWithMainContext = false, // NEW: Flag to indicate if started with main context
+  setSessionResumeHandle, // NEW: Added to handle session resume
 }) {
   const [inputText, setInputText] = useState('');
   const messagesEndRef = useRef(null);
@@ -204,6 +214,11 @@ export default function LivePopup({
   const [activeTab, setActiveTab] = useState(TABS[0].id);
   const [isSystemInstructionExpanded, setIsSystemInstructionExpanded] = useState(false);
   const prevCalendarEventsLastUpdatedRef = useRef(0); // Keep track of the previous update value
+
+  // New state for saved sessions
+  const [showSavedSessions, setShowSavedSessions] = useState(false);
+  const [sessionTitle, setSessionTitle] = useState("");
+  const [showSaveDialog, setShowSaveDialog] = useState(false);
 
   // --- NEW: State for Create Event Modal & Form ---
   const [isCreateEventModalOpen, setIsCreateEventModalOpen] = useState(false);
@@ -276,7 +291,14 @@ export default function LivePopup({
   // Apply the locally edited system instruction to the App state *before* starting
   const handleStartSession = () => {
     onSystemInstructionChange(tempSystemInstruction); // Update App state
-    onStartSession(); // Call App's start function
+    
+    // Clear any existing session handle to ensure we always start a new session
+    if (setSessionResumeHandle) {
+      setSessionResumeHandle(null);
+    }
+    
+    // Call App's start function without any context to start a fresh session
+    onStartSession(); 
   }
 
   // Handle overlay click to close
@@ -315,6 +337,65 @@ export default function LivePopup({
     onSetSelectedVideoDeviceId(deviceId);
     onStartVideo(deviceId);
     setShowCameraSelector(false);
+  };
+
+  // NEW: Function to save the current session
+  const handleSaveCurrentSession = () => {
+    // Only allow saving if we have a current session and a handle
+    if (isSessionActive && currentSessionHandle) {
+      setShowSaveDialog(true);
+    } else {
+      alert("No active session to save");
+    }
+  };
+
+  // NEW: Function to actually save the session to localStorage
+  const saveCurrentSession = () => {
+    if (!currentSessionHandle) return;
+    
+    const sessionData = {
+      id: Date.now().toString(), // Unique ID for the saved session
+      title: sessionTitle || `Chat Session ${new Date().toLocaleString()}`,
+      timestamp: Date.now(),
+      resumeHandle: currentSessionHandle,
+      messageCount: messages.filter(msg => msg.role === 'user' || msg.role === 'model').length,
+      modality: liveModality,
+      voice: currentVoice,
+      systemInstruction: liveSystemInstruction
+    };
+    
+    const success = saveSession(sessionData);
+    
+    if (success) {
+      setShowSaveDialog(false);
+      setSessionTitle("");
+      alert("Session saved successfully!");
+    } else {
+      alert("Failed to save session");
+    }
+  };
+
+  // NEW: Function to handle selecting a saved session
+  const handleSelectSavedSession = (session) => {
+    setShowSavedSessions(false);
+    
+    // If we're currently in an active session, confirm before loading
+    if (isSessionActive) {
+      if (window.confirm("This will end your current session. Continue?")) {
+        onEndSession();
+        setTimeout(() => {
+          // Resume with the selected session's handle
+          if (onLoadSession) {
+            onLoadSession(session.resumeHandle, session.modality, session.voice, session.systemInstruction);
+          }
+        }, 500);
+      }
+    } else {
+      // If no active session, just load directly
+      if (onLoadSession) {
+        onLoadSession(session.resumeHandle, session.modality, session.voice, session.systemInstruction);
+      }
+    }
   };
 
   const logMessages = messages.filter(msg => {
@@ -459,27 +540,22 @@ export default function LivePopup({
       >
         {/* Header */}
         <div className="flex justify-between items-center px-3 sm:px-5 py-2.5 sm:py-3 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
-          <div className="flex items-center gap-2 sm:gap-3">
-            <span className="bg-indigo-100 dark:bg-indigo-900/40 p-1 sm:p-1.5 rounded-full shadow">
-              <MessageSquare className="h-4 w-4 sm:h-5 sm:w-5 text-indigo-500 dark:text-indigo-300" />
-            </span>
-            <h2 className="text-lg sm:text-xl font-semibold text-gray-800 dark:text-white">Apsara Live</h2>
+          <div className="flex items-center gap-2">
+            <div className="flex items-center bg-blue-100 dark:bg-blue-900/50 px-2 py-1 rounded-md text-sm font-medium text-blue-600 dark:text-blue-300">
+              <AudioLines className="h-4 w-4 mr-1.5" />
+              <span>Apsara Live</span>
+            </div>
+            {getStatusIndicator(connectionStatus)}
           </div>
-          <div className="flex items-center gap-2 sm:gap-3">
-            <span className={`px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-full text-xs font-medium shadow-sm ${
-              connectionStatus === 'connected' ? 'bg-green-100 text-green-700' :
-              connectionStatus === 'connecting' ? 'bg-yellow-100 text-yellow-700' :
-              connectionStatus === 'error' ? 'bg-red-100 text-red-700' :
-              'bg-gray-100 text-gray-600'
-            }`}>
-              {getStatusIndicator(connectionStatus)}
-            </span>
+
+          <div className="flex items-center gap-2">
+            {/* Keep only the Close button */}
             <button 
               onClick={onClose} 
-              className="p-1 sm:p-1.5 rounded-full text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors group"
-              aria-label="Close live session"
+              className="flex items-center text-xs rounded p-1 hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+              title="Close"
             >
-              <X className="h-4 w-4 sm:h-5 sm:w-5 transition-transform duration-150 ease-in-out group-hover:scale-110" />
+              <X className="h-4 w-4" />
             </button>
           </div>
         </div>
@@ -855,13 +931,22 @@ export default function LivePopup({
                     </div>
                   </div>
                 </div>
-                <div className="pt-2 flex-grow flex items-end">
-                <button
+                
+                {/* NEW: Load Session Button */}
+                <div className="pt-2 flex flex-col gap-2">
+                  <button
+                    onClick={() => setShowSavedSessions(true)}
+                    className="w-full px-3 py-1.5 bg-blue-500 text-white text-xs font-medium rounded-lg shadow hover:bg-blue-600 transition-colors flex items-center justify-center gap-1.5"
+                  >
+                    <FolderOpen className="w-3.5 h-3.5" /> Load Saved Session
+                  </button>
+                  
+                  <button
                     onClick={handleStartSession} disabled={connectionStatus === 'connecting'}
                     className="w-full px-3 py-2 sm:px-4 sm:py-2.5 bg-green-500 text-white text-sm font-semibold rounded-lg shadow hover:bg-green-600 transition-colors disabled:opacity-60 flex items-center justify-center gap-1.5">
-                  {connectionStatus === 'connecting' ? 'Connecting...' : 'Start Session'}
-                </button>
-              </div>
+                    {connectionStatus === 'connecting' ? 'Connecting...' : 'Start Session'}
+                  </button>
+                </div>
             </div>
             ) : (
               <div className="flex flex-col flex-grow">
@@ -921,10 +1006,22 @@ export default function LivePopup({
                   </div>
                 </div>
                 
-                <div className="mt-auto flex-shrink-0"> {/* End Session Button - Fixed at bottom */}
-                  <button onClick={onEndSession} className="w-full px-3 py-1.5 sm:py-2.5 bg-red-500 text-white text-xs font-semibold rounded-lg shadow hover:bg-red-600 transition-colors">
-                    End Session
-                  </button>
+                <div className="mt-auto flex-shrink-0"> 
+                  {/* Add Save Session button */}
+                  <div className="flex flex-col gap-2">
+                    <button 
+                      onClick={handleSaveCurrentSession}
+                      disabled={!currentSessionHandle}
+                      className="w-full px-3 py-1.5 bg-blue-500 text-white text-xs font-medium rounded-lg shadow hover:bg-blue-600 transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5"
+                    >
+                      <Save className="w-3.5 h-3.5" /> Save Session
+                    </button>
+                    
+                    {/* End Session Button */}
+                    <button onClick={onEndSession} className="w-full px-3 py-1.5 sm:py-2.5 bg-red-500 text-white text-xs font-semibold rounded-lg shadow hover:bg-red-600 transition-colors">
+                      End Session
+                    </button>
+                  </div>
                 </div>
               </div>
             )}
@@ -938,7 +1035,7 @@ export default function LivePopup({
             onClick={() => setShowCameraSelector(false)}
           >
             <div 
-              className="bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-xl shadow-2xl w-full max-w-xs sm:max-w-sm" // Adjusted max-width
+              className="bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-xl shadow-2xl w-full max-w-xs sm:max-w-sm"
               onClick={e => e.stopPropagation()}
             >
               <h3 className="text-base sm:text-lg font-semibold text-gray-800 dark:text-gray-100 mb-3 sm:mb-4">Select Camera Source</h3>
@@ -968,15 +1065,65 @@ export default function LivePopup({
             </div>
           )}
 
-        {/* --- NEW: Create Event Modal --- */}
+        {/* NEW: Save Session Dialog */}
+        {showSaveDialog && (
+          <div 
+            className="absolute inset-0 z-60 flex justify-center items-center bg-black/30 backdrop-blur-sm p-4"
+            onClick={() => setShowSaveDialog(false)}
+          >
+            <div 
+              className="bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-xl shadow-2xl w-full max-w-xs sm:max-w-sm"
+              onClick={e => e.stopPropagation()}
+            >
+              <h3 className="text-base sm:text-lg font-semibold text-gray-800 dark:text-gray-100 mb-3 sm:mb-4">Save Current Session</h3>
+              <div className="mb-4">
+                <label htmlFor="sessionTitle" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Session Title
+                </label>
+                <input
+                  type="text"
+                  id="sessionTitle"
+                  value={sessionTitle}
+                  onChange={(e) => setSessionTitle(e.target.value)}
+                  placeholder="My Chat Session"
+                  className="w-full p-2 border rounded-md bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 focus:ring-1 focus:ring-indigo-500 text-sm"
+                />
+              </div>
+              <div className="flex justify-end gap-2">
+                <button
+                  onClick={() => setShowSaveDialog(false)}
+                  className="px-3 py-1.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={saveCurrentSession}
+                  className="px-3 py-1.5 bg-blue-500 text-white text-sm rounded hover:bg-blue-600 transition-colors"
+                >
+                  Save
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* NEW: Saved Sessions Panel */}
+        {showSavedSessions && (
+          <SavedSessionsPanel
+            onClose={() => setShowSavedSessions(false)}
+            onSelectSession={handleSelectSavedSession}
+          />
+        )}
+
+        {/* Create Event Modal */}
         {isCreateEventModalOpen && (
           <div 
-            className="absolute inset-0 z-[65] flex justify-center items-center bg-black/40 backdrop-blur-sm p-3 sm:p-4" // Increased z-index
+            className="absolute inset-0 z-[65] flex justify-center items-center bg-black/40 backdrop-blur-sm p-3 sm:p-4"
             onClick={() => setIsCreateEventModalOpen(false)}
           >
             <div 
-              className="bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-xl shadow-2xl w-full max-w-xs sm:max-w-lg overflow-y-auto max-h-[90vh]" // Allow scroll on small modals
-              onClick={e => e.stopPropagation()} // Prevent click from closing modal
+              className="bg-white dark:bg-gray-800 p-4 sm:p-6 rounded-xl shadow-2xl w-full max-w-xs sm:max-w-lg overflow-y-auto max-h-[90vh]"
+              onClick={e => e.stopPropagation()}
             >
               <h3 className="text-base sm:text-lg font-semibold text-gray-800 dark:text-gray-100 mb-4 sm:mb-5">Create New Calendar Event</h3>
               <form onSubmit={(e) => { e.preventDefault(); handleCreateEventSubmit(); }} className="space-y-3 sm:space-y-4 text-xs sm:text-sm">
@@ -1072,7 +1219,6 @@ export default function LivePopup({
             </div>
             </div>
           )}
-        {/* --- END NEW: Create Event Modal --- */}
       </div>
     </div>
   );

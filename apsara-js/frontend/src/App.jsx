@@ -142,6 +142,11 @@ export default function App() {
     screenStream,
     videoDevices, // <-- Add new state from hook
     selectedVideoDeviceId, // <-- Add new state from hook
+    mapDisplayData,
+    weatherUIData,
+    calendarEvents,
+    calendarEventsLastUpdated,
+    currentSessionHandle, // Get the session handle from the hook
     // Live Handlers/Setters
     setLiveModality,
     setLiveSystemInstruction: setLivePrompt, // Rename for clarity
@@ -156,11 +161,9 @@ export default function App() {
     stopVideoStream,
     startScreenShare,
     stopScreenShare,
-    mapDisplayData,
-    weatherUIData,
-    calendarEvents,
-    calendarEventsLastUpdated,
     flipCamera,
+    handleAutoSessionResume,
+    setSessionResumeHandle, // NEW: Expose function to set the session resume handle directly
   } = useLiveSession({
     currentVoice,
     transcriptionEnabled,
@@ -314,6 +317,71 @@ export default function App() {
     await startStreamChat(promptText, id, initialConvoData, modelToUse, shouldEnableSearch, shouldEnableCodeExec); // Pass overrides
   }, [models, currentModel, setCurrentModel, setEnableGoogleSearch, setEnableCodeExecution, setStreamToggleState, closeSidebar, startStreamChat]); // Added setters to dependencies, removed sendToBackend as it's not used here
 
+  // NEW: Function to load a saved live session
+  const loadLiveSession = useCallback((resumeHandle, modality, voice, systemInstruction) => {
+    if (!resumeHandle) {
+      console.error("Cannot load session: No resume handle provided");
+      return;
+    }
+
+    // Update settings based on saved session
+    if (modality) setLiveModality(modality);
+    if (voice) setCurrentVoice(voice);
+    if (systemInstruction) setLivePrompt(systemInstruction);
+
+    // Open live popup if not already open
+    if (!liveOpen) setLiveOpen(true);
+    
+    // Wait a short time for UI to update before starting the session
+    setTimeout(() => {
+      console.log("Loading saved session with handle:", resumeHandle);
+      // The useLiveSession hook will automatically use the handle to resume
+      startLiveSession();
+    }, 300);
+  }, [liveOpen, setLiveOpen, setLiveModality, setCurrentVoice, setLivePrompt, startLiveSession]);
+
+  // NEW: Function to start a live chat with the current main chat context
+  const startLiveWithMainContext = useCallback(() => {
+    // Check if there's an active conversation with messages
+    if (!activeConvoId) {
+      // No active conversation, just start a regular live chat
+      setLiveOpen(true);
+      return;
+    }
+
+    const activeConvo = convos.find(c => c.id === activeConvoId);
+    if (!activeConvo || !activeConvo.messages || activeConvo.messages.length === 0) {
+      // No messages in the active conversation, just start a regular live chat
+      setLiveOpen(true);
+      return;
+    }
+
+    // Prepare a chat summary to send to the live session
+    const userMessages = activeConvo.messages
+      .filter(m => m.role === 'user' || m.role === 'model')
+      .slice(-10) // Limit to the last 10 messages to avoid overwhelming the context
+      .map(m => `${m.role === 'user' ? 'User' : 'AI'}: ${m.text || (m.parts?.map(p => p.text || '').join(' ') || '')}`)
+      .join('\n');
+
+    // Construct a context message
+    const contextMessage = 
+      `This is a continuation of a previous text chat. Here's the relevant conversation history:\n\n${userMessages}\n\nPlease remember any information shared in this conversation context and continue appropriately.`;
+
+    // Open the live popup
+    setLiveOpen(true);
+
+    // Set appropriate modality for continuation (default to AUDIO)
+    setLiveModality('AUDIO');
+
+    // Make sure we're not using any resume handle - always start a fresh session
+    setSessionResumeHandle(null);
+
+    // Start a new live session with the main chat context directly
+    setTimeout(() => {
+      startLiveSession(contextMessage);
+    }, 300);
+  }, [activeConvoId, convos, setLiveOpen, setLiveModality, startLiveSession, setSessionResumeHandle]);
+
   // Show loading indicator while initial data is fetched?
   if (dataLoading) {
       return (
@@ -400,21 +468,35 @@ export default function App() {
           )}
         </div>
 
-        {/* Fixed bottom container for file preview and input */}
-        <div className="fixed bottom-0 left-0 right-0 lg:left-auto w-full border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 z-20">
-          {/* File Preview Bar - Renders if files are present */}
+        {/* Bottom Flex Container for File & Input */}
+        <div className="w-full p-2 sm:p-3 border-t border-gray-200 dark:border-gray-700 flex flex-col gap-2 relative flex-shrink-0 bg-white dark:bg-gray-800">
+          {/* File Preview Bar */}
           <FilePreviewBar files={files} onRemoveFile={removeFile} />
-        
-        {/* Message Input - Use Imported Component */}
-        <MessageInput
-          onSend={sendToBackend}
-          onStreamSend={startStreamChat}
-          isLoading={isChatLoading}
-          disabled={!activeConvoId}
-          onFileUploadClick={() => setFileUploadOpen(true)}
+          
+          {/* Action Buttons Row - NEW */}
+          <div className="flex justify-between items-center mb-1">
+            {/* Live Chat Button - Left side */}
+            <button 
+              onClick={startLiveWithMainContext} 
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-indigo-500 to-purple-500 text-white text-xs font-medium rounded-lg shadow-sm hover:from-indigo-600 hover:to-purple-600 transition-colors"
+            >
+              <AudioLines className="w-3.5 h-3.5" /> Start Live Chat
+            </button>
+            
+            {/* Right side - future actions could go here */}
+            <div></div>
+          </div>
+
+          {/* Chat Input Area */}
+          <MessageInput
+            onSend={sendToBackend}
+            onStreamSend={startStreamChat}
+            isLoading={isChatLoading}
+            disabled={!activeConvoId}
+            onFileUploadClick={() => setFileUploadOpen(true)}
             streamEnabled={streamToggleState}
             onStreamToggleChange={setStreamToggleState}
-        />
+          />
         </div>
       </main>
 
@@ -488,6 +570,12 @@ export default function App() {
           setSlidingWindowEnabled={setSlidingWindowEnabled}
           slidingWindowTokens={slidingWindowTokens}
           setSlidingWindowTokens={setSlidingWindowTokens}
+          onAutoResumeSession={handleAutoSessionResume}
+          onLoadSession={loadLiveSession} // Add new prop for loading saved sessions
+          onStartWithMainContext={startLiveWithMainContext} // NEW: Add prop for starting with main chat context
+          currentSessionHandle={currentSessionHandle} // Pass the properly exposed value from useLiveSession hook
+          startedWithMainContext={activeConvoId != null} // Set true if opened from main chat
+          setSessionResumeHandle={setSessionResumeHandle} // Make sure this prop is passed to LivePopup
         />
       )}
 
