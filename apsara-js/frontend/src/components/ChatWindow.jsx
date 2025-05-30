@@ -3,7 +3,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import ImageModal from './ImageModal';
 import StreamingApsaraLogo from './StreamingApsaraLogo';
-import { ClipboardCopy, ChevronDown, ChevronUp } from 'lucide-react';
+import { ClipboardCopy, ChevronDown, ChevronUp, BrainCircuit } from 'lucide-react'; // Added BrainCircuit
 
 // Helper function to detect code blocks for specific styling
 // const isCodePart = (part) => part.executableCode || part.codeExecutionResult; // We'll handle this within the markdown components
@@ -136,7 +136,43 @@ export default function ChatWindow({ convo, streamingModelMessageId, isLoading }
       </div>
     );
   };
-  
+
+  // Helper function to detect code blocks for specific styling
+  const renderThoughtSummary = (thoughtText, uniqueIdPrefix) => {
+    const sectionId = `${uniqueIdPrefix}-thought`;
+    const isCollapsed = collapsedSections[sectionId] === undefined ? false : collapsedSections[sectionId];
+    return (
+      <div key={sectionId} className="my-2 text-sm">
+        <div 
+          className="flex justify-between items-center px-3 py-1.5 bg-purple-50 dark:bg-purple-900/20 border-l-4 border-purple-500 dark:border-purple-400 rounded-r-md cursor-pointer transition-colors hover:bg-purple-100 dark:hover:bg-purple-900/30"
+          onClick={() => toggleCollapse(sectionId)} // Consolidated onClick here
+        >
+          <div className="flex items-center gap-2">
+            <BrainCircuit size={16} className="text-purple-600 dark:text-purple-300 flex-shrink-0" />
+            <span className="font-semibold text-gray-800 dark:text-purple-300">Details</span>
+          </div>
+          <button
+            // onClick is now handled by the parent div, but keep button for semantics & styling if needed
+            className="p-1 text-gray-500 dark:text-gray-400 hover:text-black dark:hover:text-white transition rounded-full"
+            title={isCollapsed ? "Show details" : "Hide details"}
+            aria-label={isCollapsed ? "Show details" : "Hide details"}
+            aria-expanded={!isCollapsed} // Added aria-expanded for accessibility
+            type="button" // Explicitly set button type
+          >
+            {isCollapsed ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
+          </button>
+        </div>
+        {!isCollapsed && (
+          <div className="prose prose-sm dark:prose-invert max-w-none mt-1 p-3 bg-purple-50 dark:bg-purple-900/10 border-l-4 border-purple-500 dark:border-purple-400 rounded-r-md">
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+              {thoughtText}
+            </ReactMarkdown>
+          </div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className="max-w-3xl mx-auto w-full space-y-6 pb-4">
       {(convo.messages || []).map((msg, idx, arr) => {
@@ -185,17 +221,33 @@ export default function ChatWindow({ convo, streamingModelMessageId, isLoading }
           );
         } else {
           // --- Apsara, System, or Error Messages ---
+          let thoughtContent = '';
+          let regularContentParts = [];
+
+          if (msg.parts && msg.parts.length > 0) {
+            msg.parts.forEach(part => {
+              // Prioritize the 'thought' property for categorization
+              if (part.thought && typeof part.text === 'string') {
+                thoughtContent += part.text + '\n'; // Accumulate thought text
+              } else if (part.text || part.executableCode || part.codeExecutionResult || part.inlineData) {
+                // Only add to regularContentParts if it's not a thought and has other content
+                regularContentParts.push(part);
+              }
+            });
+          }
+
           return (
             <div key={msg.id || idx} className={`flex flex-col items-start w-full group ${isSystem ? 'items-center' : ''}`}>
-              {/* Profile icon/name placeholder - for Apsara (can be added later) */}
-              {/* {!isSystem && !isError && <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">Apsara</div>} */}
-
               <div className={`w-full text-gray-800 dark:text-gray-200 ${isSystem ? 'text-center' : ''}`}>
-                {(msg.parts && msg.parts.length > 0) ? (
-                  msg.parts.map((part, i) => {
+                {/* Render accumulated thoughts first if any */}
+                {thoughtContent.trim() && renderThoughtSummary(thoughtContent.trim(), `${msg.id || idx}-thoughtsBlock`)}
+                
+                {/* Then render other parts */}
+                {regularContentParts.length > 0 ? (
+                  regularContentParts.map((part, i) => {
                     const partId = `${msg.id || idx}-part-${i}`;
-                    if (part.text) {
-                      // Use streaming animation for the model's text when it's actively streaming
+                    // This condition ensures we don't re-render thoughts here (already handled by the check above)
+                    if (part.text) { 
                       return (
                         <div
                           key={`${partId}-text`}
@@ -205,7 +257,7 @@ export default function ChatWindow({ convo, streamingModelMessageId, isLoading }
                             ''
                           }`}
                         >
-                          {isStreaming ? (
+                          {isStreaming && regularContentParts.length === 1 && msg.parts.length === 1 ? (
                             renderStreamingText(part.text)
                           ) : (
                             <ReactMarkdown remarkPlugins={[remarkGfm]}>
@@ -219,27 +271,28 @@ export default function ChatWindow({ convo, streamingModelMessageId, isLoading }
                     } else if (part.codeExecutionResult) {
                       return renderCodeExecutionResult(part.codeExecutionResult.output, partId);
                     } else if (part.inlineData?.mimeType?.startsWith('image/')) {
-                return (
+                      return (
                         <div
                           key={`${partId}-img`}
                           className="my-2 p-1 bg-gray-100 dark:bg-gray-900/30 rounded-md inline-block cursor-pointer hover:ring-2 hover:ring-indigo-500 transition-all"
                           onClick={() => handleImageClick(part.inlineData)}
                         >
-                    <img
-                      src={`data:${part.inlineData.mimeType};base64,${part.inlineData.data}`}
-                      alt="Generated content"
+                          <img
+                            src={`data:${part.inlineData.mimeType};base64,${part.inlineData.data}`}
+                            alt="Generated content"
                             className="max-w-md h-auto rounded"
-                    />
-                  </div>
-                );
+                          />
+                        </div>
+                      );
                     } else {
-                return null;
-              }
+                      return null;
+                    }
                   })
                 ) : (
-                  // Fallback for messages with no 'parts' array
-              <>
-                    {msg.text && (
+                  // Fallback for messages with no 'parts' array or only thought parts that were already rendered
+                  // or simple text messages without parts array
+                  <>
+                    {msg.text && !thoughtContent.trim() && ( // Render msg.text only if no thoughts were processed from parts
                        <div className={`prose prose-sm dark:prose-invert max-w-none py-1 ${
                             isError ? 'text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-900/20 p-3 rounded-md' :
                             isSystem ? 'text-sm text-gray-500 dark:text-gray-400 italic px-3 py-2 bg-gray-100 dark:bg-gray-700/50 rounded-md' :
@@ -251,14 +304,15 @@ export default function ChatWindow({ convo, streamingModelMessageId, isLoading }
                          ) : (
                            <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.text}</ReactMarkdown>
                          )}
-                  </div>
+                      </div>
+                    )}
+                    {/* Render legacy executableCode/codeExecutionResult if present directly on msg object */}
+                    {msg.executableCode && renderCodeBlock(msg.executableCode.code, msg.executableCode.language, `${msg.id || idx}-topLegacyCode`)}
+                    {msg.codeExecutionResult && renderCodeExecutionResult(msg.codeExecutionResult.output, `${msg.id || idx}-topLegacyResult`)}
+                  </>
                 )}
-                    {msg.executableCode && renderCodeBlock(msg.executableCode.code, msg.executableCode.language, `${msg.id || idx}-topLegacy`)}
-                    {msg.codeExecutionResult && renderCodeExecutionResult(msg.codeExecutionResult.output, `${msg.id || idx}-topLegacy`)}
-              </>
-            )}
-          </div>
-          {/* Copy icon below model bubble, only after streaming is done and not for system/error */}
+              </div>
+              {/* Copy icon below model bubble, only after streaming is done and not for system/error */}
           {msg.role === 'model' && msg.id !== streamingModelMessageId && !isSystem && !isError && (
             <div className="flex justify-start mt-1 mb-2">
               <button

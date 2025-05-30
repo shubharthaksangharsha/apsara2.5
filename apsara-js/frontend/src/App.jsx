@@ -15,6 +15,8 @@ import EmptyChatContent from './components/EmptyChatContent'; // Import the new 
 import FileUploadPopup from './components/FileUploadPopup';
 import FilePreviewBar from './components/FilePreviewBar'; // <-- Add this import
 import MapDisplay from './components/MapDisplay'; // <-- Import MapDisplay
+import ImageUploadButton from './components/ImageUploadButton'; // Assuming this path is correct
+import ImagePreviewBar from './components/ImagePreviewBar';   // Assuming this path is correct
 
 // Import the custom hook
 import { useTheme } from './hooks/useTheme';
@@ -34,7 +36,7 @@ const MAX_STORAGE_BYTES = MAX_LOCALSTORAGE_SIZE_MB * BYTES_PER_MB;
 // Define suggested prompts with optional target models and tool usage
 const suggestedPrompts = [
   // Technical & Coding (Using Pro for complexity/accuracy & Code Execution)
-  { text: "Explain the concept of closures in JavaScript", icon: BrainCircuit, modelId: "gemini-2.5-pro-exp-03-25"},
+  { text: "Explain the concept of closures in JavaScript", icon: BrainCircuit, modelId: "gemini-2.5-flash-preview-04-17"},
   { text: "Generate and execute Python code to print a random number (1-10)", icon: Code, modelId: "gemini-2.0-flash", toolUsage: 'codeExecution' },
   { text: "Debug this SQL query:\nSELECT user, COUNT(*) FROM orders GROUP BY product;", icon: Code, modelId: "gemini-2.0-flash", toolUsage: 'codeExecution' },
   { text: "What are the main differences between React and Vue?", icon: BrainCircuit },
@@ -58,7 +60,7 @@ const suggestedPrompts = [
 
   { text: "Provide tips for improving public speaking skills", icon: BookOpen, modelId: "gemini-1.5-flash" },
   { text: "Explain the concept of blockchain technology simply", icon: Globe, modelId: "gemini-1.5-flash" },
-  { text: "Summarize the main events of World War II", icon: History, modelId: "gemini-2.5-pro-exp-03-25" },
+  { text: "Summarize the main events of World War II", icon: History, modelId: "gemini-2.5-flash-preview-04-17" },
   { text: "What is the plot of the movie 'Inception'?", icon: Film, modelId: "gemini-1.5-flash" },
   { text: "Give me ideas for a challenging programming project", icon: Lightbulb, modelId: "gemini-1.5-flash"},
   { text: "Search for recent news about AI developments", icon: Search, modelId: "gemini-2.0-flash", toolUsage: 'googleSearch' },
@@ -73,9 +75,14 @@ export default function App() {
   // State for initial data loading (consider moving fetch logic into a hook too)
   const [models, setModels] = useState([]);
   const [voices, setVoices] = useState([]);
-  const [initialSystemInstruction, setInitialSystemInstruction] = useState(null); // Start null, fetch it
-  const [initialFiles, setInitialFiles] = useState([]); // Start empty, fetch them
-  const [dataLoading, setDataLoading] = useState(true); // Track initial data load
+  const [initialSystemInstruction, setInitialSystemInstruction] = useState(null); 
+  const [initialFiles, setInitialFiles] = useState([]); 
+  const [dataLoading, setDataLoading] = useState(true); 
+
+  // New state for images selected for the prompt
+  const [selectedImagesForPrompt, setSelectedImagesForPrompt] = useState([]);
+  // New state to track uploading status of individual prompt images
+  const [promptImageUploadStatus, setPromptImageUploadStatus] = useState({}); // { [fileName]: 'uploading' | 'success' | 'error' }
 
   const {
     convos,
@@ -98,33 +105,275 @@ export default function App() {
     maxOutputTokens, setMaxOutputTokens,
     enableGoogleSearch, setEnableGoogleSearch,
     enableCodeExecution, setEnableCodeExecution,
+    enableThinking, setEnableThinking, // <-- New
+    thinkingBudget, setThinkingBudget, // <-- New
     isSystemInstructionApplicable,
     isSearchSupportedByModel,
     isCodeExecutionSupportedByModel,
+    isThinkingSupportedByModel, // <-- New
+    isThinkingBudgetSupportedByModel, // <-- New
   } = useAppSettings(initialSystemInstruction ?? 'You are a helpful assistant.'); // Pass fetched instruction
 
   const {
-    files,
-    setFiles,
-    uploadFile,
+    files, // This state from useFileUpload is for files *being sent* with a message
+    setFiles, // This will be used by useChatApi's clearUploadedFiles
+    uploadFile, // We'll use this to upload selected prompt images
     removeFile,
-  } = useFileUpload(initialFiles); // Pass fetched files
+  } = useFileUpload(initialFiles); 
+
+  // Handlers for selected prompt images
+  // const handleSelectImagesForPrompt = (newImageFiles) => { // REMOVED THIS BLOCK
+  //   // Basic validation: ensure they are image files (optional, can be done in ImageUploadButton too)
+  //   const imageFiles = Array.from(newImageFiles).filter(file => file.type.startsWith('image/'));
+  //   setSelectedImagesForPrompt(prevImages => [...prevImages, ...imageFiles]);
+  // };
+
+  // const handleRemoveSelectedImage = (imageToRemove) => { // REMOVED THIS BLOCK
+  //   setSelectedImagesForPrompt(prevImages => prevImages.filter(image => image !== imageToRemove));
+  // };
+
+  // const clearSelectedImagesForPrompt = () => { // REMOVED THIS BLOCK
+  //   setSelectedImagesForPrompt([]);
+  // };
 
   const {
-    isLoading: isChatLoading, // Rename to avoid conflict if dataLoading is used
-    streamingModelMessageId, // Not directly used in App UI
-    sendToBackend,
-    startStreamChat,
-  } = useChatApi({ // Pass dependencies
-    convos, setConvos, activeConvoId, setActiveConvoId, // From useConversations
-    currentModel, temperature, maxOutputTokens, enableGoogleSearch, enableCodeExecution, systemInstruction, isSystemInstructionApplicable, // From useAppSettings
-    uploadedFiles: files, // <-- Pass the files
-    clearUploadedFiles: () => setFiles([]), // <-- Pass a function to clear them
+    isLoading: isChatLoading, 
+    streamingModelMessageId, 
+    sendToBackend: originalSendToBackend, // Rename original
+    startStreamChat: originalStartStreamChat, // Rename original
+  } = useChatApi({ 
+    convos, setConvos, activeConvoId, setActiveConvoId, 
+    currentModel, temperature, maxOutputTokens, enableGoogleSearch, enableCodeExecution, systemInstruction, isSystemInstructionApplicable, 
+    enableThinking, thinkingBudget, 
+    uploadedFiles: files, // This will be populated with uploaded prompt image metadata
+    clearUploadedFiles: () => {
+      setFiles([]);
+      setPromptImageUploadStatus({}); // Clear status when chat API clears files
+    },
   });
 
+  // Add a general loading state for App component operations like image uploading
+  const [isAppLoading, setIsAppLoading] = useState(false);
+
+  const handleSelectImagesForPrompt = async (newImageFiles) => {
+    const imageFiles = Array.from(newImageFiles).filter(file => file.type.startsWith('image/'));
+    if (imageFiles.length === 0) return;
+
+    const newSelectedImagesWithPreview = [];
+    const newStatuses = {};
+
+    for (const file of imageFiles) {
+      if (!selectedImagesForPrompt.some(existingFile => existingFile.name === file.name && existingFile.size === file.size) &&
+          !files.some(existingFile => existingFile.originalname === file.name && existingFile.size === file.size)) {
+        
+        const previewUrl = URL.createObjectURL(file); // Create blob URL for preview
+        newSelectedImagesWithPreview.push({ ...file, previewUrl, originalFile: file }); // Store original file and previewUrl
+        newStatuses[file.name] = 'uploading';
+      }
+    }
+
+    if (newSelectedImagesWithPreview.length === 0) return;
+
+    setSelectedImagesForPrompt(prevImages => [...prevImages, ...newSelectedImagesWithPreview]);
+    setPromptImageUploadStatus(prevStatus => ({ ...prevStatus, ...newStatuses }));
+
+    setIsAppLoading(true);
+    const currentUploadStatuses = { ...promptImageUploadStatus, ...newStatuses };
+
+    for (const imageFileObj of newSelectedImagesWithPreview) {
+      try {
+        // uploadFile expects the actual File object, not our wrapper with previewUrl
+        const metadata = await uploadFile(imageFileObj.originalFile);
+        if (metadata) {
+          setSelectedImagesForPrompt(prevSelected => prevSelected.map(img => 
+            img.name === imageFileObj.name && img.size === imageFileObj.size 
+            ? { ...img, id: metadata.id, uri: metadata.uri, originalname: imageFileObj.originalFile.name, mimetype: imageFileObj.originalFile.type } // Add originalname and mimetype for consistency
+            : img
+          ));
+          setFiles(prevFiles => {
+            if (!prevFiles.some(f => f.id === metadata.id)) {
+              // Ensure the metadata stored in `files` also has originalname and mimetype
+              return [...prevFiles, { ...metadata, originalname: imageFileObj.originalFile.name, mimetype: imageFileObj.originalFile.type }];
+            }
+            return prevFiles;
+          });
+          currentUploadStatuses[imageFileObj.name] = 'success';
+        } else {
+          currentUploadStatuses[imageFileObj.name] = 'error';
+        }
+      } catch (error) {
+        console.error(`Error uploading ${imageFileObj.name}:`, error);
+        currentUploadStatuses[imageFileObj.name] = 'error';
+      }
+      setPromptImageUploadStatus(prevStatus => ({ ...prevStatus, [imageFileObj.name]: currentUploadStatuses[imageFileObj.name] }));
+    }
+    setIsAppLoading(false);
+  };
+
+  // In sendToBackend and startStreamChat, when clearing images:
+  // Make sure to revoke object URLs for the images that are being cleared to prevent memory leaks.
+
+  const clearAndRevokeImages = (imagesToClear) => {
+    imagesToClear.forEach(img => {
+      if (img.previewUrl && img.previewUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(img.previewUrl);
+      }
+    });
+    // Clear from selectedImagesForPrompt and promptImageUploadStatus as before
+  };
+
+  const sendToBackend = async (text, targetConvoId = null, initialConvoData = null, targetModelId = null) => {
+    setIsAppLoading(true);
+
+    const successfullyUploadedImages = selectedImagesForPrompt.filter(
+      img => img.id && promptImageUploadStatus[img.name] === 'success'
+    );
+
+    const filesForMessage = files.filter(f => 
+        successfullyUploadedImages.some(sImg => sImg.id === f.id)
+    );
+    
+    console.log('[App.jsx] Sending with files:', filesForMessage);
+
+    await originalSendToBackend(text, targetConvoId, initialConvoData, targetModelId, filesForMessage);
+    
+    clearAndRevokeImages(successfullyUploadedImages); // Use the new helper
+    setSelectedImagesForPrompt(prevImages => prevImages.filter(img => !successfullyUploadedImages.includes(img)));
+    setPromptImageUploadStatus(prevStatus => {
+        const newStatus = { ...prevStatus };
+        successfullyUploadedImages.forEach(img => {
+            if (newStatus[img.name] === 'success') {
+                delete newStatus[img.name];
+            }
+        });
+        return newStatus;
+    });
+
+    setIsAppLoading(false); 
+  };
+
+  const startStreamChat = async (text, targetConvoId = null, initialConvoData = null, targetModelId = null) => {
+    setIsAppLoading(true);
+
+    const successfullyUploadedImages = selectedImagesForPrompt.filter(
+      img => img.id && promptImageUploadStatus[img.name] === 'success'
+    );
+
+    const filesForMessage = files.filter(f => 
+        successfullyUploadedImages.some(sImg => sImg.id === f.id)
+    );
+
+    console.log('[App.jsx] Streaming with files:', filesForMessage);
+
+    await originalStartStreamChat(text, targetConvoId, initialConvoData, targetModelId, filesForMessage);
+
+    clearAndRevokeImages(successfullyUploadedImages); // Use the new helper
+    setSelectedImagesForPrompt(prevImages => prevImages.filter(img => !successfullyUploadedImages.includes(img)));
+    setPromptImageUploadStatus(prevStatus => {
+        const newStatus = { ...prevStatus };
+        successfullyUploadedImages.forEach(img => {
+            if (newStatus[img.name] === 'success') {
+                delete newStatus[img.name];
+            }
+        });
+        return newStatus;
+    });
+    setIsAppLoading(false);
+  };
+
+  // Also, when removing an image manually:
+  const handleRemoveSelectedImage = (imageToRemove) => {
+    if (imageToRemove.previewUrl && imageToRemove.previewUrl.startsWith('blob:')) {
+      URL.revokeObjectURL(imageToRemove.previewUrl);
+    }
+    setSelectedImagesForPrompt(prevImages => prevImages.filter(image => image !== imageToRemove));
+    setPromptImageUploadStatus(prevStatus => {
+      const newStatus = { ...prevStatus };
+      delete newStatus[imageToRemove.name];
+      return newStatus;
+    });
+    if (imageToRemove.id) {
+      removeFile(imageToRemove.id);
+    }
+  };
+
+  const clearSelectedImagesForPrompt = () => {
+    setSelectedImagesForPrompt([]);
+    setPromptImageUploadStatus({});
+  };
+
+  
   const [transcriptionEnabled, setTranscriptionEnabled] = useState(true); // default ON
   const [slidingWindowEnabled, setSlidingWindowEnabled] = useState(true); // default ON
   const [slidingWindowTokens, setSlidingWindowTokens] = useState(4000); // default 4000
+
+  // REMOVE THE REDUNDANT FUNCTION DEFINITIONS BELOW
+  /*
+  // Wrapped sendToBackend to handle prompt image uploads
+  const sendToBackend = async (text, targetConvoId = null, initialConvoData = null, targetModelId = null) => {
+    setIsAppLoading(true); // Indicate app is busy for the send operation
+
+    // Filter selectedImagesForPrompt for those that are successfully uploaded (have an id and success status)
+    const successfullyUploadedImages = selectedImagesForPrompt.filter(
+      img => img.id && promptImageUploadStatus[img.name] === 'success'
+    );
+
+    // The `files` state in `useFileUpload` should already contain these successfully uploaded files because
+    // `handleSelectImagesForPrompt` calls `setFiles` after each successful upload from `uploadFile`.
+    // We just need to ensure we're passing the correct subset of `files` that correspond to the current prompt's images.
+    const filesForMessage = files.filter(f => 
+        successfullyUploadedImages.some(sImg => sImg.id === f.id)
+    );
+    
+    console.log('[App.jsx] Sending with files:', filesForMessage);
+
+    await originalSendToBackend(text, targetConvoId, initialConvoData, targetModelId, filesForMessage);
+    
+    // Clear only the successfully sent images from the selection
+    setSelectedImagesForPrompt(prevImages => prevImages.filter(img => promptImageUploadStatus[img.name] !== 'success'));
+    // Corresponding statuses can be cleared or left if we want to keep error states visible
+    // For simplicity, let's clear statuses of successful ones
+    setPromptImageUploadStatus(prevStatus => {
+        const newStatus = { ...prevStatus };
+        successfullyUploadedImages.forEach(img => {
+            if (newStatus[img.name] === 'success') {
+                delete newStatus[img.name];
+            }
+        });
+        return newStatus;
+    });
+
+    setIsAppLoading(false); 
+  };
+
+  const startStreamChat = async (text, targetConvoId = null, initialConvoData = null, targetModelId = null) => {
+    setIsAppLoading(true);
+
+    const successfullyUploadedImages = selectedImagesForPrompt.filter(
+      img => img.id && promptImageUploadStatus[img.name] === 'success'
+    );
+
+    const filesForMessage = files.filter(f => 
+        successfullyUploadedImages.some(sImg => sImg.id === f.id)
+    );
+
+    console.log('[App.jsx] Streaming with files:', filesForMessage);
+
+    await originalStartStreamChat(text, targetConvoId, initialConvoData, targetModelId, filesForMessage);
+
+    setSelectedImagesForPrompt(prevImages => prevImages.filter(img => promptImageUploadStatus[img.name] !== 'success'));
+    setPromptImageUploadStatus(prevStatus => {
+        const newStatus = { ...prevStatus };
+        successfullyUploadedImages.forEach(img => {
+            if (newStatus[img.name] === 'success') {
+                delete newStatus[img.name];
+            }
+        });
+        return newStatus;
+    });
+    setIsAppLoading(false);
+  };
+  */
 
   const {
     // Live State
@@ -495,14 +744,19 @@ export default function App() {
           </div>
 
           {/* Chat Input Area */}
-        <MessageInput
+          <MessageInput
           onSend={sendToBackend}
           onStreamSend={startStreamChat}
           isLoading={isChatLoading}
           disabled={!activeConvoId}
-          onFileUploadClick={() => setFileUploadOpen(true)}
-            streamEnabled={streamToggleState}
-            onStreamToggleChange={setStreamToggleState}
+          onFileUploadClick={() => setFileUploadOpen(true)} // For general files
+          streamEnabled={streamToggleState}
+          onStreamToggleChange={setStreamToggleState}
+          // --> ADD THESE PROPS FOR IMAGE SELECTION <--
+          selectedImagesForPrompt={selectedImagesForPrompt}
+          onSelectImagesForPrompt={handleSelectImagesForPrompt}
+          onRemoveSelectedImage={handleRemoveSelectedImage}
+          promptImageUploadStatus={promptImageUploadStatus} // Pass the status object
         />
         </div>
       </main>
@@ -511,6 +765,8 @@ export default function App() {
       {settingsOpen && (
         <SettingsPanel
           currentModel={currentModel}
+          models={models} // Pass the models list for the dropdown
+          onModelChange={setCurrentModel} // Pass the setter for model change
           isSystemInstructionApplicable={isSystemInstructionApplicable}
           systemInstruction={systemInstruction}
           onSystemInstructionChange={handleSystemInstructionSave}
@@ -526,6 +782,14 @@ export default function App() {
           onMaxOutputTokensChange={setMaxOutputTokens}
           onEnableGoogleSearchChange={setEnableGoogleSearch}
           onEnableCodeExecutionChange={setEnableCodeExecution}
+          // Props for Thinking Mode
+          enableThinking={enableThinking}
+          onEnableThinkingChange={setEnableThinking}
+          isThinkingSupported={isThinkingSupportedByModel}
+          // Props for Thinking Budget
+          thinkingBudget={thinkingBudget}
+          onThinkingBudgetChange={setThinkingBudget}
+          isThinkingBudgetSupported={isThinkingBudgetSupportedByModel}
         />
       )}
 
@@ -584,7 +848,7 @@ export default function App() {
           onStartWithMainContext={startLiveWithMainContext} // NEW: Add prop for starting with main chat context
           currentSessionHandle={currentSessionHandle} // Pass the properly exposed value from useLiveSession hook
           startedWithMainContext={activeConvoId != null} // Set true if opened from main chat
-          setSessionResumeHandle={setSessionResumeHandle} // Pass the session resume handler
+          setSessionResumeHandle={setSessionResumeHandle} // Pass the session resume handle
         />
       )}
 

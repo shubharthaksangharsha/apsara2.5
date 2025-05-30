@@ -18,8 +18,14 @@ export default function SettingsPanel({
   onEnableGoogleSearchChange,
   enableCodeExecution,
   onEnableCodeExecutionChange,
+  enableThinking, // <-- New
+  onEnableThinkingChange, // <-- New
+  thinkingBudget, // <-- New
+  onThinkingBudgetChange, // <-- New
   isSearchSupported,
   isCodeExecutionSupported,
+  isThinkingSupported, // <-- New
+  isThinkingBudgetSupported, // <-- New
 
   // Panel Visibility
   isOpen,
@@ -75,6 +81,13 @@ export default function SettingsPanel({
     // If turning code execution ON, turn search OFF
     if (newValue) {
       onEnableGoogleSearchChange(false);
+    }
+  };
+
+  const handleThinkingToggle = (newValue) => {
+    onEnableThinkingChange(newValue);
+    if (!newValue) {
+      onThinkingBudgetChange(0);
     }
   };
 
@@ -228,15 +241,73 @@ export default function SettingsPanel({
               className={`relative inline-flex h-5 w-9 sm:h-6 sm:w-11 flex-shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:ring-offset-2 dark:focus:ring-offset-gray-800 ${!isCodeExecutionSupported || (enableGoogleSearch && isSearchSupported) ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'} ${enableCodeExecution && isCodeExecutionSupported ? 'bg-indigo-600' : 'bg-gray-200 dark:bg-gray-700'}`}
             >
               <span className="absolute inset-0 h-full w-full flex items-center justify-center transition-opacity">
-                    <Code className={`h-2.5 w-2.5 sm:h-3 sm:w-3 text-indigo-600 ${enableCodeExecution && isCodeExecutionSupported ? 'opacity-100 duration-200 ease-in' : 'opacity-0 duration-100 ease-out'}`} />
-                    <X className={`h-2.5 w-2.5 sm:h-3 sm:w-3 text-gray-400 dark:text-gray-500 ${enableCodeExecution && isCodeExecutionSupported ? 'opacity-0 duration-100 ease-out' : 'opacity-100 duration-200 ease-in'}`} />
+                {/* Optional: Icons for on/off state if desired */}
               </span>
-              <span className={`pointer-events-none inline-block h-4 w-4 sm:h-5 sm:w-5 transform rounded-full bg-white dark:bg-gray-300 shadow ring-0 transition duration-200 ease-in-out ${enableCodeExecution && isCodeExecutionSupported ? 'translate-x-4 sm:translate-x-5' : 'translate-x-0'}`} />
+              <span
+                aria-hidden="true"
+                className={`pointer-events-none inline-block h-4 w-4 sm:h-5 sm:w-5 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${enableCodeExecution && isCodeExecutionSupported ? 'translate-x-4 sm:translate-x-5' : 'translate-x-0'}`}
+              />
             </Switch>
           </Switch.Group>
+
+          {/* Enable Thinking Process Toggle */}
+          <Switch.Group as="div" className="flex items-center justify-between py-2 sm:py-3">
+            <span className="flex flex-grow flex-col mr-3">
+              <Switch.Label
+                as="span"
+                className={`text-xs sm:text-sm font-medium leading-6 text-gray-900 dark:text-gray-100 ${!isThinkingSupported ? 'opacity-50' : ''}`}
+                passive
+              >
+                Enable Thinking Process
+              </Switch.Label>
+              {!isThinkingSupported && (
+                <Switch.Description as="span" className="text-[10px] sm:text-xs text-red-500 dark:text-red-400">
+                  Thinking process not supported by this model.
+                </Switch.Description>
+              )}
+            </span>
+            <Switch
+              checked={enableThinking && isThinkingSupported}
+              onChange={handleThinkingToggle}
+              disabled={!isThinkingSupported}
+              className={`relative inline-flex h-5 w-9 sm:h-6 sm:w-11 flex-shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:ring-offset-2 dark:focus:ring-offset-gray-800 ${!isThinkingSupported ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'} ${enableThinking && isThinkingSupported ? 'bg-indigo-600' : 'bg-gray-200 dark:bg-gray-700'}`}
+            >
+              <span className="absolute inset-0 h-full w-full flex items-center justify-center transition-opacity">
+                {/* Optional: Icons for on/off state if desired */}
+              </span>
+              <span
+                aria-hidden="true"
+                className={`pointer-events-none inline-block h-4 w-4 sm:h-5 sm:w-5 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out
+                  ${enableThinking && isThinkingSupported ? 'translate-x-5' : 'translate-x-0'}`}
+              />
+            </Switch>
+          </Switch.Group>
+
+          {/* Thinking Budget Slider (conditionally rendered) */}
+          {enableThinking && isThinkingSupported && isThinkingBudgetSupported && (
+            <div>
+              <label htmlFor="thinkingBudget" className="block text-xs sm:text-sm font-medium mb-1">
+                Thinking Budget: <span className="font-normal text-gray-500 dark:text-gray-400">({thinkingBudget})</span>
+              </label>
+              <input
+                id="thinkingBudget"
+                type="range"
+                min="0" // Or a more sensible minimum like 100 if 0 means disabled
+                max="2000" // As per your requirement, though 1000 was mentioned as default
+                step="50" // Or any other appropriate step
+                value={thinkingBudget}
+                onChange={(e) => onThinkingBudgetChange(parseInt(e.target.value, 10))}
+                className="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer accent-indigo-500"
+              />
+              <p className="text-[10px] sm:text-xs text-gray-500 dark:text-gray-400 mt-1">
+                Set a budget for the thinking process (e.g., 100-1000). Only for compatible models. Set to 0 to disable if not automatically handled by the toggle.
+              </p>
+            </div>
+          )}
+
         </div>
 
-        {/* Footer Buttons */}
+        {/* Footer with Save/Cancel Buttons */}
         <div className="mt-auto pt-4 sm:pt-6 flex flex-col sm:flex-row justify-end space-y-2 sm:space-y-0 sm:space-x-3 flex-shrink-0 border-t border-gray-200 dark:border-gray-700">
           <button
             onClick={onClose}

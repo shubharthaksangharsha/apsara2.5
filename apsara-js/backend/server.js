@@ -4,6 +4,7 @@
 
 import express from 'express';
 import http from 'http';
+import fs from 'fs';
 import dotenv from 'dotenv';
 import { WebSocketServer, WebSocket } from 'ws';
 import multer from 'multer';
@@ -57,7 +58,8 @@ const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
 // --- In‐memory state & config ---
 const availableModels = [
-  { id: "gemini-2.5-pro-exp-03-25", name: "Gemini 2.5 Pro Exp" },
+  // { id: "gemini-2.5-pro-preview-05-06", name: "Gemini 2.5 Pro" },
+  // { id: "gemini-2.5-pro-preview-03-25", name: "Gemini 2.5 Pro (Free)" },
   { id: "gemini-2.5-flash-preview-04-17", name: "Gemini 2.5 Flash Preview" },
   { id: "gemini-2.0-flash", name: "Gemini 2.0 Flash" },
   { id: "gemini-2.0-flash-preview-image-generation", name: "Gemini 2.0 Flash (Image Gen)" },
@@ -94,8 +96,62 @@ function buildApiRequest(body) {
   if (!contents || !Array.isArray(contents) || !contents.length) {
     throw new Error('Missing or invalid "contents" array in request body.');
   }
-  const selectedModelId = modelId || 'gemini-2.0-flash';
-  const apiRequest = { model: selectedModelId, contents, config: {} };
+  const selectedModelId = modelId || 'gemini-2.0-flash'; // Default model if not provided
+
+  // Process contents to include inline image data if fileData is present
+  const processedContents = contents.map(contentPart => {
+    if (contentPart.role === 'user' && contentPart.parts) {
+      const newParts = [];
+      let fileDataArray = null;
+
+      contentPart.parts.forEach(part => {
+        if (part.fileData && Array.isArray(part.fileData)) {
+          fileDataArray = part.fileData; // Store fileData to be processed
+        } else {
+          newParts.push(part); // Keep non-fileData parts
+        }
+      });
+
+      if (fileDataArray) {
+        fileDataArray.forEach(file => {
+          if (file.id && file.type && file.type.startsWith('image/')) {
+            try {
+              const filePath = path.join(__dirname, 'uploads', file.id);
+              if (fs.existsSync(filePath)) {
+                const imageBuffer = fs.readFileSync(filePath);
+                const base64ImageData = imageBuffer.toString('base64');
+                newParts.push({
+                  inlineData: {
+                    mimeType: file.type,
+                    data: base64ImageData
+                  }
+                });
+              } else {
+                console.warn(`[buildApiRequest] Image file not found: ${filePath} for file ID: ${file.id}`);
+                // Optionally, add a text part indicating the image was not found
+                // newParts.push({ text: `[Image ${file.name || file.id} not found]` });
+              }
+            } catch (e) {
+              console.error(`[buildApiRequest] Error processing image file ${file.id}:`, e);
+              // Optionally, add a text part indicating an error
+              // newParts.push({ text: `[Error processing image ${file.name || file.id}]` });
+            }
+          }
+        });
+        return { ...contentPart, parts: newParts };
+      }
+    }
+    return contentPart;
+  });
+
+  const apiRequest = { model: selectedModelId, contents: processedContents, config: {} };
+
+  // Define models that DO support thinking configuration
+  const modelsWithThinkingConfigSupport = {
+    "gemini-2.5-pro-exp-03-25": { supportsBudget: false },
+    "gemini-2.5-flash-preview-04-17": { supportsBudget: true },
+    // Add other model IDs here if they support thinking_config
+  };
 
   // Image‐gen modalities
   if (selectedModelId === 'gemini-2.0-flash-preview-image-generation') {
@@ -112,11 +168,52 @@ function buildApiRequest(body) {
         threshold: HarmBlockThreshold[s.threshold]||s.threshold
       }));
     }
-    // Thinking budget
-    if (config.thinkingConfig?.thinkingBudget != null) {
-      const b = parseInt(config.thinkingConfig.thinkingBudget,10);
-      if (!isNaN(b)) apiRequest.config.thinkingConfig = { thinkingBudget: b };
+
+    // Thinking config - only add if model supports it and client sends it
+    if (modelsWithThinkingConfigSupport[selectedModelId] && config.thinkingConfig) {
+      apiRequest.config.thinkingConfig = {}; // Initialize
+
+      // Explicitly set includeThoughts based on the client's request
+      if (typeof config.thinkingConfig.includeThoughts === 'boolean') {
+        apiRequest.config.thinkingConfig.includeThoughts = config.thinkingConfig.includeThoughts;
+      }
+
+      // Apply thinkingBudget if model supports it, budget is provided, and includeThoughts is not explicitly false
+      if (modelsWithThinkingConfigSupport[selectedModelId].supportsBudget && 
+          config.thinkingConfig.thinkingBudget != null && 
+          apiRequest.config.thinkingConfig.includeThoughts !== false) { 
+        const b = parseInt(config.thinkingConfig.thinkingBudget, 10);
+        if (!isNaN(b)) {
+          apiRequest.config.thinkingConfig.thinkingBudget = b;
+        }
+      }
+
+      // If includeThoughts is explicitly false, ensure only that is sent for thinkingConfig
+      if (apiRequest.config.thinkingConfig.includeThoughts === false) {
+        apiRequest.config.thinkingConfig = { includeThoughts: false };
+      } else if (Object.keys(apiRequest.config.thinkingConfig).length === 0 || 
+                 (Object.keys(apiRequest.config.thinkingConfig).length === 1 && 
+                  apiRequest.config.thinkingConfig.hasOwnProperty('includeThoughts') && 
+                  apiRequest.config.thinkingConfig.includeThoughts === true && 
+                  !apiRequest.config.thinkingConfig.hasOwnProperty('thinkingBudget'))) {
+         // If it's empty after processing, or only contains includeThoughts:true (default state without budget/explicit false)
+         // and the original request from client didn't have thinkingConfig.includeThoughts: false
+        if (!(config.thinkingConfig && typeof config.thinkingConfig.includeThoughts === 'boolean' && config.thinkingConfig.includeThoughts === false)){
+            delete apiRequest.config.thinkingConfig; // Delete if effectively no thinking config is needed
+        }
+      }
+      // Final check: if thinkingConfig is an empty object, remove it, unless it was explicitly {includeThoughts: false}
+      if (apiRequest.config.thinkingConfig && Object.keys(apiRequest.config.thinkingConfig).length === 0) {
+        delete apiRequest.config.thinkingConfig;
+      }
+    } else if (config.thinkingConfig && config.thinkingConfig.includeThoughts === false) {
+      // If model doesn't support thinking BUT client explicitly sends includeThoughts: false,
+      // we should still send this to the API, as it might be a general parameter.
+      // However, given the errors, it's safer to only send thinkingConfig for supported models.
+      // For now, we will NOT add thinkingConfig if model is not in modelsWithThinkingConfigSupport.
+      // If API behavior changes, this else-if could be: apiRequest.config.thinkingConfig = { includeThoughts: false };
     }
+
     // GenerationConfig & JSON schema
     if (config.generationConfig) {
       const gc = config.generationConfig;
@@ -380,82 +477,91 @@ app.post('/chat/stream', async (req, res) => {
         });
 
         const apiRequest = buildApiRequest(req.body);
-        console.log(`[POST /chat/stream] Request to Google API (Model: ${modelId}):`, JSON.stringify(apiRequest, null, 2));
+        // console.log(`[POST /chat/stream] Request to Google API (Model: ${modelId}):`, JSON.stringify(apiRequest, null, 2)); // Original console.log
         const stream = await ai.models.generateContentStream(apiRequest);
 
-        // Iterate through the stream chunks
     for await (const chunk of stream) {
-            // --- UPDATED: Process parts within the chunk ---
             const candidate = chunk.candidates?.[0];
-            if (!candidate) continue; // Skip if no candidate
+            if (!candidate) continue; 
 
-            // Process parts if they exist
             if (candidate.content?.parts) {
                 for (const part of candidate.content.parts) {
+                    let eventData = {};
                     if (part.text) {
-                        // Send text part
-                        res.write(`data: ${JSON.stringify({ text: part.text })}\n\n`);
-                    } else if (part.inlineData) {
-                        // Send inlineData part (e.g., generated image from code execution)
-                        res.write(`data: ${JSON.stringify({ inlineData: part.inlineData })}\n\n`);
-                    } else if (part.executableCode) {
-                        // Send executableCode part
-                        res.write(`data: ${JSON.stringify({ executableCode: part.executableCode })}\n\n`);
-                    } else if (part.codeExecutionResult) {
-                        // Send codeExecutionResult part
-                        res.write(`data: ${JSON.stringify({ codeExecutionResult: part.codeExecutionResult })}\n\n`);
-      }
-                    // NOTE: We are not explicitly handling part.thought here, assuming it's not needed for display
+                        eventData.text = part.text;
+                    }
+                    // Explicitly check for the thought property from Gemini API response
+                    if (part.thought) { 
+                        eventData.thought = true;
+                    }
+                    if (part.inlineData) {
+                        eventData.inlineData = part.inlineData;
+                    }
+                    if (part.executableCode) {
+                        eventData.executableCode = part.executableCode;
+                    }
+                    if (part.codeExecutionResult) {
+                        eventData.codeExecutionResult = part.codeExecutionResult;
+                    }
+
+                    if (Object.keys(eventData).length > 0) {
+                         const dataString = `data: ${JSON.stringify(eventData)}\n\n`;
+                         console.log('[STREAMING TO CLIENT]', dataString); // Added console.log as requested
+                         res.write(dataString);
+                    }
                 }
             }
-            // --- End Updated Part Processing ---
 
-            // Send function calls if present (may be separate from parts in some chunks)
             if (chunk.functionCalls) {
-                 // Note: The frontend needs logic to handle this event if function calling is used with streaming
-                res.write(`event: function_call\ndata: ${JSON.stringify({ functionCalls: chunk.functionCalls })}\n\n`);
+                const fcDataString = `event: function_call\ndata: ${JSON.stringify({ functionCalls: chunk.functionCalls })}\n\n`;
+                console.log('[STREAMING FUNCTION CALL TO CLIENT]', fcDataString); // Optional: log function calls too
+                res.write(fcDataString);
             }
 
-            // Send grounding metadata if present
             if (candidate.groundingMetadata) {
-                 // Note: Frontend might need logic for this event
-                res.write(`event: grounding\ndata: ${JSON.stringify(candidate.groundingMetadata)}\n\n`);
+                const gmDataString = `event: grounding\ndata: ${JSON.stringify(candidate.groundingMetadata)}\n\n`;
+                console.log('[STREAMING GROUNDING METADATA TO CLIENT]', gmDataString); // Optional: log grounding too
+                res.write(gmDataString);
             }
 
-            // Check for finish reason (often comes in the last chunk)
             if (candidate.finishReason && candidate.finishReason !== 'FINISH_REASON_UNSPECIFIED') {
-                 // Send final metadata including usage
                  const finalData = {
                     finishReason: candidate.finishReason,
-                    usageMetadata: chunk.usageMetadata, // Usage metadata usually comes with the last chunk
-                    // Include safety ratings if needed
-                    safetyRatings: candidate.safetyRatings 
+                    usageMetadata: chunk.usageMetadata, // Usually comes with the final chunk
+                    safetyRatings: candidate.safetyRatings
                  };
-                 res.write(`data: ${JSON.stringify(finalData)}\n\n`);
-    }
-        }
-
-        // Signal stream completion explicitly
-        res.write(`event: done\ndata: ${JSON.stringify({ message: "Stream ended" })}\n\n`);
-    res.end();
-
-  } catch (e) {
-        console.error("Error in /chat/stream:", e);
-        // Try to send an error event if headers not fully sent
-        if (!res.writableEnded) {
-            try {
-                res.write(`event: error\ndata: ${JSON.stringify({ error: e.message || 'Unknown stream error' })}\n\n`);
-                res.end();
-            } catch (writeError) {
-                console.error("Error sending stream error event:", writeError);
-                res.end(); // Force end if even error writing fails
+                 const finalDataString = `event: done\ndata: ${JSON.stringify(finalData)}\n\n`;
+                 console.log('[STREAMING DONE TO CLIENT]', finalDataString);
+                 res.write(finalDataString);
             }
         }
-        // If headers weren't even sent, we can send a normal HTTP error
-        else if (!res.headersSent) {
-             res.status(500).json({ error: e.message });
+    } catch (e) {
+        console.error('[STREAM ERROR]',e);
+        // Ensure the error message is properly formatted for JSON
+        const errorMessage = (e instanceof Error) ? e.message : 'Stream error occurred.';
+        // Attempt to get more details from the error if they exist (e.g., from API errors)
+        const errorCode = e.code || (e.details && e.details.code) || (e.error && e.error.code);
+        const errorStatus = e.status || (e.details && e.details.status) || (e.error && e.error.status);
+        const errorDetails = (e.details && typeof e.details === 'object') ? e.details : (e.error && typeof e.error === 'object' ? e.error : { message: errorMessage });
+
+        const errorPayload = { 
+            error: {
+                 message: errorMessage, 
+                 ...(errorCode && { code: errorCode }),
+                 ...(errorStatus && { status: errorStatus }),
+                 details: errorDetails
+            }
+        };
+        const errorDataString = `event: error\ndata: ${JSON.stringify(errorPayload)}\n\n`;
+        console.log('[STREAMING ERROR TO CLIENT]', errorDataString);
+        if (!res.headersSent) {
+             res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'Connection': 'keep-alive' });
         }
-  }
+        res.write(errorDataString);
+    } finally {
+        console.log('[STREAM ENDED]');
+        res.end();
+    }
 });
 
 app.post('/chat/function-result', async (req,res)=>{

@@ -12,6 +12,8 @@ export function useAppSettings(initialSystemInstruction) {
   const [maxOutputTokens, setMaxOutputTokens] = useState(() => parseInt(localStorage.getItem('maxOutputTokens') || '8192', 10)); // Default to 8k often safer
   const [enableGoogleSearch, setEnableGoogleSearch] = useState(false); // Initialize false, enable later based on model/saved state
   const [enableCodeExecution, setEnableCodeExecution] = useState(false); // Initialize false
+  const [enableThinking, setEnableThinking] = useState(() => localStorage.getItem('enableThinking') === 'true');
+  const [thinkingBudget, setThinkingBudget] = useState(() => parseInt(localStorage.getItem('thinkingBudget') || '0', 10));
 
   // Store model capabilities
   const [modelCapabilities, setModelCapabilities] = useState(getModelCapabilities(currentModel));
@@ -45,6 +47,34 @@ export function useAppSettings(initialSystemInstruction) {
      } else {
        setEnableCodeExecution(false);
      }
+
+    // Default thinking settings based on model, then check localStorage for overrides
+    let modelDefaultThinking = false;
+    let modelDefaultBudget = 0;
+
+    if (currentModel === 'gemini-2.5-pro-exp-03-25' || currentModel === 'gemini-2.5-flash-preview-04-17') {
+      modelDefaultThinking = true;
+      if (currentModel === 'gemini-2.5-flash-preview-04-17') {
+        modelDefaultBudget = 100;
+      }
+    }
+
+    const savedThinking = localStorage.getItem('enableThinking');
+    const savedThinkingBudget = localStorage.getItem('thinkingBudget');
+
+    if (capabilities.supportsThinking) {
+      // If localStorage has a value, use it; otherwise, use model default
+      setEnableThinking(savedThinking !== null ? savedThinking === 'true' : modelDefaultThinking);
+    } else {
+      setEnableThinking(false);
+    }
+
+    if (capabilities.supportsThinkingBudget) {
+      // If localStorage has a value, use it; otherwise, use model default
+      setThinkingBudget(savedThinkingBudget !== null ? parseInt(savedThinkingBudget, 10) : modelDefaultBudget);
+    } else {
+      setThinkingBudget(0); // Reset to 0 if not supported
+    }
 
   }, [currentModel]);
 
@@ -83,6 +113,23 @@ export function useAppSettings(initialSystemInstruction) {
     }
   }, [enableCodeExecution, modelCapabilities.supportsCodeExecution]);
 
+  // Persist thinking setting only if the model supports it AND the setting is true
+  useEffect(() => {
+    if (modelCapabilities.supportsThinking) {
+      localStorage.setItem('enableThinking', enableThinking.toString());
+    } else {
+      localStorage.removeItem('enableThinking');
+    }
+  }, [enableThinking, modelCapabilities.supportsThinking]);
+
+  useEffect(() => {
+    if (modelCapabilities.supportsThinkingBudget) {
+      localStorage.setItem('thinkingBudget', thinkingBudget.toString());
+    } else {
+      localStorage.removeItem('thinkingBudget');
+    }
+  }, [thinkingBudget, modelCapabilities.supportsThinkingBudget]);
+
   // --- Handlers ---
   const handleSystemInstructionSave = useCallback((newInstruction) => {
     if (modelCapabilities.supportsSystemInstruction) {
@@ -107,6 +154,8 @@ export function useAppSettings(initialSystemInstruction) {
     maxOutputTokens,
     enableGoogleSearch,
     enableCodeExecution,
+    enableThinking,
+    thinkingBudget,
 
     // Setters
     setCurrentModel,
@@ -117,10 +166,14 @@ export function useAppSettings(initialSystemInstruction) {
     setMaxOutputTokens,
     setEnableGoogleSearch, // Need setter for the Switch component
     setEnableCodeExecution, // Need setter for the Switch component
+    setEnableThinking,
+    setThinkingBudget,
 
     // Capability flags
     isSystemInstructionApplicable: modelCapabilities.supportsSystemInstruction,
     isSearchSupportedByModel: modelCapabilities.supportsSearch,
     isCodeExecutionSupportedByModel: modelCapabilities.supportsCodeExecution,
+    isThinkingSupportedByModel: modelCapabilities.supportsThinking,
+    isThinkingBudgetSupportedByModel: modelCapabilities.supportsThinkingBudget,
   };
 }

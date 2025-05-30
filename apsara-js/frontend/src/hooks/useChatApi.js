@@ -16,6 +16,8 @@ export function useChatApi({
   isSystemInstructionApplicable,
   uploadedFiles, // <-- New prop: List of uploaded file metadata
   clearUploadedFiles, // <-- New prop: Function to clear uploaded files
+  enableThinking, // <-- New prop
+  thinkingBudget, // <-- New prop
 }) {
   const [isLoading, setIsLoading] = useState(false);
   const [streamingModelMessageId, setStreamingModelMessageId] = useState(null);
@@ -55,6 +57,20 @@ export function useChatApi({
         // if (enableFunctionCalling && functionDeclarations?.length > 0) {
         //    config.tools = [{ functionDeclarations: functionDeclarations }];
         // }
+      }
+    }
+
+    // Add thinkingConfig based on enableThinking and thinkingBudget
+    if (typeof enableThinking === 'boolean') { // Check if enableThinking is explicitly set
+      if (enableThinking) {
+        config.thinkingConfig = { includeThoughts: true };
+        // Add thinkingBudget if it's a non-negative number (including 0)
+        if (typeof thinkingBudget === 'number' && thinkingBudget >= 0) {
+          config.thinkingConfig.thinkingBudget = thinkingBudget;
+        }
+      } else {
+        // If thinking is explicitly disabled, send includeThoughts: false
+        config.thinkingConfig = { includeThoughts: false };
       }
     }
 
@@ -126,7 +142,8 @@ export function useChatApi({
       const baseRequestBody = {
         contents: turns,
         modelId: modelToUse,
-        config: applyConfigSettings({}, isImageGen),
+        // Pass null for overrides if they are not applicable or defined for non-streaming
+        config: applyConfigSettings({}, isImageGen, null, null), 
       };
 
       const response = await fetch(`${BACKEND_URL}/chat`, {
@@ -206,10 +223,10 @@ export function useChatApi({
 
   const startStreamChat = async (text, targetConvoId = null, initialConvoData = null, targetModelId = null, overrideEnableSearch = null, overrideEnableCodeExec = null) => {
     const convoIdToUse = targetConvoId || activeConvoId;
-     if (!convoIdToUse && !initialConvoData) {
-       console.error("startStreamChat: No active conversation and no initial data provided.");
-       return;
-     }
+    if (!convoIdToUse && !initialConvoData) {
+      console.error("useChatApi: No active stream conversation and no initial data provided.");
+      return;
+    }
 
     setIsLoading(true);
     let finalConvoId = convoIdToUse;
@@ -290,10 +307,11 @@ export function useChatApi({
          config: applyConfigSettings({}, isImageGen, overrideEnableSearch, overrideEnableCodeExec),
       };
 
-      const response = await fetch(`${BACKEND_URL}/chat/stream`, {
+      // --- API Call for Streaming ---
+      const response = await fetch(`${BACKEND_URL}/chat/stream`, { // <-- CORRECTED URL
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(baseRequestBody)
+        body: JSON.stringify(baseRequestBody),
       });
 
       // Clear uploaded files after the request is made (success or fail)
@@ -327,36 +345,60 @@ export function useChatApi({
             const jsonData = line.slice(6);
             try {
               const data = JSON.parse(jsonData);
+              console.log('[useChatApi Stream] Received data chunk:', data); // <-- ADD THIS LINE
 
               // --- Handle Different Part Types ---
-              if (data.text || data.inlineData || data.executableCode || data.codeExecutionResult) {
+              if (data.text || data.inlineData || data.executableCode || data.codeExecutionResult || data.thought) { // Added data.thought here
                    setConvos(prevConvos => prevConvos.map(c => {
                       if (c.id !== finalConvoId) return c;
                       const updatedMessages = c.messages.map(m => {
                           if (m.id === tempModelMessageId) {
                               let currentParts = m.parts ? [...m.parts] : [];
+                              let newPart = {}; // Create a new part object
 
                               // Handle text - append or add new
                               if (data.text) {
                                   const lastPartIndex = currentParts.length - 1;
-                                  if (lastPartIndex >= 0 && typeof currentParts[lastPartIndex] === 'object' && 'text' in currentParts[lastPartIndex]) {
-                                      currentParts[lastPartIndex] = { ...currentParts[lastPartIndex], text: currentParts[lastPartIndex].text + data.text };
+                                  if (lastPartIndex >= 0 && 
+                                      typeof currentParts[lastPartIndex] === 'object' && 
+                                      'text' in currentParts[lastPartIndex] &&
+                                      // Ensure thought status matches for appending
+                                      (currentParts[lastPartIndex].thought === true) === (data.thought === true)) { 
+                                      currentParts[lastPartIndex] = { 
+                                          ...currentParts[lastPartIndex], 
+                                          text: currentParts[lastPartIndex].text + data.text 
+                                          // 'thought' status is preserved from currentParts[lastPartIndex]
+                                      };
+                                      newPart = null; // Indicate no new part needs to be pushed
                                   } else {
-                                      currentParts.push({ text: data.text });
+                                      newPart.text = data.text;
                                   }
                               }
                               // Handle images (inlineData) - add new
-                              else if (data.inlineData) {
-                                  currentParts.push({ inlineData: data.inlineData });
+                              if (data.inlineData) { 
+                                  if (newPart === null) newPart = {}; // Reinitialize if it was nulled by text append
+                                  newPart.inlineData = data.inlineData;
                               }
                               // Handle executable code - add new
-                              else if (data.executableCode) {
-                                  currentParts.push({ executableCode: data.executableCode });
+                              if (data.executableCode) { 
+                                  if (newPart === null) newPart = {}; // Reinitialize
+                                  newPart.executableCode = data.executableCode;
                               }
                               // Handle code result - add new
-                              else if (data.codeExecutionResult) {
-                                  currentParts.push({ codeExecutionResult: data.codeExecutionResult });
+                              if (data.codeExecutionResult) { 
+                                  if (newPart === null) newPart = {}; // Reinitialize
+                                  newPart.codeExecutionResult = data.codeExecutionResult;
                               }
+                              
+                              // Preserve the thought property ONLY if newPart is being created
+                              if (newPart && data.thought) {
+                                  newPart.thought = true; 
+                              }
+
+                              if (newPart && Object.keys(newPart).length > 0) {
+                                  currentParts.push(newPart);
+                              }
+                              
                               return { ...m, parts: currentParts };
                           }
                           return m;
