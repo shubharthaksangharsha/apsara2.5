@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { MessageSquare, X, Send, Mic, MicOff, Video, VideoOff, ScreenShare, ScreenShareOff, ClipboardCopy, Settings as SettingsIcon, Paperclip, Info, MapPin, Code2, Terminal, CalendarDays, Users, Sun, ChevronDown, ChevronUp, Volume2, RefreshCw, PlusCircle, Calendar as CalendarIcon, Clock, AudioLines, Save, FolderOpen, Play } from 'lucide-react';
+import ModelSelector from './ModelSelector';
 import VideoStreamDisplay from './VideoStreamDisplay';
 import ScreenShareDisplay from './ScreenShareDisplay';
 import MapDisplay from './MapDisplay';
@@ -180,6 +181,8 @@ export default function LivePopup({
   slidingWindowTokens, // <-- NEW PROP for token limit
   activeTab, // NEW: prop for active tab from useLiveSession
   setActiveTab, // NEW: function to set active tab in useLiveSession
+  selectedModel, // NEW: prop for selected model
+  setSelectedModel, // NEW: function to set selected model
   
   // Handlers from App.jsx
   onVoiceChange, 
@@ -213,6 +216,7 @@ export default function LivePopup({
   const [tempSystemInstruction, setTempSystemInstruction] = useState(liveSystemInstruction);
   const [copiedContent, setCopiedContent] = useState(null);
   const [showCameraSelector, setShowCameraSelector] = useState(false);
+  const [showModelSelector, setShowModelSelector] = useState(false);
   const [isSystemInstructionExpanded, setIsSystemInstructionExpanded] = useState(false);
   const prevCalendarEventsLastUpdatedRef = useRef(0); // Keep track of the previous update value
 
@@ -220,7 +224,7 @@ export default function LivePopup({
   const [showSavedSessions, setShowSavedSessions] = useState(false);
   const [sessionTitle, setSessionTitle] = useState("");
   const [showSaveDialog, setShowSaveDialog] = useState(false);
-
+  
   // --- NEW: State for Create Event Modal & Form ---
   const [isCreateEventModalOpen, setIsCreateEventModalOpen] = useState(false);
   const [newEventForm, setNewEventForm] = useState({
@@ -614,7 +618,7 @@ export default function LivePopup({
                           <div className="flex items-center justify-between px-2 py-1 sm:px-3 sm:py-1.5 bg-gray-700/80 text-indigo-200 font-mono">
                             <span>{item.data.language?.toUpperCase() || 'CODE'}</span>
                             <button className="flex items-center gap-1 text-indigo-300 hover:text-white transition text-[10px] sm:text-xs" onClick={() => handleCopyContent(item.data.code, item.id)} title="Copy code">
-                              <ClipboardCopy className="w-3 h-3 sm:w-3.5 sm:h-3.5" /> {copiedContent === item.id ? 'Copied!' : 'Copy'}
+                              <ClipboardCopy className="w-3 h-3" /> {copiedContent === item.id ? 'Copied!' : 'Copy'}
                           </button>
                           </div>
                           <pre className="p-2 sm:p-3.5 overflow-x-auto text-indigo-100 font-mono bg-gray-800/80 custom-scrollbar text-[10px] sm:text-xs"><code>{item.data.code}</code></pre>
@@ -709,35 +713,54 @@ export default function LivePopup({
                 <div className="p-2 sm:p-4 space-y-3">
                   <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-3 sm:mb-4 gap-2">
                     <h2 className="text-lg sm:text-xl font-semibold text-gray-800 dark:text-gray-100 flex items-center gap-1.5 sm:gap-2">
-                        <CalendarIcon size={20} sm:size={24} className="text-indigo-500 dark:text-indigo-400"/>
-                        Calendar Events
+                      <CalendarIcon size={20} sm:size={24} className="text-indigo-500 dark:text-indigo-400"/>
+                      Calendar Events
                     </h2>
+                    {showModelSelector && (
+                      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                        <div className="bg-white rounded-lg p-4 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+                          <div className="flex justify-between items-center mb-4">
+                            <h3 className="text-lg font-semibold">Select AI Model</h3>
+                            <button onClick={() => setShowModelSelector(false)} className="p-1 rounded-full hover:bg-gray-200">
+                              <X size={20} />
+                            </button>
+                          </div>
+                          <ModelSelector 
+                            selectedModel={selectedModel} 
+                            onSelectModel={(model) => {
+                              setSelectedModel(model);
+                              setShowModelSelector(false);
+                            }} 
+                          />
+                        </div>
+                      </div>
+                    )}
                     <div className="flex gap-1.5 sm:gap-2 w-full sm:w-auto">
-                        <button
-                          onClick={() => setIsCreateEventModalOpen(true)}
-                          disabled={connectionStatus !== 'connected'}
-                          className="flex-1 sm:flex-auto items-center justify-center gap-1 sm:gap-1.5 px-2.5 py-1 sm:px-3 sm:py-1.5 bg-green-500 text-white text-[11px] sm:text-xs font-medium rounded-md hover:bg-green-600 transition-colors disabled:opacity-50 flex"
-                        >
-                          <PlusCircle size={12} sm:size={14} />
-                          Create Event
-                        </button>
-                        <button
-                          onClick={handleRefreshCalendar}
-                          disabled={connectionStatus !== 'connected'}
-                          className="flex-1 sm:flex-auto items-center justify-center gap-1 sm:gap-1.5 px-2.5 py-1 sm:px-3 sm:py-1.5 bg-indigo-500 text-white text-[11px] sm:text-xs font-medium rounded-md hover:bg-indigo-600 transition-colors disabled:opacity-50 flex"
-                        >
-                          <RefreshCw size={12} sm:size={14} />
-                          Refresh
-                        </button>
+                      <button
+                        onClick={() => setIsCreateEventModalOpen(true)}
+                        disabled={connectionStatus !== 'connected'}
+                        className="flex-1 sm:flex-auto items-center justify-center gap-1 sm:gap-1.5 px-2.5 py-1 sm:px-3 sm:py-1.5 bg-green-500 text-white text-[11px] sm:text-xs font-medium rounded-md hover:bg-green-600 transition-colors disabled:opacity-50 flex"
+                      >
+                        <PlusCircle size={12} sm:size={14} />
+                        Create Event
+                      </button>
+                      <button
+                        onClick={handleRefreshCalendar}
+                        disabled={connectionStatus !== 'connected'}
+                        className="flex-1 sm:flex-auto items-center justify-center gap-1 sm:gap-1.5 px-2.5 py-1 sm:px-3 sm:py-1.5 bg-indigo-500 text-white text-[11px] sm:text-xs font-medium rounded-md hover:bg-indigo-600 transition-colors disabled:opacity-50 flex"
+                      >
+                        <RefreshCw size={12} sm:size={14} />
+                        Refresh
+                      </button>
                     </div>
                   </div>
 
                   {connectionStatus !== 'connected' && (
-                     <div className="text-center text-gray-500 dark:text-gray-400 p-4 sm:p-6 bg-white dark:bg-gray-800 rounded-lg shadow">
-                        <CalendarDays size={32} sm:size={40} className="mb-2 sm:mb-3 text-gray-400 dark:text-gray-500 mx-auto"/>
-                        <p className="font-semibold mb-1 text-sm sm:text-base">Calendar Disconnected</p>
-                        <p className="text-xs sm:text-sm">Start a session to load and manage calendar events.</p>
-                      </div>
+                    <div className="text-center text-gray-500 dark:text-gray-400 p-4 sm:p-6 bg-white dark:bg-gray-800 rounded-lg shadow">
+                      <CalendarDays size={32} sm:size={40} className="mb-2 sm:mb-3 text-gray-400 dark:text-gray-500 mx-auto"/>
+                      <p className="font-semibold mb-1 text-sm sm:text-base">Calendar Disconnected</p>
+                      <p className="text-xs sm:text-sm">Start a session to load and manage calendar events.</p>
+                    </div>
                   )}
 
                   {connectionStatus === 'connected' && calendarEvents.length > 0 && (
@@ -750,7 +773,7 @@ export default function LivePopup({
                           </p>
                           {event.location && <p className="text-[10px] sm:text-xs text-gray-500 dark:text-gray-400">Location: {event.location}</p>}
                           {event.description && <p className="text-[10px] sm:text-xs text-gray-600 dark:text-gray-300 mt-1 whitespace-pre-wrap">{event.description}</p>}
-                           {event.link && <a href={event.link} target="_blank" rel="noopener noreferrer" className="text-[10px] sm:text-xs text-blue-500 hover:underline dark:text-blue-400 mt-1 block">View on Google Calendar</a>}
+                          {event.link && <a href={event.link} target="_blank" rel="noopener noreferrer" className="text-[10px] sm:text-xs text-blue-500 hover:underline dark:text-blue-400 mt-1 block">View on Google Calendar</a>}
                         </li>
                       ))}
                     </ul>
@@ -830,19 +853,77 @@ export default function LivePopup({
             {audioError && (
               <div className="p-1.5 mt-2 bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-300 text-xs rounded-md text-center">
                 Audio Error: {audioError}
-            </div>
-          )}
-        </div>
+              </div>
+            )}
+          </div>
 
-        {/* Right Settings Panel - Collapsible on mobile */}
-        <div className={`w-full md:w-72 bg-gray-50 dark:bg-gray-800/50 p-2 sm:p-4 rounded-lg border border-gray-200 dark:border-gray-700 flex-shrink-0 flex flex-col text-xs mt-1.5 md:mt-0 max-h-[35vh] md:max-h-none overflow-y-auto md:overflow-visible`}>
-          <h3 className="text-sm md:text-base font-semibold text-center text-gray-700 dark:text-gray-200 mb-2 border-b dark:border-gray-600 pb-2 flex-shrink-0">
-            {isSessionActive ? "Session Active" : "Live Session Settings"}
-          </h3>
-          
-          {!isSessionActive ? (
-            <div className="space-y-2 sm:space-y-3 overflow-y-auto custom-scrollbar pr-1 flex-grow">
-              <div>
+          {/* Right Settings Panel - Collapsible on mobile */}
+          <div className={`w-full md:w-72 bg-gray-50 dark:bg-gray-800/50 p-2 sm:p-4 rounded-lg border border-gray-200 dark:border-gray-700 flex-shrink-0 flex flex-col text-xs mt-1.5 md:mt-0 max-h-[35vh] md:max-h-none overflow-y-auto md:overflow-visible`}>
+            <h3 className="text-sm md:text-base font-semibold text-center text-gray-700 dark:text-gray-200 mb-2 border-b dark:border-gray-600 pb-2 flex-shrink-0">
+              {isSessionActive ? "Session Active" : "Live Session Settings"}
+            </h3>
+            
+            {!isSessionActive ? (
+              <div className="space-y-2 sm:space-y-3 overflow-y-auto custom-scrollbar pr-1 flex-grow">
+                {/* Model Selection - Direct Dropdown */}
+                <div>
+                  <ModelSelector 
+                    selectedModel={selectedModel}
+                    onSelectModel={(model) => {
+                      if (typeof setSelectedModel === 'function') {
+                        setSelectedModel(model);
+                        // Reset modality to Audio if switching from Flash to other models while Text Only is selected
+                        if (model !== 'gemini-2.0-flash-live-001' && liveModality === 'TEXT') {
+                          onModalityChange('AUDIO');
+                        }
+                      } else {
+                        console.error('setSelectedModel is not a function');
+                      }
+                    }}
+                    disabled={isSessionActive}
+                  />
+                  
+                  {/* Model capabilities indicator */}
+                  <div className="mt-2 text-xs text-gray-500 dark:text-gray-400 p-2 bg-gray-50/70 dark:bg-gray-800/40 rounded-md border border-gray-200 dark:border-gray-700">
+                    <div className="font-medium mb-1.5 text-gray-600 dark:text-gray-300">Available Tools:</div>
+                    <div className="flex flex-wrap gap-1.5 mt-1">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900/50 text-green-800 dark:text-green-300">
+                        <span className="mr-1">✓</span> Search
+                      </span>
+                      
+                      {selectedModel !== 'gemini-2.5-flash-exp-native-audio-thinking-dialog' && (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900/50 text-green-800 dark:text-green-300">
+                          <span className="mr-1">✓</span> Function Calling
+                        </span>
+                      )}
+                      
+                      {selectedModel === 'gemini-2.0-flash-live-001' && (
+                        <>
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900/50 text-green-800 dark:text-green-300">
+                            <span className="mr-1">✓</span> Code Execution
+                          </span>
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900/50 text-green-800 dark:text-green-300">
+                            <span className="mr-1">✓</span> URL Context
+                          </span>
+                        </>
+                      )}
+                      
+                      {selectedModel === 'gemini-2.5-flash-exp-native-audio-thinking-dialog' && (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 dark:bg-blue-900/50 text-blue-800 dark:text-blue-300">
+                          <span className="mr-1">★</span> Thinking Capabilities
+                        </span>
+                      )}
+                      
+                      {selectedModel !== 'gemini-2.0-flash-live-001' && (
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 dark:bg-purple-900/50 text-purple-800 dark:text-purple-300">
+                          <span className="mr-1">★</span> Enhanced Audio Quality
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                
+                <div>
                   <div className="flex justify-between items-center mb-1">
                     <label htmlFor="liveSystemInstruction" className="block text-xs font-medium text-gray-600 dark:text-gray-400">System Instruction</label>
                     <button onClick={() => setIsSystemInstructionExpanded(!isSystemInstructionExpanded)} className="text-indigo-600 dark:text-indigo-400 hover:underline text-xs p-0.5 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500 flex items-center gap-1">
@@ -850,43 +931,51 @@ export default function LivePopup({
                     </button>
                   </div>
                   {isSystemInstructionExpanded ? (
-                <textarea
+                    <textarea
                       id="liveSystemInstruction" rows={window.innerWidth < 768 ? 3 : 5} // Shorter on mobile
                       className="w-full p-2 border rounded-md text-xs bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 focus:ring-1 focus:ring-indigo-400 custom-scrollbar"
                       value={tempSystemInstruction} onChange={(e) => setTempSystemInstruction(e.target.value)} placeholder="e.g., Respond concisely."
-                />
+                    />
                   ) : (
                     <div className="p-2 border rounded-md text-xs bg-gray-100 dark:bg-gray-700/50 border-gray-300 dark:border-gray-600 text-gray-500 dark:text-gray-400 truncate cursor-pointer hover:bg-gray-200 dark:hover:bg-gray-700" onClick={() => setIsSystemInstructionExpanded(true)}>
                       {tempSystemInstruction || "Default instructions"}
-              </div>
+                    </div>
                   )}
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Response Mode</label>
                   <div className="space-y-1">
-                    {[
-                      { value: 'AUDIO', label: 'Audio Only' },
-                      { value: 'AUDIO_TEXT', label: 'Audio + Text' },
-                      { value: 'TEXT', label: 'Text Only' },
-                    ].map(opt => (
-                      <label key={opt.value} className="flex items-center space-x-2 cursor-pointer text-xs p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded sm:p-1.5">
-                        <input type="radio" name="liveModality" value={opt.value} checked={liveModality === opt.value} onChange={() => onModalityChange(opt.value)} className="text-indigo-600 focus:ring-indigo-500 h-3 w-3 sm:h-3.5 sm:w-3.5"/>
-                        <span>{opt.label}</span>
-                  </label>
-                    ))}
+                    {
+                      // Only the Flash model supports Text Only mode
+                      // Other models can only use Audio
+                      (selectedModel === 'gemini-2.0-flash-live-001' ?
+                        [
+                          { value: 'AUDIO', label: 'Audio Only' },
+                          { value: 'TEXT', label: 'Text Only' },
+                        ] :
+                        [
+                          { value: 'AUDIO', label: 'Audio Only' },
+                        ]
+                      ).map(opt => (
+                        <label key={opt.value} className="flex items-center space-x-2 cursor-pointer text-xs p-1 hover:bg-gray-100 dark:hover:bg-gray-700 rounded sm:p-1.5">
+                          <input type="radio" name="liveModality" value={opt.value} checked={liveModality === opt.value} onChange={() => onModalityChange(opt.value)} className="text-indigo-600 focus:ring-indigo-500 h-3 w-3 sm:h-3.5 sm:w-3.5"/>
+                          <span>{opt.label}</span>
+                        </label>
+                      ))}
+                    
                   </div>
                 </div>
                 {(liveModality === 'AUDIO' || liveModality === 'AUDIO_TEXT') && (
                   <div>
                     <label htmlFor="liveVoiceSelect" className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">AI Voice</label>
-                  <select
+                    <select
                       id="liveVoiceSelect" value={currentVoice} onChange={(e) => onVoiceChange(e.target.value)}
                       className="w-full p-1.5 sm:p-2 border rounded-md text-xs bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 focus:ring-1 focus:ring-indigo-400"
-                  >
-                    {voices.length > 0 ? voices.map(v => (<option key={v} value={v}>{v}</option>)) : <option disabled>Loading voices...</option>}
-                  </select>
-                </div>
-              )}
+                    >
+                      {voices.length > 0 ? voices.map(v => (<option key={v} value={v}>{v}</option>)) : <option disabled>Loading voices...</option>}
+                    </select>
+                  </div>
+                )}
                 <div>
                   <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Advanced Settings</label>
                   <div className="space-y-2 p-2 border rounded-md text-xs bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600"> 
@@ -915,7 +1004,7 @@ export default function LivePopup({
                 
                 {/* NEW: Load Session Button */}
                 <div className="pt-2 flex flex-col gap-2">
-                <button
+                  <button
                     onClick={() => setShowSavedSessions(true)}
                     className="w-full px-3 py-1.5 bg-blue-500 text-white text-xs font-medium rounded-lg shadow hover:bg-blue-600 transition-colors flex items-center justify-center gap-1.5"
                   >
@@ -924,11 +1013,12 @@ export default function LivePopup({
                   
                   <button
                     onClick={handleStartSession} disabled={connectionStatus === 'connecting'}
-                    className="w-full px-3 py-2 sm:px-4 sm:py-2.5 bg-green-500 text-white text-sm font-semibold rounded-lg shadow hover:bg-green-600 transition-colors disabled:opacity-60 flex items-center justify-center gap-1.5">
-                  {connectionStatus === 'connecting' ? 'Connecting...' : 'Start Session'}
-                </button>
+                    className="w-full px-3 py-2 sm:px-4 sm:py-2.5 bg-green-500 text-white text-sm font-semibold rounded-lg shadow hover:bg-green-600 transition-colors disabled:opacity-60 flex items-center justify-center gap-1.5"
+                  >
+                    {connectionStatus === 'connecting' ? 'Connecting...' : 'Start Session'}
+                  </button>
+                </div>
               </div>
-            </div>
             ) : (
               <div className="flex flex-col flex-grow">
                 {/* Status info with session time remaining */}
@@ -982,15 +1072,15 @@ export default function LivePopup({
                         <div className="w-0.5 sm:w-1 h-3 sm:h-3.5 bg-blue-500 rounded-full animate-pulse-audio delay-150"></div>
                         <div className="w-0.5 sm:w-1 h-2 sm:h-2.5 bg-blue-500 rounded-full animate-pulse-audio delay-300"></div>
                         <span className="text-[9px] sm:text-[10px] text-gray-600 dark:text-gray-300 ml-0.5 sm:ml-1">Speaking</span>
-            </div>
-          )}
+                      </div>
+                    )}
                   </div>
                 </div>
                 
                 <div className="mt-auto flex-shrink-0"> 
                   {/* Add Save Session button */}
                   <div className="flex flex-col gap-2">
-              <button
+                    <button
                       onClick={handleSaveCurrentSession}
                       disabled={!currentSessionHandle}
                       className="w-full px-3 py-1.5 bg-blue-500 text-white text-xs font-medium rounded-lg shadow hover:bg-blue-600 transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5"
@@ -1001,7 +1091,7 @@ export default function LivePopup({
                     {/* End Session Button */}
                     <button onClick={onEndSession} className="w-full px-3 py-1.5 sm:py-2.5 bg-red-500 text-white text-xs font-semibold rounded-lg shadow hover:bg-red-600 transition-colors">
                       End Session
-              </button>
+                    </button>
                   </div>
                 </div>
               </div>
@@ -1024,12 +1114,12 @@ export default function LivePopup({
                 <ul className="space-y-1.5 sm:space-y-2">
                   {videoDevices.map(device => (
                     <li key={device.deviceId}>
-              <button
+                      <button
                         onClick={() => handleCameraSelect(device.deviceId)}
                         className="w-full text-left px-3 py-1.5 sm:px-4 sm:py-2 rounded-md text-sm text-gray-700 dark:text-gray-300 hover:bg-indigo-100 dark:hover:bg-indigo-700/50 transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-400"
                       >
                         {device.label || `Camera ${videoDevices.indexOf(device) + 1}`}
-              </button>
+                      </button>
                     </li>
                   ))}
                 </ul>
@@ -1039,14 +1129,16 @@ export default function LivePopup({
               <button
                 onClick={() => setShowCameraSelector(false)}
                 className="mt-4 sm:mt-6 w-full px-3 py-1.5 sm:px-4 sm:py-2 rounded-md text-sm text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
-                >
+              >
                 Cancel
               </button>
-              </div>
             </div>
-          )}
+          </div>
+        )}
 
-        {/* NEW: Save Session Dialog */}
+        {/* Model selection is now directly integrated in the settings panel */}
+        
+        {/* Save Session dialog */}
         {showSaveDialog && (
           <div 
             className="absolute inset-0 z-60 flex justify-center items-center bg-black/30 backdrop-blur-sm p-4"

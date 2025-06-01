@@ -1,5 +1,5 @@
 import React, { Fragment } from 'react';
-import { Menu, Sun, Moon, MessageSquare, Settings, Check, ChevronsUpDown } from 'lucide-react';
+import { Menu, Sun, Moon, MessageSquare, Settings, Check, ChevronsUpDown, LogOut, Mail } from 'lucide-react';
 import { Listbox, Transition } from '@headlessui/react';
 
 export default function Header({ 
@@ -10,7 +10,10 @@ export default function Header({
     setDarkMode, 
     setLiveOpen, 
     setSettingsOpen, 
-    setIsSidebarOpen 
+    setIsSidebarOpen,
+    isAuthenticated,
+    userProfile,
+    onSignOut
 }) {
   const selectedModelObject = models.find(m => m.id === currentModel);
 
@@ -88,6 +91,14 @@ export default function Header({
         
         {/* Header Buttons - Improved spacing for mobile */}
         <div className="flex items-center gap-1 sm:space-x-3">
+          {/* Auth Status Indicator - Only visible when authenticated */}
+          {isAuthenticated && (
+            <div className="hidden md:flex items-center mr-2 bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-300 rounded-full px-2 py-1 text-xs">
+              <Mail className="h-3 w-3 mr-1" />
+              <span className="truncate max-w-[100px]">{userProfile?.name?.split(' ')[0] || 'User'}</span>
+            </div>
+          )}
+          
           {/* Theme Toggle */}
           <button
             onClick={() => setDarkMode(!darkMode)}
@@ -114,6 +125,17 @@ export default function Header({
           >
             <Settings className="h-4 w-4 sm:h-5 sm:w-5 transition-transform duration-150 ease-in-out group-hover:scale-110 group-hover:rotate-45" />
           </button>
+          
+          {/* Sign Out Button - Only visible when authenticated */}
+          {isAuthenticated && (
+            <button
+              onClick={onSignOut}
+              className="p-1.5 sm:p-2 rounded-full text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-red-600 dark:hover:text-red-400 transition-all duration-150 ease-in-out group"
+              title="Sign Out"
+            >
+              <LogOut className="h-4 w-4 sm:h-5 sm:w-5 transition-transform duration-150 ease-in-out group-hover:scale-110" />
+            </button>
+          )}
         </div>
       </div>
     </header>

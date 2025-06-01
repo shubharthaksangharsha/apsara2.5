@@ -18,6 +18,7 @@ export function useLiveSession({ currentVoice, transcriptionEnabled = true, slid
   const [liveConnectionStatus, setLiveConnectionStatus] = useState('disconnected');
   const [liveModality, setLiveModality] = useState('AUDIO');
   const [liveSystemInstruction, setLiveSystemInstruction] = useState('You are a helpful assistant.');
+  const [selectedModel, setSelectedModel] = useState('gemini-2.0-flash-live-001'); // Default to original model
   const [isModelSpeaking, setIsModelSpeaking] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [isStreamingVideo, setIsStreamingVideo] = useState(false);
@@ -800,6 +801,9 @@ export function useLiveSession({ currentVoice, transcriptionEnabled = true, slid
     const wsUrl = new URL("/live", baseUrl);
     wsUrl.protocol = baseUrl.startsWith('https') ? 'wss:' : 'ws:';
 
+    // Add model as query parameter
+    wsUrl.searchParams.append('model', selectedModel);
+
     // Add modality as query parameter
     wsUrl.searchParams.append('modalities', liveModality);
 
@@ -1194,7 +1198,7 @@ export function useLiveSession({ currentVoice, transcriptionEnabled = true, slid
       setCalendarEvents([]); // <-- NEW: Clear calendar events on close
       setCalendarEventsLastUpdated(0); // Reset
     };
-  }, [liveModality, currentVoice, liveSystemInstruction, addLiveMessage, updateLiveMessage, addOrUpdateLiveModelMessagePart, initAudioContexts, playAudioQueue, closeAudioContexts, isRecording, stopRecordingInternal, transcriptionEnabled, slidingWindowEnabled, slidingWindowTokens, selectedVideoDeviceId]);
+  }, [liveModality, currentVoice, liveSystemInstruction, addLiveMessage, updateLiveMessage, addOrUpdateLiveModelMessagePart, initAudioContexts, playAudioQueue, closeAudioContexts, isRecording, stopRecordingInternal, transcriptionEnabled, slidingWindowEnabled, slidingWindowTokens, selectedVideoDeviceId, selectedModel]);
 
   // --- Public Handlers ---
   const startLiveSession = useCallback((mainChatContext = null) => {
@@ -1218,7 +1222,7 @@ export function useLiveSession({ currentVoice, transcriptionEnabled = true, slid
     
     console.log(`[Live WS] Starting a new live session. Modality: ${liveModality}`);
     setupLiveConnection(mainChatContext);
-  }, [liveConnectionStatus, liveModality, setupLiveConnection, initAudioContexts]);
+  }, [liveConnectionStatus, liveModality, setupLiveConnection, initAudioContexts, selectedModel]);
 
   const endLiveSession = useCallback(() => {
     setMapDisplayData(null); // Clear map when ending
@@ -1365,23 +1369,27 @@ export function useLiveSession({ currentVoice, transcriptionEnabled = true, slid
 
   return {
     // State
-    liveMessages, liveConnectionStatus, liveModality, isModelSpeaking, isRecording, isStreamingVideo, audioError, sessionTimeLeft,
-    liveSystemInstruction, // Keep original name for App.jsx prop clarity if preferred
+    liveMessages, liveConnectionStatus, liveModality, isModelSpeaking, isRecording, isStreamingVideo, isStreamingScreen,
     mediaStream: videoStreamRef.current,
-    isStreamingScreen, // <-- New state
-    screenStream: screenStreamRef.current, // <-- New stream for screen share display
-    videoDevices, // <-- New: expose video devices
-    selectedVideoDeviceId, // <-- New: expose selected video device ID
-    mapDisplayData, // <-- Expose map data state
-    weatherUIData, // <-- NEW: Expose weather UI data
-    calendarEvents, // <-- NEW: Expose calendar events
-    calendarEventsLastUpdated, // Expose this new state
-    currentSessionHandle: sessionResumeHandleRef.current, // Expose the current session handle
-    activeTab, // NEW: Expose the active tab state
+    screenStream: screenStreamRef.current,
+    audioError,
+    sessionTimeLeft,
+    liveSystemInstruction,
+    selectedModel,
+    videoDevices,
+    selectedVideoDeviceId,
+    mapDisplayData,
+    weatherUIData,
+    calendarEvents,
+    calendarEventsLastUpdated,
+    currentSessionHandle: sessionResumeHandleRef.current,
+    activeTab,
+    setActiveTab,
 
     // Setters/Handlers
     setLiveModality,
     setLiveSystemInstruction, // Keep original name
+    setSelectedModel, // <-- Add setter for selected model
     setSelectedVideoDeviceId, // <-- New: expose setter for selected video device
     getVideoInputDevices, // <-- New: expose function to get video devices
     setMapDisplayData, // <-- Expose map data setter if needed externally (maybe not)

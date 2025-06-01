@@ -24,7 +24,16 @@ import { dirname, join } from 'path';
 import { parse } from 'url';
 import path from 'path';
 import cors from 'cors';
-import { customToolDeclarations, toolHandlers, customToolNames } from './tools.js';
+import { customToolDeclarations, toolHandlers, customToolNames, getToolDeclarations } from './tools.js';
+import cookieParser from 'cookie-parser';
+import { 
+  generateAuthUrl, 
+  getTokensFromCode,
+  getUserProfile, 
+  verifyTokens, 
+  refreshAccessToken, 
+  createOAuth2Client 
+} from './auth-utils.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -43,11 +52,261 @@ const port = process.env.PORT || 9000;
 // now you can do:
 app.use(express.static(join(__dirname, 'public')));
 
-// allow CORS from any origin (for dev)
-app.use(cors());
+// allow CORS from any origin (for dev) with credentials support
+app.use(cors({
+  origin: function(origin, callback) {
+    // Allow requests with no origin (like mobile apps, curl, Postman)
+    if(!origin) return callback(null, true);
+    
+    // Allow frontend origins during development
+    const allowedOrigins = [
+      'http://localhost:3000',
+      'http://localhost:5173'
+    ];
+    
+    if(allowedOrigins.indexOf(origin) === -1){
+      return callback(new Error('The CORS policy for this site does not allow access from the specified Origin.'), false);
+    }
+    
+    return callback(null, true);
+  },
+  credentials: true
+}));
 
 // Body parser (allow large base64 images)
 app.use(express.json({ limit: '50mb' }));
+
+// Cookie parser middleware for auth
+app.use(cookieParser());
+
+// Authentication state
+const AUTH_COOKIE_NAME = 'apsara_auth';
+const AUTH_STATE_COOKIE = 'apsara_auth_state';
+const COOKIE_OPTIONS = {
+  httpOnly: true,
+  secure: false, // Set to false for local development with HTTP
+  sameSite: 'lax', // Use lax to allow redirect-based cookies
+  path: '/',
+  maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+};
+
+// Special cookie options for the state cookie (shorter lifespan, less restrictive)
+const STATE_COOKIE_OPTIONS = {
+  httpOnly: true, 
+  secure: false, // Must be false for local development with HTTP
+  sameSite: 'lax', // More permissive for redirects
+  path: '/',
+  maxAge: 10 * 60 * 1000 // 10 minutes
+};
+
+// Auth middleware to extract and verify tokens
+const authMiddleware = async (req, res, next) => {
+  const authCookie = req.cookies[AUTH_COOKIE_NAME];
+  
+  if (!authCookie) {
+    req.isAuthenticated = false;
+    req.userTokens = null;
+    req.userProfile = null;
+    return next();
+  }
+  
+  try {
+    const tokens = JSON.parse(authCookie);
+    
+    // Check if access token is expired
+    if (tokens.expiry_date && Date.now() > tokens.expiry_date) {
+      // Try to refresh the token
+      if (tokens.refresh_token) {
+        const newTokens = await refreshAccessToken(tokens);
+        res.cookie(AUTH_COOKIE_NAME, JSON.stringify(newTokens), COOKIE_OPTIONS);
+        req.userTokens = newTokens;
+      } else {
+        req.isAuthenticated = false;
+        req.userTokens = null;
+        req.userProfile = null;
+        return next();
+      }
+    } else {
+      req.userTokens = tokens;
+    }
+    
+    // Get user profile if we have valid tokens
+    if (req.userTokens) {
+      const isValid = await verifyTokens(req.userTokens);
+      if (isValid) {
+        req.isAuthenticated = true;
+        try {
+          req.userProfile = await getUserProfile(req.userTokens);
+        } catch (err) {
+          console.error('Error getting user profile:', err);
+          req.userProfile = null;
+        }
+      } else {
+        req.isAuthenticated = false;
+        req.userProfile = null;
+      }
+    }
+  } catch (error) {
+    console.error('Auth middleware error:', error);
+    req.isAuthenticated = false;
+    req.userTokens = null;
+    req.userProfile = null;
+  }
+  
+  next();
+};
+
+// Apply auth middleware to all requests
+app.use(authMiddleware);
+
+// Auth API Routes
+
+// Check authentication status
+app.get('/api/auth/status', (req, res) => {
+  // Only log auth errors or initial auth successes, not every status check
+  // console.log('Auth status check - isAuthenticated:', req.isAuthenticated);
+  // console.log('Auth status check - userProfile:', req.userProfile ? 'exists' : 'null');
+  // console.log('Auth cookies:', req.cookies);
+  
+  if (req.isAuthenticated && req.userProfile) {
+    return res.json({
+      isAuthenticated: true,
+      profile: {
+        id: req.userProfile.id,
+        name: req.userProfile.name,
+        email: req.userProfile.email,
+        picture: req.userProfile.picture
+      },
+      // Also include user for backward compatibility
+      user: {
+        id: req.userProfile.id,
+        name: req.userProfile.name,
+        email: req.userProfile.email,
+        picture: req.userProfile.picture
+      }
+    });
+  }
+  
+  res.json({
+    isAuthenticated: false,
+    profile: null,
+    user: null
+  });
+});
+
+// Get Google OAuth URL
+app.get('/api/auth/google/url', (req, res) => {
+  try {
+    const { authUrl, state } = generateAuthUrl();
+    
+    // Store state in a cookie for verification during callback
+    res.cookie(AUTH_STATE_COOKIE, state, STATE_COOKIE_OPTIONS);
+    
+    res.json({ url: authUrl });
+  } catch (error) {
+    console.error('Error generating auth URL:', error);
+    res.status(500).json({ error: 'Failed to generate authentication URL' });
+  }
+});
+
+// Handle Google OAuth callback (POST version for programmatic API calls)
+app.post('/api/auth/google/callback', async (req, res) => {
+  const { code, state } = req.body;
+  const storedState = req.cookies[AUTH_STATE_COOKIE];
+  
+  // Verify state to prevent CSRF attacks
+  if (!state || !storedState || state !== storedState) {
+    return res.status(400).json({ error: 'Invalid state parameter' });
+  }
+  
+  try {
+    // Exchange code for tokens
+    const tokens = await getTokensFromCode(code);
+    
+    // Get user profile
+    const userProfile = await getUserProfile(tokens);
+    
+    // Store tokens in a cookie
+    res.cookie(AUTH_COOKIE_NAME, JSON.stringify(tokens), COOKIE_OPTIONS);
+    
+    // Clear state cookie
+    res.clearCookie(AUTH_STATE_COOKIE);
+    
+    res.json({
+      success: true,
+      user: userProfile
+    });
+  } catch (error) {
+    console.error('OAuth callback error:', error);
+    res.status(500).json({ error: 'Authentication failed' });
+  }
+});
+
+// Handle Google OAuth callback (GET version for redirect from Google)
+app.get('/api/auth/google/callback', async (req, res) => {
+  const { code, state } = req.query;
+  const storedState = req.cookies[AUTH_STATE_COOKIE];
+  
+  // Debug logging
+  console.log('Received state:', state);
+  console.log('Stored state:', storedState);
+  console.log('All cookies:', req.cookies);
+  
+  // Verify state to prevent CSRF attacks
+  // In development, we'll bypass state verification to make authentication easier
+  const isDevMode = process.env.NODE_ENV !== 'production' || !process.env.NODE_ENV;
+  
+  if (!isDevMode && (!state || !storedState || state !== storedState)) {
+    return res.status(400).send('Invalid state parameter. Authentication failed. Check console logs for details.');
+  } else if (isDevMode) {
+    console.log('Development mode: Bypassing state verification for easier testing');
+  }
+  
+  // Clear the state cookie regardless of validation (important for retry attempts)
+  res.clearCookie(AUTH_STATE_COOKIE);
+  
+  try {
+    console.log('Exchanging code for tokens...');
+    // Exchange the authorization code for tokens
+    const tokens = await getTokensFromCode(code);
+    console.log('Tokens received:', tokens ? 'success' : 'failed');
+    
+    // Get user profile for logging purposes
+    try {
+      const userProfile = await getUserProfile(tokens);
+      console.log('User profile fetched:', userProfile ? userProfile.email : 'No profile');
+    } catch (profileError) {
+      console.error('Error fetching user profile:', profileError);
+      // Continue anyway - profile fetch is not critical
+    }
+    
+    // Store tokens in an HTTP-only cookie
+    console.log('Setting auth cookie...');
+    res.cookie(AUTH_COOKIE_NAME, JSON.stringify(tokens), COOKIE_OPTIONS);
+    
+    // Set a visible cookie to confirm auth (non-httpOnly for client-side access)
+    res.cookie('apsara_auth_status', 'authenticated', {
+      httpOnly: false,
+      secure: false,
+      sameSite: 'lax',
+      path: '/',
+      maxAge: 7 * 24 * 60 * 60 * 1000
+    });
+    
+    console.log('Redirecting to frontend...');
+    // Redirect to the frontend
+    res.redirect(process.env.FRONTEND_URL || 'http://localhost:5173');
+  } catch (error) {
+    console.error('OAuth callback error:', error);
+    res.status(500).send('Authentication failed. Error: ' + error.message);
+  }
+});
+
+// Logout
+app.post('/api/auth/logout', (req, res) => {
+  res.clearCookie(AUTH_COOKIE_NAME);
+  res.json({ success: true });
+});
 
 // File upload
 const upload = multer({ dest: 'uploads/' });
@@ -56,10 +315,36 @@ const uploadedFiles = [];
 // Initialize Gemini AI client
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
-// --- In‐memory state & config ---
-const availableModels = [
-  // { id: "gemini-2.5-pro-preview-05-06", name: "Gemini 2.5 Pro" },
-  // { id: "gemini-2.5-pro-preview-03-25", name: "Gemini 2.5 Pro (Free)" },
+// --- Available Models, Voices, Tools ---
+const availableModels = ["gemini-2.0-flash","gemini-2.0-pro","gemini-1.5-flash","gemini-1.5-pro","imagen-3.0-generate-002"];
+
+// --- Available Live Models ---
+const availableLiveModels = [
+  {
+    id: 'gemini-2.0-flash-live-001',
+    name: 'Gemini 2.0 Flash Live',
+    description: 'Original live model with cascaded audio processing',
+    features: ['Tool use (Search, Functions, Code)', 'Lower quality audio', 'Longer context window'],
+    isDefault: true
+  },
+  {
+    id: 'gemini-2.5-flash-preview-native-audio-dialog',
+    name: 'Gemini 2.5 Native Audio',
+    description: 'Improved model with native audio generation',
+    features: ['Higher quality audio', 'More natural sounding voices', 'Better expression and tone', 'Limited tool support (Search, Functions)'],
+    isDefault: false
+  },
+  {
+    id: 'gemini-2.5-flash-exp-native-audio-thinking-dialog',
+    name: 'Gemini 2.5 Native Audio + Thinking',
+    description: 'Experimental model with thinking capabilities and native audio',
+    features: ['Thinking capabilities', 'Higher quality audio', 'More expressive responses', 'Limited tool support (Search only)'],
+    isDefault: false
+  }
+];
+
+// --- Chat Models (REST API) ---
+const chatModels = [
   { id: "gemini-2.5-flash-preview-04-17", name: "Gemini 2.5 Flash Preview" },
   { id: "gemini-2.0-flash", name: "Gemini 2.0 Flash" },
   { id: "gemini-2.0-flash-preview-image-generation", name: "Gemini 2.0 Flash (Image Gen)" },
@@ -279,7 +564,10 @@ function buildApiRequest(body) {
 
 // --- REST: Health, Models, Voices, System, Tools, Files ---
 app.get('/health', (req,res)=>res.json({status:'ok'}));
-app.get('/models',(req,res)=>res.json(availableModels));
+
+// Models endpoints
+app.get('/models',(req,res)=>res.json(chatModels));
+app.get('/models/live',(req,res)=>res.json(availableLiveModels));
 
 app.get('/voices',(req,res)=>res.json({voices:availableVoices}));
 app.post('/voices/select',(req,res)=>{
@@ -297,12 +585,47 @@ app.post('/system',(req,res)=>{
   res.json({ updatedInstruction:currentSystemInstruction });
 });
 
-app.get('/tools',(req,res)=>res.json({ tools: customToolDeclarations }));
+app.get('/tools', (req, res) => {
+  // Get authentication-aware tool declarations
+  const toolsToUse = getToolDeclarations(!!req.userTokens);
+  res.json({ 
+    tools: toolsToUse,
+    isAuthenticated: req.isAuthenticated || false
+  });
+});
+
 app.post('/tools/invoke',(req,res)=>{
   const { toolName, args } = req.body;
   if (!toolHandlers[toolName]) return res.status(400).json({ error:'Unknown tool.' });
-  try { res.json({ toolName, result:toolHandlers[toolName](args||{}) }); }
-  catch(e){ res.status(500).json({ error:e.message }); }
+  try { 
+    console.log(`[Tool Invoke] Executing tool: ${toolName}`);
+    const isGoogleTool = [
+      'sendGmail', 'draftGmail', 'listGmailMessages', 'getGmailMessage',
+      'listCalendarEvents', 'createCalendarEvent', 'getCalendarEvent'
+    ].includes(toolName);
+    
+    let result;
+    if (isGoogleTool) {
+      if (!req.isAuthenticated || !req.userTokens) {
+        return res.status(401).json({ 
+          error: 'Authentication required for this tool.', 
+          toolName 
+        });
+      }
+      // Make sure args is defined and is an object
+      const safeArgs = args && typeof args === 'object' ? args : {};
+      console.log(`[Tool Invoke] Invoking Google tool ${toolName} with args:`, safeArgs);
+      result = toolHandlers[toolName](req, safeArgs);
+    } else {
+      // For other tools, just pass the args
+      result = toolHandlers[toolName](args||{});
+    }
+    
+    res.json({ toolName, result });
+  } catch(e){ 
+    console.error(`[Tool Invoke] Error executing ${toolName}:`, e);
+    res.status(500).json({ error:e.message }); 
+  }
 });
 
 app.post('/files',upload.single('file'), async (req,res)=>{
@@ -710,6 +1033,45 @@ server.on('upgrade', (req, socket, head) => {
 
 async function handleLiveConnection(ws, req) {
    console.log("[Live Backend] handleLiveConnection started.");
+   
+   // Process auth cookies for WebSocket connection
+   // The WebSocket request doesn't automatically process cookies through middleware
+   let isAuthenticated = false;
+   let userTokens = null;
+   
+   try {
+       const cookies = req.headers.cookie;
+       if (cookies) {
+           console.log(`[Live Backend] Processing cookies from WebSocket request...`);
+           const cookiePairs = cookies.split(';');
+           const cookieMap = {};
+           
+           cookiePairs.forEach(pair => {
+               const [key, value] = pair.trim().split('=');
+               cookieMap[key] = decodeURIComponent(value);
+           });
+           
+           console.log(`[Live Backend] Found cookies: ${Object.keys(cookieMap).join(', ')}`);
+           
+           // Check for auth cookie and extract tokens
+           if (cookieMap[AUTH_COOKIE_NAME]) {
+               try {
+                   userTokens = JSON.parse(cookieMap[AUTH_COOKIE_NAME]);
+                   isAuthenticated = true;
+                   console.log(`[Live Backend] Successfully extracted auth tokens from cookie for WebSocket connection`);
+                   
+                   // Attach tokens to the request object so they can be used by tool declaration functions
+                   req.userTokens = userTokens;
+                   req.isAuthenticated = true;
+               } catch (e) {
+                   console.error(`[Live Backend] Error parsing auth cookie: ${e.message}`);
+               }
+           }
+       }
+   } catch (cookieErr) {
+       console.error(`[Live Backend] Error processing WebSocket cookies: ${cookieErr}`);
+   }
+   
    let requestedModality = Modality.TEXT;
    let requestedVoice = availableVoices[0];
    let requestedRealtimeConfig = {};
@@ -720,12 +1082,14 @@ async function handleLiveConnection(ws, req) {
    let slidingWindowTokens = 4000;
    let transcriptionEnabled = true;
 
+   let requestedModel = 'gemini-2.0-flash-live-001'; // Default model
+
    try {
-       const parsedUrl = parse(req.url, true);
+       const parsedUrl = new URL(req.url, `http://${req.headers.host}`);
        console.log(`[Live Backend] Handling connection for URL: ${req.url}`);
 
        // --- Modality Parsing ---
-       const modalityParam = parsedUrl.query.modalities?.toString().trim().toUpperCase();
+       const modalityParam = parsedUrl.searchParams.get('modalities')?.trim().toUpperCase();
        if (modalityParam === 'AUDIO') {
            requestedModality = Modality.AUDIO;
            console.log("[Live Backend] Requested Modality: AUDIO");
@@ -736,8 +1100,8 @@ async function handleLiveConnection(ws, req) {
        // --------------------------
 
        // --- Voice Parsing ---
-       if (requestedModality === Modality.AUDIO && parsedUrl.query.voice) {
-           const voiceParam = parsedUrl.query.voice;
+       if (requestedModality === Modality.AUDIO && parsedUrl.searchParams.get('voice')) {
+           const voiceParam = parsedUrl.searchParams.get('voice');
            if (availableVoices.includes(voiceParam)) {
                requestedVoice = voiceParam;
                console.log(`[Live Backend] Using requested voice: ${requestedVoice}`);
@@ -750,10 +1114,10 @@ async function handleLiveConnection(ws, req) {
        }
 
        // --- System Instruction Parsing ---
-       if (parsedUrl.query.systemInstruction) {
+       if (parsedUrl.searchParams.get('system')) {
            // Decode URI component in case it's encoded
            try {
-               requestedSystemInstruction = decodeURIComponent(parsedUrl.query.systemInstruction.toString());
+               requestedSystemInstruction = decodeURIComponent(parsedUrl.searchParams.get('system').toString());
                console.log(`[Live Backend] Using requested system instruction: "${requestedSystemInstruction.substring(0, 50)}..."`);
            } catch (e) {
                 console.error('[Live Backend] Error decoding system instruction parameter:', e);
@@ -765,26 +1129,35 @@ async function handleLiveConnection(ws, req) {
        // ---------------------------------
 
        // VAD Config (Example)
-       if (parsedUrl.query.disableVAD === 'true' && requestedModality === Modality.AUDIO) {
+       if (parsedUrl.searchParams.get('disablevad') === 'true' && requestedModality === Modality.AUDIO) {
             requestedRealtimeConfig.disableAutomaticActivityDetection = true;
             console.log("[Live Backend] Automatic activity detection (VAD) DISABLED via query param.");
        }
 
        // --- Session Resumption Handle Parsing ---
-       if (parsedUrl.query.resumeHandle) {
-           requestedResumeHandle = parsedUrl.query.resumeHandle.toString();
+       if (parsedUrl.searchParams.get('resumehandle')) {
+           requestedResumeHandle = parsedUrl.searchParams.get('resumehandle').toString();
            console.log("[Live Backend] Attempting session resumption with handle.");
        }
 
        // --- Sliding Window and Transcription Parsing ---
-       if (parsedUrl.query.slidingWindowEnabled !== undefined) {
-         slidingWindowEnabled = parsedUrl.query.slidingWindowEnabled === 'true';
+       if (parsedUrl.searchParams.get('slidingwindow') !== undefined) {
+         slidingWindowEnabled = parsedUrl.searchParams.get('slidingwindow') === 'true';
        }
-       if (parsedUrl.query.slidingWindowTokens !== undefined) {
-         slidingWindowTokens = parseInt(parsedUrl.query.slidingWindowTokens, 10) || 4000;
+       if (parsedUrl.searchParams.get('slidingwindowtokens') !== undefined) {
+         slidingWindowTokens = parseInt(parsedUrl.searchParams.get('slidingwindowtokens'), 10) || 4000;
        }
-       if (parsedUrl.query.transcriptionEnabled !== undefined) {
-         transcriptionEnabled = parsedUrl.query.transcriptionEnabled === 'true';
+       if (parsedUrl.searchParams.get('transcription') !== undefined) {
+         transcriptionEnabled = parsedUrl.searchParams.get('transcription') !== 'false';
+       }
+
+       // --- Model Parsing ---
+       const modelParam = parsedUrl.searchParams.get('model');
+       if (modelParam) {
+           requestedModel = modelParam;
+           console.log(`[Live Backend] Using requested model: ${requestedModel}`);
+       } else {
+           console.log(`[Live Backend] No model specified, using default: ${requestedModel}`);
        }
 
    } catch (e) {
@@ -798,6 +1171,7 @@ async function handleLiveConnection(ws, req) {
 
    // --- Prepare Config based on Request ---
    const liveConnectConfig = {
+       model: requestedModel,
        responseModalities: [requestedModality],
        ...(requestedModality === Modality.AUDIO && requestedVoice && {
            speechConfig: {
@@ -807,8 +1181,16 @@ async function handleLiveConnection(ws, req) {
        ...(Object.keys(requestedRealtimeConfig).length > 0 && {
             realtimeInputConfig: requestedRealtimeConfig
        }),
-       ...(requestedSystemInstruction && {
-           systemInstruction: { role: 'system', parts: [{ text: requestedSystemInstruction }] }
+       ...(requestedSystemInstruction ? {
+           systemInstruction: { 
+             role: 'system', 
+             parts: [{ text: requestedSystemInstruction }] 
+           }
+       } : {
+           systemInstruction: { 
+             role: 'system', 
+             parts: [{ text: getDefaultSystemInstruction() }] 
+           }
        }),
        // Enable unlimited session with context window compression if enabled
        ...(slidingWindowEnabled && {
@@ -825,12 +1207,23 @@ async function handleLiveConnection(ws, req) {
        ...(transcriptionEnabled && { outputAudioTranscription: {} }),
        // Set media resolution to medium by default
        mediaResolution: "MEDIA_RESOLUTION_MEDIUM",
-       // --- Add Tools Configuration ---
-       tools: [
-           { googleSearch: {} },        // Enable Google Search (native)
-           { codeExecution: {} },       // Enable Code Execution (native)
-           { functionDeclarations: customToolDeclarations } // RE-ENABLE custom tool declarations
-       ],
+        // --- Add Tools Configuration ---
+        tools: (function() {
+            // Use the authentication status we extracted from cookies
+            console.log(`[Live Backend] Authentication status for tools: ${isAuthenticated ? 'AUTHENTICATED' : 'NOT AUTHENTICATED'}`);
+            if (isAuthenticated) {
+                console.log(`[Live Backend] User tokens present, including Google tools in declarations`);
+                console.log(`[Live Backend] Token scope: ${userTokens?.scope || 'NO SCOPE'}`);
+            } else {
+                console.log(`[Live Backend] User tokens missing, using basic tools only`);
+            }
+            
+            return [
+                { googleSearch: {} },        // Enable Google Search (native)
+                { codeExecution: {} },       // Enable Code Execution (native)
+                { functionDeclarations: getToolDeclarations(isAuthenticated) } // Authentication-aware tool declarations
+            ];
+        })(),
    };
 
    // Add debug log for liveConnectConfig
@@ -839,9 +1232,9 @@ async function handleLiveConnection(ws, req) {
 
    let session;
    try {
-       console.log('[Live Backend] Calling ai.live.connect...');
+       console.log('[Live Backend] Calling ai.live.connect with model:', requestedModel);
        session = await ai.live.connect({
-           model: 'gemini-2.0-flash-live-001', // Or adapt based on frontend selection if needed later
+           model: requestedModel, // Use the model requested from frontend
            config: liveConnectConfig,
            callbacks: {
                onopen: () => {
@@ -894,8 +1287,25 @@ async function handleLiveConnection(ws, req) {
                          for (const call of evt.toolCall.functionCalls) {
                              if (toolHandlers[call.name]) {
                                  try {
-                                     const result = await toolHandlers[call.name](call.args || {});
-                                     console.log(`[Live Backend] Tool ${call.name} executed. Result:`, JSON.stringify(result));
+                                     // Define list of Google tools that need the request object
+                                      const isGoogleTool = [
+                                          'sendGmail', 'draftGmail', 'listGmailMessages', 'getGmailMessage',
+                                          'listCalendarEvents', 'createCalendarEvent', 'getCalendarEvent'
+                                      ].includes(call.name);
+                                      
+                                      let result;
+                                      if (isGoogleTool) {
+                                          // For Google tools, pass the req object and safe args
+                                          if (!req.isAuthenticated || !req.userTokens) {
+                                              throw new Error('Authentication required for this Google tool');
+                                          }
+                                          const safeArgs = call.args && typeof call.args === 'object' ? call.args : {};
+                                          result = await toolHandlers[call.name](req, safeArgs);
+                                      } else {
+                                          // For other tools, just pass the args
+                                          result = await toolHandlers[call.name](call.args || {});
+                                      }
+                                      console.log(`[Live Backend] Tool ${call.name} executed. Result:`, JSON.stringify(result));
                                      responsesToSend.push({ id: call.id, name: call.name, response: { result: result } });
 
                                      // --- Check for Map Display Data and send separate event ---

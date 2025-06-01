@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { BellRing, FileUp, Menu, Mic, Moon, Send, Settings, Sun, User, X, MessageSquare, UploadCloud, AudioLines, Cog, Trash2, MicOff, BrainCircuit, Image as ImageIcon, BookOpen, Link as LinkIcon, UserIcon, Code, Sparkles, Plane, UtensilsCrossed, History, Film, PenTool, Globe, FileText, Lightbulb, Target, Search } from 'lucide-react';
+import { BellRing, FileUp, Menu, Mic, Moon, Send, Settings, Sun, User, X, MessageSquare, UploadCloud, AudioLines, Cog, Trash2, MicOff, BrainCircuit, Image as ImageIcon, BookOpen, Link as LinkIcon, UserIcon, Code, Sparkles, Plane, UtensilsCrossed, History, Film, PenTool, Globe, FileText, Lightbulb, Target, Search, LogOut } from 'lucide-react';
 
 // Import the new components
 import Sidebar from './components/Sidebar';
@@ -23,6 +23,7 @@ import { useConversations } from './hooks/useConversations';
 import { useChatApi } from './hooks/useChatApi';
 import { useFileUpload } from './hooks/useFileUpload';
 import { useLiveSession } from './hooks/useLiveSession';
+import { useGoogleAuth } from './hooks/useGoogleAuth';
 import { getModelCapabilities } from './utils/modelCapabilities'; // Import capability checker
 
 const BACKEND_URL = 'http://localhost:9000';
@@ -69,6 +70,20 @@ const suggestedPrompts = [
 export default function App() {
   // Theme - Use the custom hook
   const [darkMode, setDarkMode] = useTheme();
+
+  // Google Auth state
+  const { 
+    isAuthenticated, 
+    userProfile, 
+    isAuthLoading, 
+    signIn: googleSignIn, 
+    signOut: googleSignOut, 
+    skipAuth, 
+    wasAuthSkipped 
+  } = useGoogleAuth();
+  
+  // Track if auth was skipped to show appropriate UI
+  const [authSkipped, setAuthSkipped] = useState(wasAuthSkipped());
 
   // State for initial data loading (consider moving fetch logic into a hook too)
   const [models, setModels] = useState([]);
@@ -137,6 +152,60 @@ export default function App() {
     },
   });
   
+  // Handle Google sign in
+  const handleGoogleSignIn = () => {
+    googleSignIn();
+  };
+
+  // Handle skip authentication
+  const handleSkipAuth = () => {
+    skipAuth();
+    setAuthSkipped(true);
+  };
+
+  // Handle sign out
+  const handleSignOut = () => {
+    googleSignOut();
+    // Don't automatically set authSkipped back to false
+    // The user might want to continue using the app without auth
+  };
+
+  // Check for auth callback from OAuth flow
+  useEffect(() => {
+    // Check if the URL contains the auth callback parameters
+    const urlParams = new URLSearchParams(window.location.search);
+    const authCode = urlParams.get('code');
+    const state = urlParams.get('state');
+    
+    if (authCode && state) {
+      // Clear the URL parameters without a page refresh
+      window.history.replaceState({}, document.title, window.location.pathname);
+      
+      // Send the auth code to backend for processing
+      const processAuthCode = async () => {
+        try {
+          const response = await fetch(`${BACKEND_URL}/api/auth/google/callback`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ code: authCode, state }),
+            credentials: 'include'
+          });
+          
+          if (response.ok) {
+            // Reload the page to get fresh auth state
+            window.location.reload();
+          }
+        } catch (error) {
+          console.error('Error processing auth code:', error);
+        }
+      };
+      
+      processAuthCode();
+    }
+  }, []);
+
   // Clear file attachments on page load/reload
   useEffect(() => {
     // Clear any existing file attachments when the component mounts (page loads/reloads)
@@ -338,6 +407,7 @@ export default function App() {
     isStreamingVideo,
     mediaStream,
     isStreamingScreen,
+    selectedModel, // Add selected model
     screenStream,
     videoDevices, // <-- Add new state from hook
     selectedVideoDeviceId, // <-- Add new state from hook
@@ -350,6 +420,7 @@ export default function App() {
     setLiveModality,
     setLiveSystemInstruction: setLivePrompt, // Rename for clarity
     setSelectedVideoDeviceId, // <-- Add new setter from hook
+    setSelectedModel, // Add model selector setter
     getVideoInputDevices, // <-- Add new handler from hook
     startLiveSession,
     endLiveSession,
@@ -627,16 +698,19 @@ export default function App() {
       {/* Main content */}
       <main className="flex-1 flex flex-col overflow-hidden transition-all duration-500 ease-in-out bg-gray-100 dark:bg-gray-900">
         {/* Header - Use Imported Component */}
-        <Header
-          models={models}
-          currentModel={currentModel}
-          setCurrentModel={setCurrentModel}
-          darkMode={darkMode}
-          setDarkMode={setDarkMode}
-          setLiveOpen={setLiveOpen}
-          setSettingsOpen={setSettingsOpen}
-          setIsSidebarOpen={setIsSidebarOpen}
-        />
+          <Header
+            models={models}
+            currentModel={currentModel}
+            setCurrentModel={setCurrentModel}
+            darkMode={darkMode}
+            setDarkMode={setDarkMode}
+            setLiveOpen={setLiveOpen}
+            setSettingsOpen={setSettingsOpen}
+            setIsSidebarOpen={setIsSidebarOpen}
+            isAuthenticated={isAuthenticated}
+            userProfile={userProfile}
+            onSignOut={handleSignOut}
+          />
         
         {/* Chat Messages Area - Now in scrollable container with FIXED height */}
         <div className="flex-1 flex flex-col overflow-y-auto p-2 sm:p-4 pb-0 bg-gray-100 dark:bg-gray-900 custom-scrollbar">
@@ -646,6 +720,11 @@ export default function App() {
               allPrompts={suggestedPrompts} // Pass the full list
               onStartChatWithPrompt={startChatWithPrompt}
               onStartNewChat={handleStartNewChat}
+              isAuthenticated={isAuthenticated}
+              userProfile={userProfile}
+              onGoogleSignIn={handleGoogleSignIn}
+              onSkipAuth={handleSkipAuth}
+              authSkipped={authSkipped}
             />
           ) : (
             // Active chat exists: Check for messages
@@ -796,6 +875,8 @@ export default function App() {
           setSlidingWindowTokens={setSlidingWindowTokens}
           activeTab={activeTab}
           setActiveTab={setActiveTab}
+          selectedModel={selectedModel}
+          setSelectedModel={setSelectedModel}
           onAutoResumeSession={handleAutoSessionResume}
           onLoadSession={loadLiveSession} // Add new prop for loading saved sessions
           onStartWithMainContext={startLiveWithMainContext} // NEW: Add prop for starting with main chat context

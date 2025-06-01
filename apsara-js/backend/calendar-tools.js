@@ -1,21 +1,60 @@
 // backend/calendar-tools.js
 import { google } from 'googleapis';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
-// Helper function to get an authenticated Calendar client
-// Uses the same OAuth credentials and refresh token as Gmail
-async function getAuthenticatedCalendarClient() {
-  const clientId = process.env.GMAIL_CLIENT_ID; // Assuming reuse of credentials
-  const clientSecret = process.env.GMAIL_CLIENT_SECRET;
-  const redirectUri = process.env.GMAIL_REDIRECT_URI;
-  const refreshToken = process.env.GMAIL_REFRESH_TOKEN; // Token MUST have calendar scope
+// Get current directory for ES modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
-  if (!clientId || !clientSecret || !redirectUri || !refreshToken) {
-    throw new Error("Google API client credentials or refresh token not configured in .env file for calendar-tools.");
+// Helper function to get an authenticated Calendar client using the request object
+async function getAuthenticatedCalendarClient(req) {
+  try {
+    // Validate request object has authentication tokens
+    if (!req || typeof req !== 'object') {
+      throw new Error('Invalid request object provided to Calendar tool');
+    }
+    
+    // Check for authentication tokens
+    if (!req.userTokens || !req.isAuthenticated) {
+      throw new Error('No authentication tokens available. User must be logged in to use Calendar features.');
+    }
+    
+    // Get credentials from credentials.json
+    let credentials;
+    try {
+      const credentialsJson = fs.readFileSync(path.join(__dirname, './credentials.json'), 'utf8');
+      credentials = JSON.parse(credentialsJson);
+    } catch (error) {
+      console.error(`Error reading credentials.json: ${error.message}`);
+      throw new Error('Unable to load credentials. Please check your Google project configuration.');
+    }
+    
+    const { client_id, client_secret } = credentials.web;
+    const redirectUri = credentials.web.redirect_uris[0];
+    const { access_token, refresh_token } = req.userTokens;
+    
+    if (!client_id || !client_secret || !redirectUri || !refresh_token) {
+      throw new Error('Missing required OAuth credentials for Calendar access');
+    }
+    
+    const oauth2Client = new google.auth.OAuth2(client_id, client_secret, redirectUri);
+    oauth2Client.setCredentials({ refresh_token, access_token });
+    
+    // It's good practice to ensure the access token is fresh, though googleapis often handles this.
+    try {
+      await oauth2Client.getAccessToken();
+    } catch (error) {
+      console.error(`[CalendarTool] Error refreshing access token: ${error.message}`);
+      throw error;
+    }
+    
+    return google.calendar({ version: 'v3', auth: oauth2Client });
+  } catch (error) {
+    console.error(`[CalendarTool] Authentication error: ${error.message}`);
+    throw error;
   }
-
-  const oauth2Client = new google.auth.OAuth2(clientId, clientSecret, redirectUri);
-  oauth2Client.setCredentials({ refresh_token: refreshToken });
-  return google.calendar({ version: 'v3', auth: oauth2Client });
 }
 
 // --- Tool Schemas for Calendar ---
@@ -55,33 +94,59 @@ export const listCalendarEventsSchema = {
 
 // --- Tool Handlers for Calendar (Placeholders/Basic Implementation) ---
 
-export async function handleCreateCalendarEvent(params) {
-  console.log('[CalendarTool: createEvent] Request:', params);
+export async function handleCreateCalendarEvent(req, args) {
+  console.log(`[CalendarTool: createEvent] Received request with args:`, JSON.stringify(args));
+  
+  // Handle case when args is undefined or not an object
+  if (!args || typeof args !== 'object') {
+    console.error(`[CalendarTool: createEvent] Invalid arguments:`, args);
+    return { status: 'error', message: 'Invalid arguments provided. Expected object with event details.' };
+  }
+  
+  // Support multiple parameter naming conventions (schema vs actual usage)
+  const summary = args.summary;
+  const description = args.description || '';
+  const location = args.location || '';
+  const startDateTime = args.startDateTime || args.start;
+  const endDateTime = args.endDateTime || args.end;
+  
+  console.log(`[CalendarTool: createEvent] Processed args: summary=${summary}, start=${startDateTime}, end=${endDateTime}`);
 
-  // Add checks for previously required parameters
-  if (!params.summary || !params.startDateTime || !params.endDateTime) {
-    let missing = [];
-    if (!params.summary) missing.push('summary');
-    if (!params.startDateTime) missing.push('startDateTime');
-    if (!params.endDateTime) missing.push('endDateTime');
+  // Validate required fields
+  let missing = [];
+  if (!summary) missing.push('summary');
+  if (!startDateTime) missing.push('start time (startDateTime or start)');
+  if (!endDateTime) missing.push('end time (endDateTime or end)');
+  
+  if (missing.length > 0) {
     return { status: 'error', message: `Missing required information for creating event: ${missing.join(', ')}.` };
+  }
+  
+  // Validate date formats
+  try {
+    if (startDateTime) new Date(startDateTime).toISOString();
+    if (endDateTime) new Date(endDateTime).toISOString();
+  } catch (e) {
+    return { status: 'error', message: 'Invalid date format for start or end time. Please use ISO format (YYYY-MM-DDTHH:MM:SS).' };
   }
 
   try {
-    const calendar = await getAuthenticatedCalendarClient();
+    const calendar = await getAuthenticatedCalendarClient(req);
+    
+    // Use our processed parameters with fallbacks
     const event = {
-      summary: params.summary,
-      description: params.description,
-      location: params.location,
+      summary: summary,
+      description: description,
+      location: location,
       start: {
-        dateTime: params.startDateTime,
-        // timeZone: params.timeZone, // Often inferred from dateTime offset
+        dateTime: startDateTime,
+        // timeZone: args.timeZone, // Often inferred from dateTime offset
       },
       end: {
-        dateTime: params.endDateTime,
-        // timeZone: params.timeZone,
+        dateTime: endDateTime,
+        // timeZone: args.timeZone,
       },
-      attendees: params.attendees ? params.attendees.map(email => ({ email })) : [],
+      attendees: args.attendees ? args.attendees.map(email => ({ email })) : [],
       // Reminders, recurrence, etc. can be added here
     };
 
@@ -104,14 +169,42 @@ export async function handleCreateCalendarEvent(params) {
   }
 }
 
-export async function handleListCalendarEvents({ maxResults = 10, timeMin }) {
-  console.log(`[CalendarTool: listEvents] Request: maxResults=${maxResults}, timeMin=${timeMin || 'now'}`);
+export async function handleListCalendarEvents(req, args) {
+  console.log(`[CalendarTool: listEvents] Received request with args:`, JSON.stringify(args));
+  
+  // Handle case when args is undefined or not an object
+  if (!args || typeof args !== 'object') {
+    console.error(`[CalendarTool: listEvents] Invalid arguments:`, args);
+    return { status: 'error', message: 'Invalid arguments provided. Expected object with optional maxResults and timeMin properties.' };
+  }
+  
+  // Extract parameters with fallbacks and support for different parameter names
+  const maxResults = args.maxResults || args.max || args.limit || 10;
+  const timeMin = args.timeMin || args.startTime || null;
+  
+  // Validate maxResults is a reasonable number
+  const parsedMaxResults = parseInt(maxResults);
+  const validMaxResults = !isNaN(parsedMaxResults) && parsedMaxResults > 0 ? 
+    Math.min(parsedMaxResults, 100) : 10; // Cap at 100 events
+    
+  console.log(`[CalendarTool: listEvents] Using maxResults=${validMaxResults}, timeMin=${timeMin || 'now'}`);
+  
+  // Validate timeMin if provided
+  let validTimeMin = null;
+  if (timeMin) {
+    try {
+      validTimeMin = new Date(timeMin).toISOString();
+    } catch (e) {
+      return { status: 'error', message: 'Invalid timeMin date format. Please use ISO format (YYYY-MM-DDTHH:MM:SS).' };
+    }
+  }
+  
   try {
-    const calendar = await getAuthenticatedCalendarClient();
+    const calendar = await getAuthenticatedCalendarClient(req);
     const res = await calendar.events.list({
       calendarId: 'primary',
-      timeMin: timeMin || (new Date()).toISOString(), // Default to now
-      maxResults: maxResults,
+      timeMin: validTimeMin || (new Date()).toISOString(), // Default to now
+      maxResults: validMaxResults,
       singleEvents: true, // Expand recurring events into single instances
       orderBy: 'startTime',
     });

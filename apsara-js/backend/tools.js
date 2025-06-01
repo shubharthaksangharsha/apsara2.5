@@ -8,6 +8,8 @@ import { calendarToolSchemas, calendarToolHandlers } from './calendar-tools.js';
 import { mapsToolSchemas, mapsToolHandlers } from './maps-tools.js';
 import fetch from 'node-fetch'; // Ensure fetch is available (used by maps-tools.js as well)
 
+// Tool declarations will be defined at the end of the file
+
 // --- Tool Schemas ---
 const getCurrentTimeSchema = {
   name: 'getCurrentTime',
@@ -124,22 +126,6 @@ const loadNotesSchema = {
     }
   }
 };
-
-// Array of tool schemas for Gemini configuration
-// Combine imported schemas from all tool files
-export const customToolDeclarations = [
-  getCurrentTimeSchema,
-  echoSchema,
-  getBatteryStatusSchema,
-  ...gmailToolSchemas, // Spread Gmail tool schemas
-  ...calendarToolSchemas, // Spread Calendar tool schemas
-  ...mapsToolSchemas, // Spread Maps tool schemas
-  getWeatherSchema,
-  switchTabSchema,
-  takeNotesSchema,
-  loadNotesSchema
-];
-
 
 // --- Tool Handlers ---
 
@@ -532,11 +518,45 @@ export const toolHandlers = {
   getBatteryStatus: handleGetBatteryStatus,
   ...gmailToolHandlers, // Spread Gmail handlers
   ...calendarToolHandlers, // Spread Calendar handlers
-  ...mapsToolHandlers, // Spread Maps handlers
+  // Maps handlers removed due to billing issues
   getWeather: handleGetWeather,
   switchTab: handleSwitchTab,
   takeNotes: handleTakeNotes,
   loadNotes: handleLoadNotes
+};
+
+// --- Define Tool Set ---
+// Base tool declarations (available without authentication)
+const baseToolDeclarations = [
+  getCurrentTimeSchema,
+  echoSchema,
+  getBatteryStatusSchema,
+  getWeatherSchema,
+  switchTabSchema,
+  takeNotesSchema,
+  loadNotesSchema,
+];
+
+// Google-specific tool declarations (require authentication)
+const googleToolDeclarations = [
+  ...gmailToolSchemas,
+  ...calendarToolSchemas,
+  // Maps schemas removed due to billing issues
+];
+
+// Default tool declarations with all tools included
+export const customToolDeclarations = [
+  ...baseToolDeclarations,
+  ...googleToolDeclarations,
+];
+
+// Function to get tool declarations based on authentication status
+export const getToolDeclarations = (isAuthenticated = false) => {
+  if (isAuthenticated) {
+    return customToolDeclarations;
+  } else {
+    return baseToolDeclarations;
+  }
 };
 
 // Export just the names for the system prompt

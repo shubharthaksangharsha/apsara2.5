@@ -36,25 +36,67 @@ function resolveEmailAlias(aliasOrEmail) {
     return null;
 }
 
+// Import modules at the top level for ES modules
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+// Get current directory for ES modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 // Helper function to get an authenticated Gmail client
 // This centralizes the auth logic for all Gmail tools in this file
-async function getAuthenticatedGmailClient() {
-  const clientId = process.env.GMAIL_CLIENT_ID;
-  const clientSecret = process.env.GMAIL_CLIENT_SECRET;
-  const redirectUri = process.env.GMAIL_REDIRECT_URI;
-  const refreshToken = process.env.GMAIL_REFRESH_TOKEN;
+async function getAuthenticatedGmailClient(req) {
+  // Get credentials from credentials.json
+  let credentials;
+  try {
+    // Validate request object has authentication tokens
+    if (!req || typeof req !== 'object') {
+      throw new Error('Invalid request object provided to Gmail tool');
+    }
+    
+    // Check for authentication tokens
+    if (!req.userTokens || !req.isAuthenticated) {
+      throw new Error('No authentication tokens available. User must be logged in to use Gmail features.');
+    }
 
-  if (!clientId || !clientSecret || !redirectUri || !refreshToken) {
-    throw new Error("Gmail API client credentials or refresh token not configured in .env file for gmail-tools.");
+    // Log authentication token presence for debugging
+    console.log(`[GmailTool] Authentication check passed, userTokens present: ${!!req.userTokens}, isAuthenticated: ${req.isAuthenticated}`);
+    
+    try {
+      const credentialsJson = fs.readFileSync(path.join(__dirname, './credentials.json'), 'utf8');
+      credentials = JSON.parse(credentialsJson);
+    } catch (error) {
+      console.error(`Error reading credentials.json: ${error.message}`);
+      throw new Error('Unable to load credentials. Please check your Google project configuration.');
+    }
+    
+    const { client_id, client_secret } = credentials.web;
+    const redirectUri = credentials.web.redirect_uris[0];
+    const { access_token, refresh_token } = req.userTokens;
+    
+    if (!client_id || !client_secret || !redirectUri || !refresh_token) {
+      throw new Error('Missing required OAuth credentials for Gmail access');
+    }
+    
+    const oauth2Client = new google.auth.OAuth2(client_id, client_secret, redirectUri);
+    oauth2Client.setCredentials({ refresh_token, access_token });
+
+    // It's good practice to ensure the access token is fresh, though googleapis often handles this.
+    try {
+      await oauth2Client.getAccessToken();
+    } catch (error) {
+      console.error(`[GmailTool] Error refreshing access token: ${error.message}`);
+      // Re-throw the error since we can't proceed without valid credentials
+      throw error;
+    }
+    
+    return google.gmail({ version: 'v1', auth: oauth2Client });
+  } catch (error) {
+    console.error(`[GmailTool] Authentication error: ${error.message}`);
+    throw error;
   }
-
-  const oauth2Client = new google.auth.OAuth2(clientId, clientSecret, redirectUri);
-  oauth2Client.setCredentials({ refresh_token: refreshToken });
-
-  // It's good practice to ensure the access token is fresh, though googleapis often handles this.
-  // await oauth2Client.getAccessToken(); // You might not need to explicitly call this if the library refreshes.
-
-  return google.gmail({ version: 'v1', auth: oauth2Client });
 }
 
 // --- Tool Schemas for Gmail ---
@@ -115,22 +157,36 @@ export const getGmailMessageSchema = {
 
 // --- Tool Handlers for Gmail ---
 
-export async function handleSendGmail({ to, subject, body }) {
-  if (!to || !subject || !body) {
-    let missing = [];
-    if (!to) missing.push('recipient (to)');
-    if (!subject) missing.push('subject');
-    if (!body) missing.push('body');
-    return { status: 'error', message: `Missing required information for sending email: ${missing.join(', ')}.` };
+export async function handleSendGmail(req, args) {
+  console.log(`[GmailTool: sendGmail] Received request with args:`, JSON.stringify(args));
+  
+  // Handle case when args is undefined or not an object
+  if (!args || typeof args !== 'object') {
+    console.error(`[GmailTool: sendGmail] Invalid arguments:`, args);
+    return { status: 'error', message: 'Invalid arguments provided. Expected object with to, subject, and body properties.' };
   }
+
+  const { to, subject, body } = args;
+  
+  // Validate required fields
+  if (!to) {
+    return { status: 'error', message: 'Recipient (to) field is required.' };
+  }
+  
+  if (!subject) {
+    return { status: 'error', message: 'Email subject is required.' };
+  }
+  
+  console.log(`[GmailTool: sendGmail] Processing: to=${to}, subject=${subject}`);
+  
+  // Resolve any alias in the 'to' field
   const resolvedTo = resolveEmailAlias(to);
   if (!resolvedTo) {
-      return { status: 'error', message: `Invalid recipient alias or email address provided: "${to}". Please use a known alias or a full email address.` };
+    return { status: 'error', message: `Invalid recipient: ${to} is not a valid email or known alias.` };
   }
-  console.log(`[GmailTool: sendGmail] Request: To: ${resolvedTo}, Subject: "${subject}"`);
-
+  
   try {
-    const gmail = await getAuthenticatedGmailClient();
+    const gmail = await getAuthenticatedGmailClient(req);
     const utf8Subject = `=?utf-8?B?${Buffer.from(subject || '(No Subject)').toString('base64')}?=`;
     const messageParts = [
       `To: ${resolvedTo}`,
@@ -164,18 +220,34 @@ export async function handleSendGmail({ to, subject, body }) {
   }
 }
 
-export async function handleDraftGmail({ to, subject = '', body = '' }) {
+export async function handleDraftGmail(req, args) {
+  console.log(`[GmailTool: draftGmail] Received request with args:`, JSON.stringify(args));
+  
+  // Handle case when args is undefined or not an object
+  if (!args || typeof args !== 'object') {
+    console.error(`[GmailTool: draftGmail] Invalid arguments:`, args);
+    return { status: 'error', message: 'Invalid arguments provided. Expected object with optional to, subject, and body properties.' };
+  }
+
+  // Extract parameters with defaults
+  const to = args.to || '';
+  const subject = args.subject || '';
+  const body = args.body || '';
+  
+  console.log(`[GmailTool: draftGmail] Processing draft: to=${to}, subject=${subject}`);
+  
+  // Handle recipient alias if provided
   let resolvedTo = '';
   if (to) {
-      resolvedTo = resolveEmailAlias(to);
-      if (!resolvedTo) {
-          console.warn(`[GmailTool: draftGmail] Invalid 'to' field "${to}" provided, creating draft without recipient.`);
-      }
+    resolvedTo = resolveEmailAlias(to);
+    if (!resolvedTo) {
+      console.warn(`[GmailTool: draftGmail] Invalid 'to' field "${to}" provided, creating draft without recipient.`);
+    }
   }
   console.log(`[GmailTool: draftGmail] Request: To: ${resolvedTo || 'N/A'}, Subject: "${subject}"`);
 
   try {
-    const gmail = await getAuthenticatedGmailClient();
+    const gmail = await getAuthenticatedGmailClient(req);
     const utf8Subject = `=?utf-8?B?${Buffer.from(subject).toString('base64')}?=`;
     const messageParts = [];
     if (resolvedTo) messageParts.push(`To: ${resolvedTo}`);
@@ -211,10 +283,10 @@ export async function handleDraftGmail({ to, subject = '', body = '' }) {
   }
 }
 
-export async function handleListGmailMessages({ maxResults = 5, query = '' }) {
+export async function handleListGmailMessages(req, { maxResults = 5, query = '' }) {
   console.log(`[GmailTool: listGmailMessages] Request: maxResults=${maxResults}, query="${query}"`);
   try {
-    const gmail = await getAuthenticatedGmailClient();
+    const gmail = await getAuthenticatedGmailClient(req);
     const res = await gmail.users.messages.list({
       userId: 'me',
       maxResults: maxResults,
@@ -261,11 +333,11 @@ export async function handleListGmailMessages({ maxResults = 5, query = '' }) {
   }
 }
 
-export async function handleGetGmailMessage({ messageId, format = 'metadata' }) {
+export async function handleGetGmailMessage(req, { messageId, format = 'metadata' }) {
   console.log(`[GmailTool: getGmailMessage] Request: messageId=${messageId}, format=${format}`);
   if (!messageId) return { status: 'error', message: 'Message ID is required.' };
   try {
-    const gmail = await getAuthenticatedGmailClient();
+    const gmail = await getAuthenticatedGmailClient(req);
     const res = await gmail.users.messages.get({
       userId: 'me',
       id: messageId,
