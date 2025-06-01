@@ -1,13 +1,53 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, Download, Share2 } from 'lucide-react';
+
+// Backend URL for fetching file content
+const BACKEND_URL = 'http://localhost:9000';
 
 export default function ImageModal({ isOpen, onClose, imageData }) {
   if (!isOpen || !imageData) return null;
 
+  // Check if we have a URI or a base64 data
+  const isFileUri = imageData.uri && !imageData.data;
+  
+  // Determine the image source to display
+  const getImageSrc = () => {
+    if (imageData.data) {
+      // Direct base64 data
+      return `data:${imageData.mimeType};base64,${imageData.data}`;
+    } else if (imageData.uri) {
+      // For Google API URIs, send just the file ID to the backend
+      if (imageData.uri.includes('generativelanguage.googleapis.com')) {
+        // Extract just the file ID from the end of the Google API URI
+        const fileId = imageData.uri.split('/').pop();
+        return `${BACKEND_URL}/files/content?fileId=${fileId}`;
+      } else {
+        // For other URIs, use the regular endpoint (though this may need adjustment)
+        return `${BACKEND_URL}/files/content?uri=${encodeURIComponent(imageData.uri)}`;
+      }
+    }
+    return '';
+  };
+
   const handleDownload = () => {
     const link = document.createElement('a');
-    link.href = `data:${imageData.mimeType};base64,${imageData.data}`;
-    link.download = `image.${imageData.mimeType.split('/')[1] || 'png'}`; // e.g., image.png
+    if (imageData.data) {
+      // For base64 data
+      link.href = `data:${imageData.mimeType};base64,${imageData.data}`;
+    } else if (imageData.uri) {
+      // Use the same URL format as in getImageSrc
+      if (imageData.uri.includes('generativelanguage.googleapis.com')) {
+        const fileId = imageData.uri.split('/').pop();
+        link.href = `${BACKEND_URL}/files/content?fileId=${fileId}`;
+      } else {
+        link.href = `${BACKEND_URL}/files/content?uri=${encodeURIComponent(imageData.uri)}`;
+      }
+    }
+    
+    // Get extension from mimeType or default to png
+    const extension = (imageData.mimeType || 'image/png').split('/')[1] || 'png';
+    link.download = `image.${extension}`;
+    
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -20,9 +60,30 @@ export default function ImageModal({ isOpen, onClose, imageData }) {
     }
 
     try {
-      const response = await fetch(`data:${imageData.mimeType};base64,${imageData.data}`);
-      const blob = await response.blob();
-      const file = new File([blob], `image.${imageData.mimeType.split('/')[1] || 'png'}`, { type: imageData.mimeType });
+      // Get the image as a blob
+      let blob;
+      if (imageData.data) {
+        // For base64 data
+        const response = await fetch(`data:${imageData.mimeType};base64,${imageData.data}`);
+        blob = await response.blob();
+      } else if (imageData.uri) {
+        // Use the same URL pattern as in getImageSrc
+        let url;
+        if (imageData.uri.includes('generativelanguage.googleapis.com')) {
+          const fileId = imageData.uri.split('/').pop();
+          url = `${BACKEND_URL}/files/content?fileId=${fileId}`;
+        } else {
+          url = `${BACKEND_URL}/files/content?uri=${encodeURIComponent(imageData.uri)}`;
+        }
+        const response = await fetch(url);
+        blob = await response.blob();
+      } else {
+        throw new Error('No valid image data to share');
+      }
+      
+      // Create a file from the blob
+      const extension = (imageData.mimeType || 'image/png').split('/')[1] || 'png';
+      const file = new File([blob], `image.${extension}`, { type: imageData.mimeType || 'image/png' });
 
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
         await navigator.share({
@@ -32,20 +93,13 @@ export default function ImageModal({ isOpen, onClose, imageData }) {
         });
         console.log('Image shared successfully');
       } else {
-        // If canShare({files}) is false, try sharing title/text and hope the OS share sheet lets you add the image,
-        // or inform the user. For simplicity, we'll alert for now.
-        alert('Your browser supports sharing, but not directly sharing this file type or file. You can download the image.');
-        // As a more advanced fallback, you could try sharing just a URL if you had one,
-        // or copying the image to clipboard if browser supports Clipboard API for images.
+        alert('Your browser supports sharing, but not directly sharing this file type. You can download the image instead.');
       }
     } catch (error) {
       console.error('Error sharing image:', error);
       alert(`Sharing failed: ${error.message}. You can download the image instead.`);
     }
   };
-
-  // Doodle functionality is complex and would require a canvas library.
-  // For now, it's out of scope for this immediate update.
 
   return (
     <div
@@ -59,9 +113,13 @@ export default function ImageModal({ isOpen, onClose, imageData }) {
         {/* Image Display */}
         <div className="flex-grow overflow-auto flex justify-center items-center custom-scrollbar rounded mb-4">
           <img
-            src={`data:${imageData.mimeType};base64,${imageData.data}`}
+            src={getImageSrc()}
             alt="Full view"
             className="max-w-full max-h-full object-contain"
+            onError={(e) => {
+              console.error('Error loading image:', e);
+              e.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyIgZmlsbC1ydWxlPSJldmVub2RkIiBjbGlwLXJ1bGU9ImV2ZW5vZGQiPjxwYXRoIGQ9Ik0yNCAyNGgtMjR2LTI0aDI0djI0em0tMTEtN2gtM3YtOGgzdjh6bTUtNmgtM3Y2aDN2LTZ6bS0xMCAyaC0zdjRoM3YtNHoiLz48L3N2Zz4=';
+            }}
           />
         </div>
 
@@ -91,9 +149,7 @@ export default function ImageModal({ isOpen, onClose, imageData }) {
             <X size={18} /> Close
           </button>
         </div>
-         {/* Placeholder for Doodle - could be another button that reveals a canvas */}
-         {/* <p className="text-xs text-center text-gray-500 mt-2">Doodle feature coming soon!</p> */}
       </div>
     </div>
   );
-} 
+}

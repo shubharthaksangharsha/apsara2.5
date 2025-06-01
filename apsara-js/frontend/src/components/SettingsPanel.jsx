@@ -69,17 +69,23 @@ export default function SettingsPanel({
 
   // --- Interactivity Handlers for Toggles ---
   const handleSearchToggle = (newValue) => {
+    console.log('[SettingsPanel] Toggling Google Search:', { newValue, previous: enableGoogleSearch });
     onEnableGoogleSearchChange(newValue);
+    
     // If turning search ON, turn code execution OFF
     if (newValue) {
+      console.log('[SettingsPanel] Auto-disabling Code Execution because Search was enabled');
       onEnableCodeExecutionChange(false);
     }
   };
 
   const handleCodeExecToggle = (newValue) => {
+    console.log('[SettingsPanel] Toggling Code Execution:', { newValue, previous: enableCodeExecution });
     onEnableCodeExecutionChange(newValue);
+    
     // If turning code execution ON, turn search OFF
     if (newValue) {
+      console.log('[SettingsPanel] Auto-disabling Google Search because Code Execution was enabled');
       onEnableGoogleSearchChange(false);
     }
   };

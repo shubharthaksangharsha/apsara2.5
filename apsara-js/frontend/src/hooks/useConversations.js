@@ -23,7 +23,35 @@ export function useConversations() {
   // Effect to save conversations and handle pruning
   useEffect(() => {
     try {
-      let convosToSave = [...convos]; // Create a mutable copy
+      // Deep clone and remove file attachments before saving
+      let convosToSave = JSON.parse(JSON.stringify(convos));
+      
+      // Remove file attachments from all messages in all conversations
+      convosToSave.forEach(convo => {
+        if (convo.messages) {
+          convo.messages.forEach(msg => {
+            // Clean file data from message parts
+            if (msg.parts) {
+              msg.parts = msg.parts.map(part => {
+                // If the part has fileData, create a clean version without it
+                if (part.fileData) {
+                  // Keep just minimal reference data if needed for UI
+                  return {
+                    ...part,
+                    fileData: {
+                      mimeType: part.fileData.mimeType,
+                      fileName: part.fileData.fileName,
+                      // Don't store actual file data/URIs
+                    }
+                  };
+                }
+                return part;
+              });
+            }
+          });
+        }
+      });
+      
       let convosString = JSON.stringify(convosToSave);
       let currentSize = new Blob([convosString]).size;
 

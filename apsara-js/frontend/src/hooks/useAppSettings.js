@@ -10,8 +10,9 @@ export function useAppSettings(initialSystemInstruction) {
   const [systemInstruction, setSystemInstruction] = useState(''); // Initialize empty, set later
   const [temperature, setTemperature] = useState(() => parseFloat(localStorage.getItem('temperature') || '0.7'));
   const [maxOutputTokens, setMaxOutputTokens] = useState(() => parseInt(localStorage.getItem('maxOutputTokens') || '8192', 10)); // Default to 8k often safer
-  const [enableGoogleSearch, setEnableGoogleSearch] = useState(false); // Initialize false, enable later based on model/saved state
-  const [enableCodeExecution, setEnableCodeExecution] = useState(false); // Initialize false
+  // Initialize tool selection flags to false by default (no localStorage dependency)
+  const [enableGoogleSearch, setEnableGoogleSearch] = useState(false);
+  const [enableCodeExecution, setEnableCodeExecution] = useState(false);
   const [enableThinking, setEnableThinking] = useState(() => localStorage.getItem('enableThinking') === 'true');
   const [thinkingBudget, setThinkingBudget] = useState(() => parseInt(localStorage.getItem('thinkingBudget') || '0', 10));
 
@@ -32,21 +33,15 @@ export function useAppSettings(initialSystemInstruction) {
     const capabilities = getModelCapabilities(currentModel);
     setModelCapabilities(capabilities);
 
-    // Load saved search state only if supported, otherwise force disable
-    const savedSearch = localStorage.getItem('enableGoogleSearch') === 'true';
-    if (capabilities.supportsSearch) {
-      setEnableGoogleSearch(savedSearch);
-    } else {
+      // Reset tool selection flags when model changes
+    // Only allow tools that are supported by the current model
+    if (!capabilities.supportsSearch) {
       setEnableGoogleSearch(false);
     }
-
-    // Load saved code execution state only if supported, otherwise force disable
-    const savedCodeExec = localStorage.getItem('enableCodeExecution') === 'true';
-     if (capabilities.supportsCodeExecution) {
-       setEnableCodeExecution(savedCodeExec);
-     } else {
-       setEnableCodeExecution(false);
-     }
+    
+    if (!capabilities.supportsCodeExecution) {
+      setEnableCodeExecution(false);
+    }
 
     // Default thinking settings based on model, then check localStorage for overrides
     let modelDefaultThinking = false;
@@ -95,23 +90,8 @@ export function useAppSettings(initialSystemInstruction) {
     localStorage.setItem('maxOutputTokens', maxOutputTokens.toString());
   }, [maxOutputTokens]);
 
-  // Persist search setting only if the model supports it AND the setting is true
-  useEffect(() => {
-    if (modelCapabilities.supportsSearch) {
-      localStorage.setItem('enableGoogleSearch', enableGoogleSearch.toString());
-    } else {
-      localStorage.removeItem('enableGoogleSearch'); // Clean up if not supported
-    }
-  }, [enableGoogleSearch, modelCapabilities.supportsSearch]);
-
-  // Persist code execution setting only if the model supports it AND the setting is true
-  useEffect(() => {
-    if (modelCapabilities.supportsCodeExecution) {
-      localStorage.setItem('enableCodeExecution', enableCodeExecution.toString());
-    } else {
-      localStorage.removeItem('enableCodeExecution'); // Clean up if not supported
-    }
-  }, [enableCodeExecution, modelCapabilities.supportsCodeExecution]);
+  // Tool settings (enableGoogleSearch, enableCodeExecution) are no longer persisted to localStorage
+  // This ensures fresh user selection each time and prevents stale values from overriding user choice
 
   // Persist thinking setting only if the model supports it AND the setting is true
   useEffect(() => {

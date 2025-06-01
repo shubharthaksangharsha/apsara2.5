@@ -5,8 +5,11 @@ import ImageModal from './ImageModal';
 import StreamingApsaraLogo from './StreamingApsaraLogo';
 import { ClipboardCopy, ChevronDown, ChevronUp, BrainCircuit } from 'lucide-react'; // Added BrainCircuit
 
+// Backend URL for fetching file content
+const BACKEND_URL = 'http://localhost:9000';
+
 // Helper function to detect code blocks for specific styling
-// const isCodePart = (part) => part.executableCode || part.codeExecutionResult; // We'll handle this within the markdown components
+const isCodePart = (part) => part.executableCode || part.codeExecutionResult; // We'll handle this within the markdown components
 
 export default function ChatWindow({ convo, streamingModelMessageId, isLoading }) {
   const messagesEndRef = useRef(null);
@@ -21,8 +24,13 @@ export default function ChatWindow({ convo, streamingModelMessageId, isLoading }
   }, [convo?.messages]); // Add safe navigation
 
   const handleImageClick = (imageData) => {
-    setSelectedImageData(imageData);
-    setModalOpen(true);
+    // Ensure we have a valid imageData object before opening modal
+    if (imageData && (imageData.data || imageData.uri)) {
+      setSelectedImageData(imageData);
+      setModalOpen(true);
+    } else {
+      console.error('Invalid image data for modal:', imageData);
+    }
   };
 
   const closeModal = () => {
@@ -188,6 +196,7 @@ export default function ChatWindow({ convo, streamingModelMessageId, isLoading }
             <React.Fragment key={msg.id || idx}>
               <div className="flex justify-end group">
                 <div className="max-w-[80%] rounded-2xl px-4 py-3 break-words bg-indigo-500 text-white shadow-md">
+                  {/* Text parts */}
                   {(msg.parts || []).map((part, i) =>
                     part.text ? (
                       <div key={`${msg.id || idx}-text-${i}`} className="whitespace-pre-wrap">
@@ -197,6 +206,46 @@ export default function ChatWindow({ convo, streamingModelMessageId, isLoading }
                   )}
                   {!msg.parts && msg.text && (
                     <div className="whitespace-pre-wrap">{msg.text}</div>
+                  )}
+                  
+                  {/* Image attachments */}
+                  {msg.parts && msg.parts.some(part => part.fileData && part.fileData.mimeType?.startsWith('image/')) && (
+                    <div className="mt-2 pt-2 border-t border-indigo-400 border-opacity-50">
+                      <div className="text-xs text-indigo-200 mb-1">Attached images:</div>
+                      <div className="flex flex-wrap gap-2">
+                        {msg.parts.filter(part => part.fileData && part.fileData.mimeType?.startsWith('image/')).map((part, i) => (
+                          <div 
+                            key={`${msg.id || idx}-img-${i}`} 
+                            className="relative bg-white p-1 rounded cursor-pointer hover:ring-2 hover:ring-white transition-all"
+                            onClick={() => {
+                              // Only trigger click handler if we have valid fileData
+                              if (part.fileData && (part.fileData.fileUri || part.fileData.data)) {
+                                handleImageClick({
+                                  mimeType: part.fileData.mimeType,
+                                  // Use uri directly or create a display URL
+                                  uri: part.fileData.fileUri
+                                });
+                              }
+                            }}
+                            title="Click to view full image"
+                          >
+                            <img 
+                              src={part.fileData.fileUri ? (
+                                part.fileData.fileUri.includes('generativelanguage.googleapis.com') 
+                                  ? `${BACKEND_URL}/files/content?fileId=${part.fileData.fileUri.split('/').pop()}` 
+                                  : `${BACKEND_URL}/files/content?uri=${encodeURIComponent(part.fileData.fileUri)}`
+                              ) : 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyIgZmlsbC1ydWxlPSJldmVub2RkIiBjbGlwLXJ1bGU9ImV2ZW5vZGQiPjxwYXRoIGQ9Ik0yNCAyNGgtMjR2LTI0aDI0djI0em0tMTEtN2gtM3YtOGgzdjh6bTUtNmgtM3Y2aDN2LTZ6bS0xMCAyaC0zdjRoM3YtNHoiLz48L3N2Zz4='}
+                              alt="Uploaded image"
+                              className="w-16 h-16 object-cover rounded"
+                              onError={(e) => {
+                                console.error('Error loading image:', e);
+                                e.target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyIgZmlsbC1ydWxlPSJldmVub2RkIiBjbGlwLXJ1bGU9ImV2ZW5vZGQiPjxwYXRoIGQ9Ik0yNCAyNGgtMjR2LTI0aDI0djI0em0tMTEtN2gtM3YtOGgzdjh6bTUtNmgtM3Y2aDN2LTZ6bS0xMCAyaC0zdjRoM3YtNHoiLz48L3N2Zz4=';
+                              }}
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    </div>
                   )}
                 </div>
               </div>

@@ -31,7 +31,7 @@ export function useChatApi({
     // Determine effective tool state: prioritize overrides, then hook state
     const useSearch = overrideEnableSearch !== null ? overrideEnableSearch : enableGoogleSearch;
     const useCodeExec = overrideEnableCodeExec !== null ? overrideEnableCodeExec : enableCodeExecution;
-    // console.log("applyConfigSettings - Effective Tools:", { useSearch, useCodeExec }); // Debug log
+    console.log("[applyConfigSettings] Effective Tools:", { useSearch, useCodeExec }); // Debug log
 
     if (!isImageGenCall && isSystemInstructionApplicable) {
       config.systemInstruction = systemInstruction;
@@ -39,24 +39,30 @@ export function useChatApi({
       delete config.systemInstruction;
     }
 
-    // Initialize tools array
+    // Initialize tools array - empty by default
     config.tools = [];
+    
+    // Tell backend to never add default tools
+    config.disableDefaultTools = true;
+    
+    // Only set Google Search flag if actually using search
+    if (useSearch) {
+      config.enableGoogleSearch = true;
+    }
 
     // Tool configuration - Enforce mutual exclusivity based on priority
     if (!isImageGenCall) {
       if (useSearch) {
         // Priority 1: Google Search - If enabled, this MUST be the only tool
         config.tools = [{ googleSearch: {} }];
+        console.log("[applyConfigSettings] Adding Google Search tool");
       } else if (useCodeExec) {
         // Priority 2: Code Execution - If enabled (and search is off), this is the only tool
         config.tools = [{ codeExecution: {} }];
+        console.log("[applyConfigSettings] Adding Code Execution tool");
       } else {
-        // Priority 3 (Future): Function Calling / Custom Tools
-        // If neither search nor code execution is enabled, other tools *could* be added here.
-        // Example (if you add function calling later):
-        // if (enableFunctionCalling && functionDeclarations?.length > 0) {
-        //    config.tools = [{ functionDeclarations: functionDeclarations }];
-        // }
+        // No tools selected - leave tools as empty array
+        console.log("[applyConfigSettings] No tools selected");
       }
     }
 
@@ -74,8 +80,15 @@ export function useChatApi({
       }
     }
 
-    if (config.tools.length === 0) delete config.tools;
-    if (Object.keys(config.generationConfig).length === 0) delete config.generationConfig;
+    // Remove empty tools array to prevent API issues
+    if (!config.tools || config.tools.length === 0) {
+      delete config.tools;
+      console.log("[applyConfigSettings] Removed empty tools array from request");
+    }
+    
+    if (Object.keys(config.generationConfig).length === 0) {
+      delete config.generationConfig;
+    }
 
     return config;
   };
@@ -221,7 +234,7 @@ export function useChatApi({
     }
   };
 
-  const startStreamChat = async (text, targetConvoId = null, initialConvoData = null, targetModelId = null, overrideEnableSearch = null, overrideEnableCodeExec = null) => {
+  const startStreamChat = async (text, targetConvoId = null, initialConvoData = null, targetModelId = null, overrideEnableSearch = null, overrideEnableCodeExec = null, explicitFiles = null) => {
     const convoIdToUse = targetConvoId || activeConvoId;
     if (!convoIdToUse && !initialConvoData) {
       console.error("useChatApi: No active stream conversation and no initial data provided.");
@@ -233,9 +246,17 @@ export function useChatApi({
     let tempModelMessageId = null; // Temporary ID for the message being built
     let userMessageParts = [{ text }]; // Start with the text part
 
-    // Append file parts if any files are uploaded
-    if (uploadedFiles && uploadedFiles.length > 0) {
-      uploadedFiles.forEach(file => {
+    // Determine which files to use - either explicit files passed in or default hook-managed files
+    const filesToUse = explicitFiles || uploadedFiles;
+    
+    // Append file parts if any files are available
+    if (filesToUse && filesToUse.length > 0) {
+      console.log('[useChatApi Stream] Using files:', {
+        source: explicitFiles ? 'explicitFiles parameter' : 'uploadedFiles from hook',
+        count: filesToUse.length
+      });
+      
+      filesToUse.forEach(file => {
         if (file.uri && file.mimetype) {
           userMessageParts.push({
             fileData: {
@@ -301,11 +322,28 @@ export function useChatApi({
        // --- API Call ---
        const modelToUse = targetModelId || currentModel;
        const isImageGen = modelToUse === 'gemini-2.0-flash-preview-image-generation';
-      const baseRequestBody = {
-        contents: turns,
+       console.log('[startStreamChat] Creating config with tooling params:', {
+         enableGoogleSearch, enableCodeExecution,
+         overrideEnableSearch, overrideEnableCodeExec
+       });
+       
+       const config = applyConfigSettings({}, isImageGen, overrideEnableSearch, overrideEnableCodeExec);
+       
+       console.log('[startStreamChat] Config after applyConfigSettings:', {
+         hasTools: !!config.tools,
+         toolsLength: config.tools ? config.tools.length : 0,
+         toolsContent: config.tools ? JSON.stringify(config.tools) : 'none',
+         disableDefaultTools: config.disableDefaultTools,
+         enableGoogleSearch: config.enableGoogleSearch
+       });
+       
+       const baseRequestBody = {
+         contents: turns,
          modelId: modelToUse,
-         config: applyConfigSettings({}, isImageGen, overrideEnableSearch, overrideEnableCodeExec),
-      };
+         config: config
+       };
+       
+       console.log('[startStreamChat] Final request body tools:', baseRequestBody.config.tools);
 
       // --- API Call for Streaming ---
       const response = await fetch(`${BACKEND_URL}/chat/stream`, { // <-- CORRECTED URL
@@ -391,7 +429,8 @@ export function useChatApi({
                               }
                               
                               // Preserve the thought property ONLY if newPart is being created
-                              if (newPart && data.thought) {
+                              // AND it's not an executableCode or codeExecutionResult part.
+                              if (newPart && data.thought && !newPart.executableCode && !newPart.codeExecutionResult) {
                                   newPart.thought = true; 
                               }
 

@@ -222,13 +222,29 @@ function buildApiRequest(body) {
       const { responseMimeType,responseSchema,numberOfImages,aspectRatio,personGeneration,...std } = gc;
       if (Object.keys(std).length) apiRequest.config.generationConfig = std;
     }
-    // Merge client tools
-    apiRequest.config.tools = [];
-    if (config.tools) apiRequest.config.tools.push(...config.tools);
-    // Grounding
-    if (config.enableGoogleSearch) {
-      apiRequest.config.tools.push({ googleSearch:{} });
-    } else if (config.enableGoogleSearchRetrieval) {
+    // Clear existing tools configuration
+    delete apiRequest.config.tools;
+    
+    // Only set tools configuration if we have tools or explicit tool preferences
+    if (config.tools && Array.isArray(config.tools)) {
+      // 1. If client explicitly sent tools array, use it exactly as is
+      if (config.tools.length > 0) {
+        console.log('[buildApiRequest] Using explicitly provided tools:', JSON.stringify(config.tools));
+        apiRequest.config.tools = [...config.tools];
+      } 
+      // 2. Empty tools array means client wants no tools
+      else {
+        console.log('[buildApiRequest] Client sent empty tools array - no tools will be used');
+        // No tools needed, leave apiRequest.config.tools unset
+      }
+    }
+    // If we don't have a tools array but have Google Search flag, add it
+    else if (config.enableGoogleSearch === true) {
+      console.log('[buildApiRequest] Adding Google Search based on flag');
+      apiRequest.config.tools = [{ googleSearch:{} }];
+    }
+    // If we don't have a tools array but have Google Search Retrieval flag, add it
+    else if (config.enableGoogleSearchRetrieval === true) {
       const t = { googleSearchRetrieval:{} };
       if (config.dynamicRetrievalThreshold != null) {
         const thr = parseFloat(config.dynamicRetrievalThreshold);
@@ -236,9 +252,17 @@ function buildApiRequest(body) {
           dynamicThreshold:thr, mode:DynamicRetrievalConfigMode.MODE_DYNAMIC
         };
       }
-      apiRequest.config.tools.push(t);
+      apiRequest.config.tools = [t];
+      console.log('[buildApiRequest] Adding Google Search Retrieval based on flag');
     }
-    if (!apiRequest.config.tools.length) delete apiRequest.config.tools;
+    
+    // Log the final tools configuration for debugging
+    console.log('[buildApiRequest] Final tools config:', apiRequest.config.tools ? JSON.stringify(apiRequest.config.tools) : 'No tools');
+    
+    // Don't send empty tools array to the API
+    if (apiRequest.config.tools && apiRequest.config.tools.length === 0) {
+      delete apiRequest.config.tools;
+    }
     // Tool‐calling config
     if (config.toolConfig) {
       const m = config.toolConfig.functionCallingConfig?.mode;
@@ -360,6 +384,56 @@ app.post('/files',upload.single('file'), async (req,res)=>{
 });
 app.get('/files',(req,res)=>res.json({ files:uploadedFiles }));
 
+// Add endpoint to fetch file content from Google File API
+app.get('/files/content', async (req, res) => {
+  try {
+    // Extract file ID from query parameters
+    const { fileId, uri } = req.query;
+    
+    if (!fileId && !uri) {
+      return res.status(400).json({ error: 'Either fileId or uri parameter is required' });
+    }
+    
+    let googleFileApiName;
+    
+    if (fileId) {
+      // If direct fileId is provided
+      googleFileApiName = fileId.startsWith('files/') ? fileId : `files/${fileId}`;
+      console.log(`[GET /files/content] Fetching content for file: ${googleFileApiName}`);
+    } else if (uri) {
+      // If full URI is provided, extract the fileId from the end
+      const uriParts = uri.split('/');
+      const extractedId = uriParts[uriParts.length - 1];
+      googleFileApiName = `files/${extractedId}`;
+      console.log(`[GET /files/content] Extracted ID from URI: ${extractedId}`);
+    }
+    
+    // Get file content from Google File API
+    const fileContent = await ai.files.getContent({ name: googleFileApiName });
+    
+    if (!fileContent || !fileContent.data) {
+      return res.status(404).json({ error: 'File content not found' });
+    }
+    
+    // Get file metadata to determine content type
+    const fileMetadata = await ai.files.get({ name: googleFileApiName });
+    
+    // Set appropriate content type
+    res.set('Content-Type', fileMetadata.mimeType || 'application/octet-stream');
+    res.set('Content-Disposition', `inline; filename="${fileMetadata.displayName || 'file'}"`); 
+    
+    // Send binary data directly
+    res.send(Buffer.from(fileContent.data));
+  } catch (error) {
+    console.error('[GET /files/content] Error fetching file content:', error);
+    res.status(500).json({ 
+      error: 'Error fetching file content',
+      details: error.message,
+      code: error.code
+    });
+  }
+});
+
 app.delete('/files/:fileId', async (req, res) => {
   const fileId = req.params.fileId; // This will be the Google File API name, e.g., "files/xxxxxxxx"
   console.log(`[DELETE /files] Request to delete file with Google Name: ${fileId}`);
@@ -477,7 +551,7 @@ app.post('/chat/stream', async (req, res) => {
         });
 
         const apiRequest = buildApiRequest(req.body);
-        // console.log(`[POST /chat/stream] Request to Google API (Model: ${modelId}):`, JSON.stringify(apiRequest, null, 2)); // Original console.log
+        console.log(`[POST /chat/stream] Request to Google API (Model: ${modelId}):`, JSON.stringify(apiRequest, null, 2)); // Original console.log
         const stream = await ai.models.generateContentStream(apiRequest);
 
     for await (const chunk of stream) {

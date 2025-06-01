@@ -9,14 +9,12 @@ import ChatWindow from './components/ChatWindow';
 import MessageInput from './components/MessageInput';
 import SettingsPanel from './components/SettingsPanel';
 import LivePopup from './components/LivePopup';
-import VideoStreamDisplay from './components/VideoStreamDisplay';
-import ScreenShareDisplay from './components/ScreenShareDisplay';
 import EmptyChatContent from './components/EmptyChatContent'; // Import the new component
 import FileUploadPopup from './components/FileUploadPopup';
-import FilePreviewBar from './components/FilePreviewBar'; // <-- Add this import
+import FilePreviewBar from './components/FilePreviewBar'; // <-- This is for general files
 import MapDisplay from './components/MapDisplay'; // <-- Import MapDisplay
-import ImageUploadButton from './components/ImageUploadButton'; // Assuming this path is correct
-import ImagePreviewBar from './components/ImagePreviewBar';   // Assuming this path is correct
+// import ImageUploadButton from './components/ImageUploadButton'; // Assuming this path is correct
+// import ImagePreviewBar from './components/ImagePreviewBar';   // Assuming this path is correct
 
 // Import the custom hook
 import { useTheme } from './hooks/useTheme';
@@ -121,20 +119,7 @@ export default function App() {
     removeFile,
   } = useFileUpload(initialFiles); 
 
-  // Handlers for selected prompt images
-  // const handleSelectImagesForPrompt = (newImageFiles) => { // REMOVED THIS BLOCK
-  //   // Basic validation: ensure they are image files (optional, can be done in ImageUploadButton too)
-  //   const imageFiles = Array.from(newImageFiles).filter(file => file.type.startsWith('image/'));
-  //   setSelectedImagesForPrompt(prevImages => [...prevImages, ...imageFiles]);
-  // };
 
-  // const handleRemoveSelectedImage = (imageToRemove) => { // REMOVED THIS BLOCK
-  //   setSelectedImagesForPrompt(prevImages => prevImages.filter(image => image !== imageToRemove));
-  // };
-
-  // const clearSelectedImagesForPrompt = () => { // REMOVED THIS BLOCK
-  //   setSelectedImagesForPrompt([]);
-  // };
 
   const {
     isLoading: isChatLoading, 
@@ -151,6 +136,16 @@ export default function App() {
       setPromptImageUploadStatus({}); // Clear status when chat API clears files
     },
   });
+  
+  // Clear file attachments on page load/reload
+  useEffect(() => {
+    // Clear any existing file attachments when the component mounts (page loads/reloads)
+    setFiles([]);
+    setInitialFiles([]); // Also clear initialFiles to prevent persistence
+    setSelectedImagesForPrompt([]);
+    setPromptImageUploadStatus({});
+    console.log('[App.jsx] Cleared file attachments on page load/reload');
+  }, []); // Empty dependency array means this runs once on mount
 
   // Add a general loading state for App component operations like image uploading
   const [isAppLoading, setIsAppLoading] = useState(false);
@@ -229,25 +224,40 @@ export default function App() {
       img => img.id && promptImageUploadStatus[img.name] === 'success'
     );
 
+    // Filter filesForMessage to include only successfully uploaded prompt images
+    // AND ensure these are also present in the general 'files' state if they were added there.
     const filesForMessage = files.filter(f => 
         successfullyUploadedImages.some(sImg => sImg.id === f.id)
     );
     
     console.log('[App.jsx] Sending with files:', filesForMessage);
 
+    // Pass filesForMessage to the backend
     await originalSendToBackend(text, targetConvoId, initialConvoData, targetModelId, filesForMessage);
     
-    clearAndRevokeImages(successfullyUploadedImages); // Use the new helper
-    setSelectedImagesForPrompt(prevImages => prevImages.filter(img => !successfullyUploadedImages.includes(img)));
+    // Clear and revoke URLs for the images that were successfully sent
+    clearAndRevokeImages(successfullyUploadedImages); 
+
+    // Remove sent images from selectedImagesForPrompt
+    setSelectedImagesForPrompt(prevImages => prevImages.filter(img => 
+        !successfullyUploadedImages.some(sImg => sImg.name === img.name) // Match by name, as ID might be transient before backend confirmation
+    ));
+
+    // Update promptImageUploadStatus: remove entries for successfully sent images
     setPromptImageUploadStatus(prevStatus => {
         const newStatus = { ...prevStatus };
         successfullyUploadedImages.forEach(img => {
-            if (newStatus[img.name] === 'success') {
+            if (newStatus[img.name] === 'success' || newStatus[img.name] === 'uploading') {
                 delete newStatus[img.name];
             }
         });
         return newStatus;
     });
+
+    // Remove these images from the main `files` state managed by useFileUpload
+    setFiles(prevFiles => prevFiles.filter(f => 
+        !successfullyUploadedImages.some(sImg => sImg.id === f.id) // Assuming sImg.id matches f.id for prompt images
+    ));
 
     setIsAppLoading(false); 
   };
@@ -265,19 +275,26 @@ export default function App() {
 
     console.log('[App.jsx] Streaming with files:', filesForMessage);
 
-    await originalStartStreamChat(text, targetConvoId, initialConvoData, targetModelId, filesForMessage);
+    // Pass null for tool override parameters, then the files
+    await originalStartStreamChat(text, targetConvoId, initialConvoData, targetModelId, null, null, filesForMessage);
 
-    clearAndRevokeImages(successfullyUploadedImages); // Use the new helper
-    setSelectedImagesForPrompt(prevImages => prevImages.filter(img => !successfullyUploadedImages.includes(img)));
+    clearAndRevokeImages(successfullyUploadedImages); 
+    setSelectedImagesForPrompt(prevImages => prevImages.filter(img => 
+        !successfullyUploadedImages.some(sImg => sImg.name === img.name)
+    ));
     setPromptImageUploadStatus(prevStatus => {
         const newStatus = { ...prevStatus };
         successfullyUploadedImages.forEach(img => {
-            if (newStatus[img.name] === 'success') {
+            if (newStatus[img.name] === 'success' || newStatus[img.name] === 'uploading') {
                 delete newStatus[img.name];
             }
         });
         return newStatus;
     });
+    setFiles(prevFiles => prevFiles.filter(f => 
+        !successfullyUploadedImages.some(sImg => sImg.id === f.id)
+    ));
+
     setIsAppLoading(false);
   };
 
@@ -307,74 +324,7 @@ export default function App() {
   const [slidingWindowEnabled, setSlidingWindowEnabled] = useState(true); // default ON
   const [slidingWindowTokens, setSlidingWindowTokens] = useState(4000); // default 4000
 
-  // REMOVE THE REDUNDANT FUNCTION DEFINITIONS BELOW
-  /*
-  // Wrapped sendToBackend to handle prompt image uploads
-  const sendToBackend = async (text, targetConvoId = null, initialConvoData = null, targetModelId = null) => {
-    setIsAppLoading(true); // Indicate app is busy for the send operation
-
-    // Filter selectedImagesForPrompt for those that are successfully uploaded (have an id and success status)
-    const successfullyUploadedImages = selectedImagesForPrompt.filter(
-      img => img.id && promptImageUploadStatus[img.name] === 'success'
-    );
-
-    // The `files` state in `useFileUpload` should already contain these successfully uploaded files because
-    // `handleSelectImagesForPrompt` calls `setFiles` after each successful upload from `uploadFile`.
-    // We just need to ensure we're passing the correct subset of `files` that correspond to the current prompt's images.
-    const filesForMessage = files.filter(f => 
-        successfullyUploadedImages.some(sImg => sImg.id === f.id)
-    );
-    
-    console.log('[App.jsx] Sending with files:', filesForMessage);
-
-    await originalSendToBackend(text, targetConvoId, initialConvoData, targetModelId, filesForMessage);
-    
-    // Clear only the successfully sent images from the selection
-    setSelectedImagesForPrompt(prevImages => prevImages.filter(img => promptImageUploadStatus[img.name] !== 'success'));
-    // Corresponding statuses can be cleared or left if we want to keep error states visible
-    // For simplicity, let's clear statuses of successful ones
-    setPromptImageUploadStatus(prevStatus => {
-        const newStatus = { ...prevStatus };
-        successfullyUploadedImages.forEach(img => {
-            if (newStatus[img.name] === 'success') {
-                delete newStatus[img.name];
-            }
-        });
-        return newStatus;
-    });
-
-    setIsAppLoading(false); 
-  };
-
-  const startStreamChat = async (text, targetConvoId = null, initialConvoData = null, targetModelId = null) => {
-    setIsAppLoading(true);
-
-    const successfullyUploadedImages = selectedImagesForPrompt.filter(
-      img => img.id && promptImageUploadStatus[img.name] === 'success'
-    );
-
-    const filesForMessage = files.filter(f => 
-        successfullyUploadedImages.some(sImg => sImg.id === f.id)
-    );
-
-    console.log('[App.jsx] Streaming with files:', filesForMessage);
-
-    await originalStartStreamChat(text, targetConvoId, initialConvoData, targetModelId, filesForMessage);
-
-    setSelectedImagesForPrompt(prevImages => prevImages.filter(img => promptImageUploadStatus[img.name] !== 'success'));
-    setPromptImageUploadStatus(prevStatus => {
-        const newStatus = { ...prevStatus };
-        successfullyUploadedImages.forEach(img => {
-            if (newStatus[img.name] === 'success') {
-                delete newStatus[img.name];
-            }
-        });
-        return newStatus;
-    });
-    setIsAppLoading(false);
-  };
-  */
-
+  
   const {
     // Live State
     liveMessages,
@@ -724,8 +674,11 @@ export default function App() {
         
         {/* Bottom Flex Container for File & Input */}
         <div className="w-full p-2 sm:p-3 border-t border-gray-200 dark:border-gray-700 flex flex-col gap-2 relative flex-shrink-0 bg-white dark:bg-gray-800">
-          {/* File Preview Bar */}
-          <FilePreviewBar files={files} onRemoveFile={removeFile} />
+          {/* File Preview Bar - Conditionally render */}
+          {files && files.length > 0 && 
+           (files.some(f => !selectedImagesForPrompt.find(sImg => sImg.id === f.id && promptImageUploadStatus[sImg.name] === 'success')) || selectedImagesForPrompt.length === 0) && (
+            <FilePreviewBar files={files} onRemoveFile={removeFile} />
+          )}
           
           {/* Action Buttons Row - NEW */}
           <div className="flex justify-between items-center mb-1">
