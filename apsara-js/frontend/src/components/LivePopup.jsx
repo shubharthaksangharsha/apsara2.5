@@ -1,11 +1,23 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { MessageSquare, X, Send, Mic, MicOff, Video, VideoOff, ScreenShare, ScreenShareOff, ClipboardCopy, Settings as SettingsIcon, Paperclip, Info, MapPin, Code2, Terminal, CalendarDays, Users, Sun, ChevronDown, ChevronUp, Volume2, RefreshCw, PlusCircle, Calendar as CalendarIcon, Clock, AudioLines, Save, FolderOpen, Play } from 'lucide-react';
+import { MessageSquare, X, Send, Mic, MicOff, Video, VideoOff, ScreenShare, ScreenShareOff, ClipboardCopy, Settings as SettingsIcon, Paperclip, Info, MapPin, Code2, Terminal, CalendarDays, Users, Sun, ChevronDown, ChevronUp, Volume2, RefreshCw, PlusCircle, Calendar as CalendarIcon, Clock, AudioLines, Save, FolderOpen, Play, HelpCircle } from 'lucide-react';
 import ModelSelector from './ModelSelector';
 import VideoStreamDisplay from './VideoStreamDisplay';
 import ScreenShareDisplay from './ScreenShareDisplay';
 import MapDisplay from './MapDisplay';
 import SavedSessionsPanel from './SavedSessionsPanel';
 import { saveSession } from '../utils/liveSessionStorage';
+
+// Simple tooltip component
+const Tooltip = ({ children, text, position = 'top' }) => {
+  return (
+    <div className="relative inline-block">
+      {children}
+      <div className={`absolute z-50 whitespace-nowrap bg-gray-800 text-white text-xs rounded px-2 py-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none ${position === 'right' ? 'left-full ml-2 top-1/2 -translate-y-1/2' : 'bottom-full left-1/2 -translate-x-1/2 mb-1'}`}>
+        {text}
+      </div>
+    </div>
+  );
+};
 
 // Helper to render message content for CHAT tab specifically
 const renderChatMessageContent = (msg) => {
@@ -187,7 +199,7 @@ export default function LivePopup({
   // Handlers from App.jsx
   onVoiceChange, 
   onModalityChange, 
-  onSystemInstructionChange, // Should accept the new value
+  onSystemInstructionChange, 
   onClose, 
   onStartSession, 
   onEndSession, 
@@ -209,10 +221,15 @@ export default function LivePopup({
   onStartWithMainContext, // NEW: Handler for starting with main chat context
   startedWithMainContext = false, // NEW: Flag to indicate if started with main context
   setSessionResumeHandle, // NEW: Added to handle session resume
+  onNativeAudioFeatureChange, // NEW: Callback for when native audio feature selection changes
+  nativeAudioFeature, // CRITICAL FIX: Add nativeAudioFeature as a prop, no longer using local state
+  mediaResolution, // NEW: Media resolution setting from App.jsx
+  onMediaResolutionChange // NEW: Callback for when media resolution changes
 }) {
   const [inputText, setInputText] = useState('');
   const messagesEndRef = useRef(null);
-  // Local state for temp system instruction edit within the popup
+  // Local state 
+  const textAreaRef = useRef(null);
   const [tempSystemInstruction, setTempSystemInstruction] = useState(liveSystemInstruction);
   const [copiedContent, setCopiedContent] = useState(null);
   const [showCameraSelector, setShowCameraSelector] = useState(false);
@@ -258,6 +275,8 @@ export default function LivePopup({
       onGetVideoInputDevices();
     }
   }, [onGetVideoInputDevices, connectionStatus, isSessionActive]);
+
+  // We'll reimplement native audio feature selection properly
 
   // Keep track of code content length for potential future use
   const prevCodeContentLengthRef = useRef(0);
@@ -967,37 +986,154 @@ export default function LivePopup({
                 </div>
                 {(liveModality === 'AUDIO' || liveModality === 'AUDIO_TEXT') && (
                   <div>
-                    <label htmlFor="liveVoiceSelect" className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">AI Voice</label>
-                    <select
-                      id="liveVoiceSelect" value={currentVoice} onChange={(e) => onVoiceChange(e.target.value)}
-                      className="w-full p-1.5 sm:p-2 border rounded-md text-xs bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 focus:ring-1 focus:ring-indigo-400"
-                    >
-                      {voices.length > 0 ? voices.map(v => (<option key={v} value={v}>{v}</option>)) : <option disabled>Loading voices...</option>}
-                    </select>
+                    <div className="flex justify-between items-center mb-1">
+                      <label htmlFor="liveVoiceSelect" className="block text-xs font-medium text-gray-600 dark:text-gray-400">AI Voice</label>
+                      
+                      {/* Native audio indicator */}
+                      {selectedModel?.includes('native-audio') && (
+                        <span className="inline-flex items-center px-2 py-0.5 text-[10px] font-medium bg-green-100 text-green-800 dark:bg-green-800/40 dark:text-green-100 rounded-full">
+                          <Volume2 className="w-3 h-3 mr-1" />
+                          Native Audio
+                        </span>
+                      )}
+                    </div>
+                    
+                    <div className="relative">
+                      <select
+                        id="liveVoiceSelect" 
+                        value={currentVoice} 
+                        onChange={(e) => onVoiceChange(e.target.value)}
+                        className={`w-full p-1.5 sm:p-2 border rounded-md text-xs ${selectedModel?.includes('native-audio') ? 'border-green-300 dark:border-green-600' : 'border-gray-300 dark:border-gray-600'} bg-white dark:bg-gray-700 focus:ring-1 focus:ring-indigo-400`}
+                      >
+                        {voices.length > 0 ? voices.map(v => (
+                          <option key={v} value={v}>{v}</option>
+                        )) : <option disabled>Loading voices...</option>}
+                      </select>
+                      
+                      {selectedModel?.includes('native-audio') && (
+                        <div className="text-[10px] text-green-600 dark:text-green-400 mt-1">
+                          Enhanced quality with native audio processing
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )}
                 <div>
                   <label className="block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1">Advanced Settings</label>
-                  <div className="space-y-2 p-2 border rounded-md text-xs bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600"> 
+                   <div className="space-y-2 p-2 border rounded-md text-xs bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600"> 
                     <div>
                       <label className="block text-[10px] font-medium text-gray-600 dark:text-gray-400 mb-1">Media Resolution</label>
-                      <select className="w-full p-1 border rounded-md text-xs bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 focus:ring-1 focus:ring-indigo-400">
+                      <select 
+                        className="w-full p-1 border rounded-md text-xs bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 focus:ring-1 focus:ring-indigo-400"
+                        value={mediaResolution} 
+                        onChange={(e) => {
+                          console.log(` [LivePopup] User changed media resolution to: ${e.target.value}`);
+                          onMediaResolutionChange(e.target.value);
+                        }}
+                      >
                         {MEDIA_RESOLUTIONS.map(res => (
                           <option key={res.value} value={res.value}>{res.label}</option>
                         ))}
                       </select>
                     </div>
+                    
+                    {/* Native Audio Features Section */}
+                    {selectedModel?.includes('native-audio') && (
+                      <div className="mt-2 pt-2 border-t border-gray-200 dark:border-gray-600">
+                        <label className="block text-[10px] font-medium text-green-600 dark:text-green-400 mb-1">Native Audio Features</label>
+                        <p className="text-[9px] text-gray-500 dark:text-gray-400 mb-1">Select one feature or none (mutually exclusive)</p>
+                         
+                         {/* Affective Dialog */}
+                         <div className="flex items-center gap-1.5 pt-1">
+                           <input 
+                             type="radio" 
+                             id="affectiveDialogEnabled" 
+                             name="nativeAudioFeature"
+                             value="affectiveDialog"
+                             className="h-3 w-3 text-green-600 focus:ring-green-500" 
+                             checked={nativeAudioFeature === 'affectiveDialog'}
+                             onChange={() => {
+                               console.log(' [LivePopup] User selected: Affective Dialog');
+                               onNativeAudioFeatureChange('affectiveDialog');
+                             }}
+                           />
+                           <label htmlFor="affectiveDialogEnabled" className="text-xs text-gray-700 dark:text-gray-300 flex items-center">
+                             <span>Affective Dialog</span>
+                             <Tooltip text="AI adapts responses based on your tone and expression" position="right">
+                               <HelpCircle className="w-3 h-3 ml-1 text-gray-400" />
+                             </Tooltip>
+                           </label>
+                         </div>
+                         
+                         {/* Proactive Audio */}
+                         <div className="flex items-center gap-1.5 pt-1">
+                           <input 
+                             type="radio" 
+                             id="proactiveAudioEnabled" 
+                             name="nativeAudioFeature"
+                             value="proactiveAudio"
+                             className="h-3 w-3 text-green-600 focus:ring-green-500" 
+                             checked={nativeAudioFeature === 'proactiveAudio'}
+                             onChange={() => {
+                               console.log(' [LivePopup] User selected: Proactive Audio');
+                               onNativeAudioFeatureChange('proactiveAudio');
+                             }}
+                           />
+                           <label htmlFor="proactiveAudioEnabled" className="text-xs text-gray-700 dark:text-gray-300 flex items-center">
+                             <span>Proactive Audio</span>
+                             <Tooltip text="AI may not respond if your input isn't relevant" position="right">
+                               <HelpCircle className="w-3 h-3 ml-1 text-gray-400" />
+                             </Tooltip>
+                           </label>
+                         </div>
+                         
+                         {/* Turn off button for native audio features */}
+                         <div className="mt-2 pt-1 border-t border-gray-200 dark:border-gray-700">
+                           <button 
+                             className={`text-xs px-2 py-1 rounded ${nativeAudioFeature === 'none' ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' : 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300'}`}
+                             onClick={() => {
+                               const newValue = nativeAudioFeature === 'none' ? 'affectiveDialog' : 'none';
+                               console.log(` [LivePopup] User ${newValue === 'none' ? 'turned OFF' : 'turned ON'} native audio features`);
+                               onNativeAudioFeatureChange(newValue);
+                             }}
+                           >
+                             {nativeAudioFeature === 'none' ? 'Native Audio Features: OFF' : 'Turn Features OFF'}
+                           </button>
+                         </div>
+                         
+                         {/* VAD Mode Selection */}
+                         <div className="mt-1">
+                           <label className="block text-[10px] font-medium text-gray-600 dark:text-gray-400">Voice Activity Detection</label>
+                           <select 
+                             className="w-full p-1 border rounded-md text-xs bg-white dark:bg-gray-700 border-green-300 dark:border-green-600 focus:ring-1 focus:ring-green-400"
+                             defaultValue="AUTO"
+                             disabled={true}
+                           >
+                             <option value="AUTO">Auto (Default)</option>
+                             <option value="MANUAL">Manual</option>
+                             <option value="HYBRID">Hybrid</option>
+                           </select>
+                           <div className="text-[9px] text-gray-500 dark:text-gray-400 mt-0.5">
+                             Determines how the system detects when you're done speaking
+                           </div>
+                         </div>
+                       </div>
+                     )}
+                    
                     <div className="flex items-center gap-1.5 pt-1">
                       <input type="checkbox" id="transcriptionEnabled" className="h-3 w-3 text-indigo-600 focus:ring-indigo-500" checked={transcriptionEnabled} onChange={e => setTranscriptionEnabled(e.target.checked)} />
                       <label htmlFor="transcriptionEnabled" className="text-xs text-gray-700 dark:text-gray-300">Enable Transcription</label>
                     </div>
+                    
                     <div className="flex items-center gap-2 pt-1">
                       <input type="checkbox" id="slidingWindowEnabled" className="h-3 w-3 text-indigo-600 focus:ring-indigo-500" checked={slidingWindowEnabled} onChange={e => setSlidingWindowEnabled(e.target.checked)} />
                       <label htmlFor="slidingWindowEnabled" className="text-xs text-gray-700 dark:text-gray-300">Enable Sliding Window Compression</label>
                       {slidingWindowEnabled && (
-                        <input type="number" min="1000" max="16000" step="100" value={slidingWindowTokens} onChange={e => setSlidingWindowTokens(Number(e.target.value))} className="ml-2 w-16 p-1 border rounded text-xs bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600" />
+                        <div className="flex items-center">
+                          <input type="number" min="1000" max="16000" step="100" value={slidingWindowTokens} onChange={e => setSlidingWindowTokens(Number(e.target.value))} className="ml-2 w-16 p-1 border rounded text-xs bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600" />
+                          <span className="text-xs text-gray-500 ml-1">Trigger Tokens</span>
+                        </div>
                       )}
-                      {slidingWindowEnabled && <span className="text-xs text-gray-500 ml-1">Trigger Tokens</span>}
                     </div>
                   </div>
                 </div>
@@ -1280,13 +1416,13 @@ export default function LivePopup({
                   >
                     Cancel
                   </button>
-              <button
+                  <button
                     type="submit"
                     disabled={connectionStatus !== 'connected'}
                     className="w-full sm:w-auto px-3 py-1.5 sm:px-4 sm:py-2 rounded-md text-xs sm:text-sm font-medium text-white bg-green-600 hover:bg-green-700 transition-colors disabled:opacity-50"
-              >
+                  >
                     Create Event
-              </button>
+                  </button>
                 </div>
               </form>
             </div>

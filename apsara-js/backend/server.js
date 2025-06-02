@@ -319,7 +319,47 @@ const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 const availableModels = ["gemini-2.0-flash","gemini-2.0-pro","gemini-1.5-flash","gemini-1.5-pro","imagen-3.0-generate-002"];
 
 // --- Available Live Models ---
-const availableLiveModels = [
+// Cache for models with TTL
+let liveModelsCache = {
+  models: null,
+  timestamp: 0,
+  ttl: 10 * 60 * 1000 // 10 minutes cache TTL
+};
+
+// Define model-specific tool capabilities
+const MODEL_TOOL_CAPABILITIES = {
+  'gemini-2.0-flash-live-001': {
+    search: true,     // Google Search
+    functions: true,  // Function calling
+    code: true,       // Code execution
+    url: true         // URL context
+  },
+  'gemini-2.5-flash-preview-native-audio-dialog': {
+    search: true,     // Google Search
+    functions: true,  // Function calling
+    code: false,      // No code execution
+    url: false        // No URL context
+  },
+  'gemini-2.5-flash-exp-native-audio-thinking-dialog': {
+    search: true,     // Google Search only
+    functions: false, // No function calling
+    code: false,      // No code execution
+    url: false        // No URL context
+  }
+};
+
+// Helper function to get tool capabilities for a model
+function getModelToolCapabilities(modelId) {
+  return MODEL_TOOL_CAPABILITIES[modelId] || {
+    search: true,     // Default to basic search only
+    functions: false,
+    code: false,
+    url: false
+  };
+}
+
+// Default models as fallback
+const DEFAULT_LIVE_MODELS = [
   {
     id: 'gemini-2.0-flash-live-001',
     name: 'Gemini 2.0 Flash Live',
@@ -342,6 +382,41 @@ const availableLiveModels = [
     isDefault: false
   }
 ];
+
+// Function to fetch models from Google Gemini API
+async function fetchLiveModels() {
+  try {
+    // Check if we have a valid cache
+    const now = Date.now();
+    if (liveModelsCache.models && (now - liveModelsCache.timestamp < liveModelsCache.ttl)) {
+      console.log('[Models] Returning cached live models');
+      return liveModelsCache.models;
+    }
+    
+    console.log('[Models] Fetching live models from Gemini API');
+    
+    // Simplified implementation for stability
+    // TODO: Replace with actual API call when endpoint is available
+    // Would be something like:
+    // const response = await fetch('https://generativelanguage.googleapis.com/v1/models?key=' + process.env.GEMINI_API_KEY);
+    // const data = await response.json();
+    // const liveModels = data.models.filter(model => model.name.includes('live'));
+    
+    // Simulate API latency
+    await new Promise(resolve => setTimeout(resolve, 500));
+    
+    // Cache the models
+    liveModelsCache.models = DEFAULT_LIVE_MODELS;
+    liveModelsCache.timestamp = now;
+    
+    console.log('[Models] Fetched and cached live models');
+    return DEFAULT_LIVE_MODELS;
+  } catch (error) {
+    console.error('[Models] Error fetching live models:', error);
+    // Always return fallback models on error
+    return DEFAULT_LIVE_MODELS;
+  }
+}
 
 // --- Chat Models (REST API) ---
 const chatModels = [
@@ -566,8 +641,53 @@ function buildApiRequest(body) {
 app.get('/health', (req,res)=>res.json({status:'ok'}));
 
 // Models endpoints
-app.get('/models',(req,res)=>res.json(chatModels));
-app.get('/models/live',(req,res)=>res.json(availableLiveModels));
+// Model endpoints - support both /api prefixed and legacy routes for compatibility
+// Chat models endpoint
+app.get('/api/models', (req, res) => {
+  try {
+    console.log('[GET /api/models] Serving chat models');
+    res.json(chatModels);
+  } catch (error) {
+    console.error('[GET /api/models] Error:', error);
+    res.status(500).json({ error: 'Failed to fetch chat models' });
+  }
+});
+
+// Live models endpoint with /api prefix
+app.get('/api/models/live', async (req, res) => {
+  try {
+    console.log('[GET /api/models/live] Fetching live models');
+    const models = await fetchLiveModels();
+    console.log('[GET /api/models/live] Success, sending', models.length, 'models');
+    res.json(models);
+  } catch (error) {
+    console.error('[GET /api/models/live] Error:', error);
+    res.status(500).json({ error: 'Failed to fetch live models' });
+  }
+});
+
+// Legacy endpoints (without /api prefix)
+app.get('/models', (req, res) => {
+  try {
+    console.log('[GET /models] Serving chat models (legacy endpoint)');
+    res.json(chatModels);
+  } catch (error) {
+    console.error('[GET /models] Error:', error);
+    res.status(500).json({ error: 'Failed to fetch chat models' });
+  }
+});
+
+app.get('/models/live', async (req, res) => {
+  try {
+    console.log('[GET /models/live] Fetching live models (legacy endpoint)');
+    const models = await fetchLiveModels();
+    console.log('[GET /models/live] Success, sending', models.length, 'models');
+    res.json(models);
+  } catch (error) {
+    console.error('[GET /models/live] Error:', error);
+    res.status(500).json({ error: 'Failed to fetch live models' });
+  }
+});
 
 app.get('/voices',(req,res)=>res.json({voices:availableVoices}));
 app.post('/voices/select',(req,res)=>{
@@ -1039,6 +1159,18 @@ async function handleLiveConnection(ws, req) {
    let isAuthenticated = false;
    let userTokens = null;
    
+   // Initialize variables for live session configuration
+   let requestedModality = 'AUDIO';
+   let requestedVoice = null;
+   let requestedSystemInstruction = null;
+   let transcriptionEnabled = true;
+   let slidingWindowEnabled = true;
+   let slidingWindowTokens = 4000;
+   let requestedModel = 'gemini-2.0-flash-live-001'; // Default model
+   let requestedResumeHandle = null;
+   let mediaResolution = "MEDIA_RESOLUTION_MEDIUM"; // Default media resolution
+   let requestedRealtimeConfig = {}; // Initialize empty realtime config
+   
    try {
        const cookies = req.headers.cookie;
        if (cookies) {
@@ -1068,35 +1200,23 @@ async function handleLiveConnection(ws, req) {
                }
            }
        }
-   } catch (cookieErr) {
-       console.error(`[Live Backend] Error processing WebSocket cookies: ${cookieErr}`);
-   }
-   
-   let requestedModality = Modality.TEXT;
-   let requestedVoice = availableVoices[0];
-   let requestedRealtimeConfig = {};
-   let requestedSystemInstruction = null;
-   let requestedResumeHandle = null; // For session resumption
 
-   let slidingWindowEnabled = true;
-   let slidingWindowTokens = 4000;
-   let transcriptionEnabled = true;
+    try {
+        const parsedUrl = new URL(req.url, `http://${req.headers.host}`);
+        console.log(`[Live Backend] Handling connection for URL: ${req.url}`);
 
-   let requestedModel = 'gemini-2.0-flash-live-001'; // Default model
-
-   try {
-       const parsedUrl = new URL(req.url, `http://${req.headers.host}`);
-       console.log(`[Live Backend] Handling connection for URL: ${req.url}`);
-
-       // --- Modality Parsing ---
-       const modalityParam = parsedUrl.searchParams.get('modalities')?.trim().toUpperCase();
-       if (modalityParam === 'AUDIO') {
-           requestedModality = Modality.AUDIO;
-           console.log("[Live Backend] Requested Modality: AUDIO");
-       } else { // Default to TEXT if not AUDIO or missing
+        // --- Modality Parsing ---
+        const modalityParam = parsedUrl.searchParams.get('modalities')?.trim().toUpperCase();
+        if (modalityParam === 'AUDIO') {
+            requestedModality = Modality.AUDIO;
+            console.log("[Live Backend] Requested Modality: AUDIO");
+        } else if (modalityParam === 'VIDEO') {
+            requestedModality = Modality.VIDEO;
+            console.log("[Live Backend] Requested Modality: VIDEO");
+        } else { // Default to TEXT if not AUDIO/VIDEO or missing
             requestedModality = Modality.TEXT;
             console.log("[Live Backend] Requested Modality: TEXT");
-       }
+        }
        // --------------------------
 
        // --- Voice Parsing ---
@@ -1128,11 +1248,74 @@ async function handleLiveConnection(ws, req) {
        }
        // ---------------------------------
 
-       // VAD Config (Example)
-       if (parsedUrl.searchParams.get('disablevad') === 'true' && requestedModality === Modality.AUDIO) {
-            requestedRealtimeConfig.disableAutomaticActivityDetection = true;
-            console.log("[Live Backend] Automatic activity detection (VAD) DISABLED via query param.");
-       }
+        // VAD Config (Example)
+        if (parsedUrl.searchParams.get('disablevad') === 'true' && requestedModality === Modality.AUDIO) {
+             requestedRealtimeConfig.disableAutomaticActivityDetection = true;
+             console.log("[Live Backend] Automatic activity detection (VAD) DISABLED via query param.");
+        }
+        
+        // --- Native Audio Features Detection ---
+        console.log(`[Live Backend] URL query params: ${req.url}`);
+        
+        // Extract all query parameters for debugging
+        const allParams = {};
+        for (const [key, value] of parsedUrl.searchParams.entries()) {
+            allParams[key] = value;
+        }
+        console.log('[Live Backend] All query parameters:', JSON.stringify(allParams));
+        
+        // IMPROVED: Enhanced native audio feature detection with better logging
+        // Explicitly check for the presence of each specific feature parameter
+        const hasAffectiveDialog = parsedUrl.searchParams.has('enableAffectiveDialog') && 
+                                  parsedUrl.searchParams.get('enableAffectiveDialog') === 'true';
+        const hasProactiveAudio = parsedUrl.searchParams.has('proactiveAudio') && 
+                                parsedUrl.searchParams.get('proactiveAudio') === 'true';
+        const hasGenericNativeAudio = parsedUrl.searchParams.has('nativeAudio') &&
+                                    parsedUrl.searchParams.get('nativeAudio') === 'true';
+        
+        // Print detailed parameter analysis
+        console.log('💾 [Live Backend] Native Audio Feature Parameters:');
+        console.log('  * enableAffectiveDialog =', parsedUrl.searchParams.get('enableAffectiveDialog'));
+        console.log('  * proactiveAudio =', parsedUrl.searchParams.get('proactiveAudio'));
+        console.log('  * nativeAudio =', parsedUrl.searchParams.get('nativeAudio'));
+        
+        // Check for media resolution parameter
+        mediaResolution = parsedUrl.searchParams.get('mediaResolution') || "MEDIA_RESOLUTION_MEDIUM";
+        console.log('  * mediaResolution =', mediaResolution);
+        
+        // Print feature status summary
+        console.log('📝 [Live Backend] Native Audio Feature Status:');
+        console.log('  * Affective Dialog:', hasAffectiveDialog ? 'ENABLED ✅' : 'DISABLED ❌');
+        console.log('  * Proactive Audio:', hasProactiveAudio ? 'ENABLED ✅' : 'DISABLED ❌');
+        console.log('  * Generic Native Audio:', hasGenericNativeAudio ? 'ENABLED ✅' : 'DISABLED ❌');
+        console.log('  * Media Resolution:', mediaResolution);
+        
+        // Validate for potential conflicts
+        if (hasAffectiveDialog && hasProactiveAudio) {
+            console.warn('⚠️ [Live Backend] WARNING: Both Affective Dialog and Proactive Audio are enabled!');
+            console.log('    This is a mutually exclusive configuration, behavior may be unpredictable');
+        }
+        
+        if ((hasAffectiveDialog || hasProactiveAudio) && hasGenericNativeAudio) {
+            console.warn('⚠️ [Live Backend] WARNING: Both specific feature and generic nativeAudio=true are set');
+            console.log('    This may cause conflicts - the model might ignore the specific feature');
+        }
+        
+        // Overall feature selection summary
+        if (hasAffectiveDialog) {
+            console.log('🔵 [Live Backend] Using AFFECTIVE DIALOG feature for this session');
+        } else if (hasProactiveAudio) {
+            console.log('🔵 [Live Backend] Using PROACTIVE AUDIO feature for this session');
+        } else if (hasGenericNativeAudio) {
+            console.log('🔵 [Live Backend] Using GENERIC NATIVE AUDIO for this session (no specific feature)');
+        } else {
+            console.log('ℹ️ [Live Backend] No native audio features detected for this session');
+        }
+        
+        // Additional validation to ensure feature selection is properly detected
+        if (hasAffectiveDialog && hasProactiveAudio) {
+            console.warn('⚠️ [Live Backend] WARNING: Both Affective Dialog and Proactive Audio enabled - these should be mutually exclusive');
+        }
 
        // --- Session Resumption Handle Parsing ---
        if (parsedUrl.searchParams.get('resumehandle')) {
@@ -1205,10 +1388,14 @@ async function handleLiveConnection(ws, req) {
        },
        // Only enable output audio transcription if enabled
        ...(transcriptionEnabled && { outputAudioTranscription: {} }),
-       // Set media resolution to medium by default
-       mediaResolution: "MEDIA_RESOLUTION_MEDIUM",
-        // --- Add Tools Configuration ---
-        tools: (function() {
+       // Use media resolution from URL parameter, fallback to medium if not specified
+       mediaResolution: mediaResolution,
+       // --- Add Tools Configuration based on model capabilities ---
+       tools: (function() {
+            // Get capabilities for the selected model
+            const capabilities = getModelToolCapabilities(requestedModel);
+            console.log(`[Live Backend] Model tool capabilities for ${requestedModel}:`, capabilities);
+            
             // Use the authentication status we extracted from cookies
             console.log(`[Live Backend] Authentication status for tools: ${isAuthenticated ? 'AUTHENTICATED' : 'NOT AUTHENTICATED'}`);
             if (isAuthenticated) {
@@ -1218,11 +1405,26 @@ async function handleLiveConnection(ws, req) {
                 console.log(`[Live Backend] User tokens missing, using basic tools only`);
             }
             
-            return [
-                { googleSearch: {} },        // Enable Google Search (native)
-                { codeExecution: {} },       // Enable Code Execution (native)
-                { functionDeclarations: getToolDeclarations(isAuthenticated) } // Authentication-aware tool declarations
-            ];
+            // Build tools array based on model capabilities
+            const toolsArray = [];
+            
+            // Add Google Search if supported by the model
+            if (capabilities.search) {
+                toolsArray.push({ googleSearch: {} });
+            }
+            
+            // Add Code Execution if supported by the model
+            if (capabilities.code) {
+                toolsArray.push({ codeExecution: {} });
+            }
+            
+            // Add Function declarations if supported by the model
+            if (capabilities.functions) {
+                toolsArray.push({ functionDeclarations: getToolDeclarations(isAuthenticated) });
+            }
+            
+            console.log(`[Live Backend] Configured tools for ${requestedModel}:`, toolsArray.map(t => Object.keys(t)[0]));
+            return toolsArray;
         })(),
    };
 
@@ -1569,7 +1771,14 @@ async function handleLiveConnection(ws, req) {
   });
 
   console.log(`[Live Backend] handleLiveConnection setup complete for <${sessionId}>.`);
-
+} catch (outerError) {
+    console.error('[Live Backend] Uncaught error in handleLiveConnection:', outerError);
+    try { 
+      if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
+        ws.close(1011, "Unexpected server error"); 
+      }
+    } catch(e){}
+  }
 } // --- End of handleLiveConnection ---
 
 // Start server

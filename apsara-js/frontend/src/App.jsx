@@ -392,6 +392,35 @@ export default function App() {
   const [transcriptionEnabled, setTranscriptionEnabled] = useState(true); // default ON
   const [slidingWindowEnabled, setSlidingWindowEnabled] = useState(true); // default ON
   const [slidingWindowTokens, setSlidingWindowTokens] = useState(4000); // default 4000
+  // Native audio feature state (source of truth)
+  const [nativeAudioFeature, setNativeAudioFeature] = useState('none');
+  // Media resolution state (source of truth)
+  const [mediaResolution, setMediaResolution] = useState('MEDIA_RESOLUTION_MEDIUM'); // default medium
+  
+  // Handler for updating native audio feature with validation and logging
+  const handleNativeAudioFeatureChange = useCallback((newValue) => {
+    // Validate the value
+    if (!['none', 'affectiveDialog', 'proactiveAudio'].includes(newValue)) {
+      console.error('❌ [App] Invalid native audio feature value:', newValue);
+      return;
+    }
+    
+    console.log('✅ [App] Setting nativeAudioFeature to:', newValue);
+    setNativeAudioFeature(newValue);
+  }, []);
+  
+  // Handler for updating media resolution with validation and logging
+  const handleMediaResolutionChange = useCallback((newValue) => {
+    // Validate the value
+    const validResolutions = ['MEDIA_RESOLUTION_LOW', 'MEDIA_RESOLUTION_MEDIUM', 'MEDIA_RESOLUTION_HIGH'];
+    if (!validResolutions.includes(newValue)) {
+      console.error('❌ [App] Invalid media resolution value:', newValue);
+      return;
+    }
+    
+    console.log('✅ [App] Setting mediaResolution to:', newValue);
+    setMediaResolution(newValue);
+  }, []);
 
   
   const {
@@ -441,6 +470,8 @@ export default function App() {
     transcriptionEnabled,
     slidingWindowEnabled,
     slidingWindowTokens,
+    nativeAudioFeature, // Use the state variable
+    mediaResolution, // Pass media resolution to useLiveSession
   });
 
   // Settings panel
@@ -883,6 +914,10 @@ export default function App() {
           currentSessionHandle={currentSessionHandle} // Pass the properly exposed value from useLiveSession hook
           startedWithMainContext={activeConvoId != null} // Set true if opened from main chat
           setSessionResumeHandle={setSessionResumeHandle} // Pass the session resume handle
+          nativeAudioFeature={nativeAudioFeature}
+          onNativeAudioFeatureChange={handleNativeAudioFeatureChange}
+          mediaResolution={mediaResolution}
+          onMediaResolutionChange={handleMediaResolutionChange}
         />
       )}
 

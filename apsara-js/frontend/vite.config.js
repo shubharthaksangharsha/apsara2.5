@@ -11,6 +11,17 @@ export default defineConfig({
         target: 'ws://localhost:9000',
         ws: true,
       },
+      '/api': {
+        target: 'http://localhost:9000',
+        changeOrigin: true,
+        secure: false,
+        rewrite: (path) => path.replace(/^\/api/, '')
+      },
+      '/models': {
+        target: 'http://localhost:9000',
+        changeOrigin: true,
+        secure: false
+      }
     },
   }
 

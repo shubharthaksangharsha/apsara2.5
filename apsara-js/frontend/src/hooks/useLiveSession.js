@@ -12,7 +12,7 @@ const decodePcm16ToFloat32 = (arrayBuffer) => {
   return floatData;
 };
 
-export function useLiveSession({ currentVoice, transcriptionEnabled = true, slidingWindowEnabled = true, slidingWindowTokens = 4000 }) {
+export function useLiveSession({ currentVoice, transcriptionEnabled = true, slidingWindowEnabled = true, slidingWindowTokens = 4000, nativeAudioFeature = 'none', mediaResolution = 'MEDIA_RESOLUTION_MEDIUM' }) {
   // State
   const [liveMessages, setLiveMessages] = useState([]);
   const [liveConnectionStatus, setLiveConnectionStatus] = useState('disconnected');
@@ -33,6 +33,12 @@ export function useLiveSession({ currentVoice, transcriptionEnabled = true, slid
   const [calendarEvents, setCalendarEvents] = useState([]); // <-- NEW: State for calendar events
   const [calendarEventsLastUpdated, setCalendarEventsLastUpdated] = useState(0); // Use 0 as initial, can be a timestamp or counter
   const [activeTab, setActiveTab] = useState('chat'); // NEW: State for the active tab
+  const [tokenUsage, setTokenUsage] = useState({ // NEW: Track token usage for API monitoring
+    inputTokens: 0,
+    outputTokens: 0,
+    totalTokens: 0,
+    lastUpdated: 0
+  });
 
   // --- ADD a useEffect to log state changes for mapDisplayData ---
   useEffect(() => {
@@ -42,7 +48,7 @@ export function useLiveSession({ currentVoice, transcriptionEnabled = true, slid
 
   // Refs
   const liveWsConnection = useRef(null);
-  const audioContextRef = useRef(null); // For Playback (24kHz)
+  const audioContextRef = useRef(null); // For Playback (24kHz or 48kHz for native audio)
   const audioInputContextRef = useRef(null); // For Recording (16kHz)
   const scriptProcessorNodeRef = useRef(null); // For PCM capture
   const mediaStreamSourceRef = useRef(null); // Mic stream source
@@ -62,6 +68,7 @@ export function useLiveSession({ currentVoice, transcriptionEnabled = true, slid
   const isScreenSharingRef = useRef(isStreamingScreen); // <-- New ref for screen share status
   const outputTranscriptionBufferRef = useRef("");
   const lastTranscriptionChunkRef = useRef("");
+  const audioCompressorRef = useRef(null); // For enhanced native audio processing
 
   // --- Sync state to refs ---
   useEffect(() => {
@@ -225,11 +232,37 @@ export function useLiveSession({ currentVoice, transcriptionEnabled = true, slid
 
   // --- Memoized Audio Context Management ---
   const initAudioContexts = useCallback(() => {
+     // Check if selected model supports native audio
+     const isNativeAudioModel = selectedModel?.includes('native-audio');
+     const playbackSampleRate = isNativeAudioModel ? 48000 : 24000; // Use 48kHz for native audio models
+     
      if (!audioContextRef.current || audioContextRef.current.state === 'closed') {
         try {
-            // Playback context remains 24kHz based on typical model output
-            audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 24000 });
-            console.log('[Audio Playback] Context initialized (24kHz):', audioContextRef.current.state);
+            // Initialize audio context with appropriate sample rate based on model capabilities
+            audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: playbackSampleRate });
+            console.log(`[Audio Playback] Context initialized (${isNativeAudioModel ? '48kHz - Native Audio' : '24kHz'})`, 
+                        audioContextRef.current.state);
+            
+            // For native audio models, add an audio compressor for better voice quality
+            if (isNativeAudioModel) {
+                try {
+                    // Create a dynamics compressor for improved voice audio
+                    const compressor = audioContextRef.current.createDynamicsCompressor();
+                    compressor.threshold.value = -24;  // dB
+                    compressor.knee.value = 30;        // dB - soft knee for more natural compression
+                    compressor.ratio.value = 12;       // compression ratio
+                    compressor.attack.value = 0.003;   // seconds - fast attack for voice
+                    compressor.release.value = 0.25;   // seconds - moderate release
+                    
+                    // Store the compressor in a ref for future audio playback
+                    audioCompressorRef.current = compressor;
+                    
+                    console.log('[Audio Playback] Enhanced audio processing with compressor for native audio model');
+                } catch (compErr) {
+                    console.warn('[Audio Playback] Could not initialize compressor, using standard audio pipeline:', compErr);
+                }
+            }
+            
             setAudioError(null);
          } catch (e) {
             console.error("[Audio Playback] Error creating Context:", e);
@@ -278,26 +311,70 @@ export function useLiveSession({ currentVoice, transcriptionEnabled = true, slid
      const audioContext = audioContextRef.current;
      if (!audioContext) return;
 
+     // Check if this is a native audio model for enhanced processing
+     const isNativeAudioModel = selectedModel?.includes('native-audio');
+     
      if (audioContext.state === 'suspended') {
-       try { await audioContext.resume(); } catch (e) {
-         console.error('[Audio] Failed to resume:', e); setAudioError("Playback requires interaction."); isPlayingAudioRef.current = false; return;
+       try { 
+         await audioContext.resume(); 
+         console.log(`[Audio] Resumed context (${isNativeAudioModel ? 'Native Audio' : 'Standard'})`);
+       } catch (e) {
+         console.error('[Audio] Failed to resume:', e); 
+         setAudioError("Playback requires interaction."); 
+         isPlayingAudioRef.current = false; 
+         return;
        }
      }
+     
      if (isPlayingAudioRef.current || audioQueueRef.current.length === 0 || audioContext.state !== 'running') return;
+     
+     // Start playback from queue
      isPlayingAudioRef.current = true;
+     setIsModelSpeaking(true);
+     
+     // Log the audio playback configuration
+     console.log(`[Audio] Starting playback with ${isNativeAudioModel ? 'enhanced native audio pipeline' : 'standard pipeline'} at ${audioContext.sampleRate}Hz`);
+     
      while (audioQueueRef.current.length > 0) {
        const arrayBuffer = audioQueueRef.current.shift();
        if (!arrayBuffer || arrayBuffer.byteLength === 0) continue;
+       
        try {
+         // Convert PCM to float32 for audio processing
          const float32Data = decodePcm16ToFloat32(arrayBuffer);
+         
+         // Create buffer with appropriate sample rate from context
          const buffer = audioContext.createBuffer(1, float32Data.length, audioContext.sampleRate);
          buffer.copyToChannel(float32Data, 0);
-         const source = audioContext.createBufferSource(); source.buffer = buffer; source.connect(audioContext.destination);
-         await new Promise(resolve => { source.onended = resolve; source.start(0); });
-       } catch (e) { console.error("[Audio] Playback error:", e); setAudioError("Error playing audio chunk."); }
+         
+         // Create source node for playback
+         const source = audioContext.createBufferSource();
+         source.buffer = buffer;
+         
+         // For native audio models, use our enhanced audio pipeline with compressor
+         if (isNativeAudioModel && audioCompressorRef.current) {
+           // Route through compressor for better voice quality
+           source.connect(audioCompressorRef.current);
+           console.log('[Audio] Using enhanced pipeline with compressor for native audio model');
+         } else {
+           // Standard pipeline for non-native audio or if compressor setup failed
+           source.connect(audioContext.destination);
+         }
+         
+         // Play the audio and wait for completion
+         await new Promise(resolve => { 
+           source.onended = resolve; 
+           source.start(0); 
+         });
+       } catch (e) { 
+         console.error("[Audio] Playback error:", e); 
+         setAudioError("Error playing audio chunk."); 
+       }
      }
+     
      isPlayingAudioRef.current = false;
-   }, []); // decodePcm16ToFloat32 is stable
+     setIsModelSpeaking(false);
+   }, [selectedModel]); // Include selectedModel as dependency since we use it for audio pipeline decisions
 
    // Function to stop current playback and clear queue
    const stopAndClearAudio = useCallback(() => {
@@ -775,6 +852,7 @@ export function useLiveSession({ currentVoice, transcriptionEnabled = true, slid
 
   // --- Core Connection Handling ---
   const setupLiveConnection = useCallback((mainChatContext = null) => {
+    console.log('🔄 [Live WS] setupLiveConnection CALLED with nativeAudioFeature:', nativeAudioFeature);
     if (liveWsConnection.current) {
       console.warn('[Live WS] Connection already exists - cleaning up first.');
       liveWsConnection.current.close(1000, "Starting new session");
@@ -801,15 +879,72 @@ export function useLiveSession({ currentVoice, transcriptionEnabled = true, slid
     const wsUrl = new URL("/live", baseUrl);
     wsUrl.protocol = baseUrl.startsWith('https') ? 'wss:' : 'ws:';
 
-    // Add model as query parameter
+     // Add model as query parameter
     wsUrl.searchParams.append('model', selectedModel);
-
+    
+    // Check if this is a native audio model
+    const isNativeAudioModel = selectedModel?.includes('native-audio');
+    const supportsThinking = selectedModel?.includes('thinking');
+    
+    console.log('🔄 [Live WS] setupLiveConnection with selected model:', selectedModel);
+    console.log('🔄 [Live WS] isNativeAudioModel:', isNativeAudioModel);
+    
+    if (isNativeAudioModel) {
+      console.log('[Live WS] Using native audio model:', selectedModel);
+      
+      // Handle native audio features - based on nativeAudioFeature selection
+      if (nativeAudioFeature === 'affectiveDialog') {
+        console.log('🎯 [Live WS] Enabling Affective Dialog feature');
+        wsUrl.searchParams.append('enableAffectiveDialog', 'true');
+      } else if (nativeAudioFeature === 'proactiveAudio') {
+        console.log('🎯 [Live WS] Enabling Proactive Audio feature');
+        wsUrl.searchParams.append('proactiveAudio', 'true');
+      } else {
+        // Default to generic native audio if no specific feature selected
+        console.log('🎯 [Live WS] No specific feature selected, using generic native audio');
+        wsUrl.searchParams.append('nativeAudio', 'true');
+      }
+      
+      // Log final URL parameters for debugging
+      console.log('🔍 [Live WS] Final WebSocket URL parameters:', {
+        affectiveDialog: wsUrl.searchParams.has('enableAffectiveDialog'),
+        proactiveAudio: wsUrl.searchParams.has('proactiveAudio'),
+        genericNativeAudio: wsUrl.searchParams.has('nativeAudio')
+      });
+      
+      // Configure Voice Activity Detection (VAD) settings for native audio models
+      wsUrl.searchParams.append('vadMode', 'AUTO');
+      wsUrl.searchParams.append('vadFallbackTimeoutMs', '5000');
+      wsUrl.searchParams.append('vadSensitivity', '0.7');
+    }
     // Add modality as query parameter
     wsUrl.searchParams.append('modalities', liveModality);
 
     // Set voice parameter if audio is requested
     if (liveModality === 'AUDIO' || liveModality === 'AUDIO_TEXT') {
+      // Native audio models automatically choose appropriate voice processing
+      // but we still pass the voice parameter for proper tracking
       wsUrl.searchParams.append('voice', currentVoice || 'Ember');
+      
+      // Add advanced audio parameters for native audio models
+      if (isNativeAudioModel) {
+        // High quality audio for native audio models (48kHz sample rate)
+        wsUrl.searchParams.append('audioQuality', 'high');
+        
+        // No explicit language code for native audio models as they auto-detect
+        // Note: API docs state that native audio models don't support explicitly setting language
+      } else {
+        // For non-native audio models, we can specify speech configuration
+        // Note: Speech config would need to be passed from UI if supporting multiple languages
+        // wsUrl.searchParams.append('speechLanguageCode', 'en-US'); // Default to English
+      }
+      
+      // Configure context window compression for longer sessions
+      // This helps with maintaining conversation context over longer periods
+      wsUrl.searchParams.append('slidingWindowEnabled', (slidingWindowEnabled || false).toString());
+      if (slidingWindowEnabled && slidingWindowTokens) {
+        wsUrl.searchParams.append('slidingWindowTokens', slidingWindowTokens.toString());
+      }
     }
 
     // Set system instruction if available
@@ -826,6 +961,12 @@ export function useLiveSession({ currentVoice, transcriptionEnabled = true, slid
     if (slidingWindowEnabled !== undefined) {
       wsUrl.searchParams.append('slidingWindowEnabled', slidingWindowEnabled.toString());
       wsUrl.searchParams.append('slidingWindowTokens', slidingWindowTokens.toString());
+    }
+    
+    // Add media resolution parameter
+    if (mediaResolution) {
+      console.log(`🔍 [Live WS] Adding media resolution: ${mediaResolution}`);
+      wsUrl.searchParams.append('mediaResolution', mediaResolution);
     }
 
     // Add session resumption handle if available (from previous connection)
@@ -855,6 +996,23 @@ export function useLiveSession({ currentVoice, transcriptionEnabled = true, slid
       setCalendarEventsLastUpdated(0); // Reset calendar timestamp
     }
 
+    // Add CRITICAL DEBUG logs to see EXACTLY what URL we're using
+    const finalUrl = wsUrl.toString();
+    console.log('🔍 [Live WS] FINAL URL ANALYSIS:');
+    console.log('📌 [Live WS] Final connection URL:', finalUrl);
+    console.log('🔎 [Live WS] URL has enableAffectiveDialog?', finalUrl.includes('enableAffectiveDialog=true'));
+    console.log('🔎 [Live WS] URL has proactiveAudio?', finalUrl.includes('proactiveAudio=true'));
+    console.log('🔎 [Live WS] URL has nativeAudio?', finalUrl.includes('nativeAudio=true'));
+    
+    // CRITICAL FIX: Double check that we're not accidentally adding nativeAudio=true
+    // Remove nativeAudio parameter if a specific feature is selected
+    if ((nativeAudioFeature === 'affectiveDialog' || nativeAudioFeature === 'proactiveAudio') && 
+        wsUrl.searchParams.has('nativeAudio')) {
+      console.log('⚠️ [Live WS] CRITICAL: Found conflicting nativeAudio parameter, removing it');
+      wsUrl.searchParams.delete('nativeAudio');
+      console.log('🔄 [Live WS] Fixed URL:', wsUrl.toString());
+    }
+    
     // Create WebSocket connection
     console.log(`[Live WS] Connecting to: ${wsUrl.toString()}`);
     setLiveConnectionStatus('connecting');
@@ -928,13 +1086,39 @@ export function useLiveSession({ currentVoice, transcriptionEnabled = true, slid
                          if (part.inlineData?.mimeType?.startsWith('audio/')) {
                               isAudioChunk = true;
                               if (liveModality === 'AUDIO') {
-                                   if (!isModelSpeaking) setIsModelSpeaking(true);
-                                   if (!audioContextRef.current) initAudioContexts();
-                                   if (audioContextRef.current?.state === 'running') {
-                                        try { const bs = window.atob(part.inlineData.data); const len = bs.length; const bytes = new Uint8Array(len); for (let i = 0; i < len; i++) bytes[i] = bs.charCodeAt(i); audioQueueRef.current.push(bytes.buffer); playAudioQueue(); }
-                                        catch (e) { console.error("[Audio] Decode/Queue Error:", e); setAudioError("Audio processing error."); }
-                                   } else if (audioContextRef.current?.state !== 'closed') { console.warn('[Audio] Context not running, skipping queue.'); }
-                                   else { setAudioError("Audio context closed."); }
+                                    if (!isModelSpeaking) setIsModelSpeaking(true);
+                                    if (!audioContextRef.current) initAudioContexts();
+                                    
+                                    // Check if we're using a native audio model
+                                    const isNativeAudioModel = selectedModel?.includes('native-audio');
+                                    
+                                    if (audioContextRef.current?.state === 'running') {
+                                        try {
+                                            // Decode base64 audio data
+                                            const bs = window.atob(part.inlineData.data);
+                                            const len = bs.length;
+                                            const bytes = new Uint8Array(len);
+                                            for (let i = 0; i < len; i++) bytes[i] = bs.charCodeAt(i);
+                                            
+                                            // Apply special handling for native audio if needed
+                                            if (isNativeAudioModel) {
+                                                console.log('[Audio] Processing native audio chunk');
+                                                // Native audio might need different processing in the future
+                                                // For now, we just queue it as normal
+                                            }
+                                            
+                                            // Queue audio data and start playback
+                                            audioQueueRef.current.push(bytes.buffer);
+                                            playAudioQueue();
+                                        } catch (e) {
+                                            console.error("[Audio] Decode/Queue Error:", e);
+                                            setAudioError("Audio processing error.");
+                                        }
+                                    } else if (audioContextRef.current?.state !== 'closed') {
+                                        console.warn('[Audio] Context not running, skipping queue.');
+                                    } else {
+                                        setAudioError("Audio context closed.");
+                                    }
                               }
                          } else if (part.inlineData?.mimeType?.startsWith('image/')) {
                                 // --- Handle Inline Image ---
@@ -983,8 +1167,40 @@ export function useLiveSession({ currentVoice, transcriptionEnabled = true, slid
             else if (data.setupComplete) {
                  console.log("✅ [Live WS] Processing 'setupComplete'.");
             } else if (data.serverToolCall) {
-                 console.log("🔧 [Live WS] Processing 'serverToolCall'.");
-                 addLiveMessage({ role: 'system', text: `Tool call: ${data.serverToolCall.functionCalls?.[0]?.name || '?'}` });
+                 console.log("🔧 [Live WS] Processing 'serverToolCall':", data.serverToolCall);
+                 
+                 // Check if this is a native audio model to adapt function call handling
+                 const isNativeAudioModel = selectedModel?.includes('native-audio');
+                 const functionCalls = data.serverToolCall.functionCalls || [];
+                 
+                 if (functionCalls.length > 0) {
+                     // Log each function call received
+                     functionCalls.forEach((call, index) => {
+                         console.log(`[Live WS] Function call ${index+1}/${functionCalls.length}: ${call.name}`);
+                     });
+                     
+                     // Show function call in UI
+                     const firstCall = functionCalls[0];
+                     addLiveMessage({ 
+                         role: 'system', 
+                         text: `Tool call: ${firstCall.name || '?'}`
+                     });
+                     
+                     // Handle async function calls for each model type differently
+                     // Native audio models require manual function call response handling
+                     if (isNativeAudioModel) {
+                         console.log('[Live WS] Native audio model requires manual function call response handling');
+                         // For native audio models, we'd add UI components or handling here
+                         // to allow the user to see and respond to function calls
+                         // This is a placeholder for more complex implementation
+                     } else {
+                         // Standard automatic function call handling for non-native audio models
+                         console.log('[Live WS] Using automatic function call response handling');
+                     }
+                 } else {
+                     console.warn('[Live WS] Received serverToolCall event without function calls');
+                     addLiveMessage({ role: 'system', text: 'Tool call received but no functions specified' });
+                 }
             }
             // --- Store Session Resumption Handle ---
             else if (data.sessionResumptionUpdate) {
@@ -1007,6 +1223,31 @@ export function useLiveSession({ currentVoice, transcriptionEnabled = true, slid
                        console.error("[Live WS] Error auto-saving session handle to localStorage:", err);
                      }
                  }
+            }
+            // --- Process Token Usage Metadata ---
+            else if (data.usageMetadata) {
+                console.log("📊 [Live WS] Processing 'usageMetadata':", data.usageMetadata);
+                
+                // Extract token counts from the usage metadata
+                const { inputTokenCount, outputTokenCount, totalTokenCount } = data.usageMetadata;
+                
+                // Update token usage state with new values
+                setTokenUsage(prevUsage => ({
+                    inputTokens: inputTokenCount || prevUsage.inputTokens,
+                    outputTokens: outputTokenCount || prevUsage.outputTokens,
+                    totalTokens: totalTokenCount || prevUsage.totalTokens,
+                    lastUpdated: Date.now()
+                }));
+                
+                console.log(`[Live WS] Updated token usage - Total: ${totalTokenCount}, Input: ${inputTokenCount}, Output: ${outputTokenCount}`);
+                
+                // Log token usage to system message (optional - for debugging or user awareness)
+                if (totalTokenCount && totalTokenCount % 1000 < 10) { // Show roughly every ~1000 tokens
+                    addLiveMessage({
+                        role: 'system',
+                        text: `Session token usage: ${totalTokenCount} tokens`
+                    });
+                }
             }
             // --- Handle Tool Call Notifications ---
             else if (data.event === 'tool_call_started') {
@@ -1198,7 +1439,7 @@ export function useLiveSession({ currentVoice, transcriptionEnabled = true, slid
       setCalendarEvents([]); // <-- NEW: Clear calendar events on close
       setCalendarEventsLastUpdated(0); // Reset
     };
-  }, [liveModality, currentVoice, liveSystemInstruction, addLiveMessage, updateLiveMessage, addOrUpdateLiveModelMessagePart, initAudioContexts, playAudioQueue, closeAudioContexts, isRecording, stopRecordingInternal, transcriptionEnabled, slidingWindowEnabled, slidingWindowTokens, selectedVideoDeviceId, selectedModel]);
+  }, [liveModality, currentVoice, liveSystemInstruction, addLiveMessage, updateLiveMessage, addOrUpdateLiveModelMessagePart, initAudioContexts, playAudioQueue, closeAudioContexts, isRecording, stopRecordingInternal, transcriptionEnabled, slidingWindowEnabled, slidingWindowTokens, selectedVideoDeviceId, selectedModel, nativeAudioFeature, mediaResolution]);
 
   // --- Public Handlers ---
   const startLiveSession = useCallback((mainChatContext = null) => {
@@ -1222,7 +1463,7 @@ export function useLiveSession({ currentVoice, transcriptionEnabled = true, slid
     
     console.log(`[Live WS] Starting a new live session. Modality: ${liveModality}`);
     setupLiveConnection(mainChatContext);
-  }, [liveConnectionStatus, liveModality, setupLiveConnection, initAudioContexts, selectedModel]);
+  }, [liveConnectionStatus, liveModality, setupLiveConnection, initAudioContexts, selectedModel, nativeAudioFeature]);
 
   const endLiveSession = useCallback(() => {
     setMapDisplayData(null); // Clear map when ending
@@ -1375,8 +1616,7 @@ export function useLiveSession({ currentVoice, transcriptionEnabled = true, slid
     audioError,
     sessionTimeLeft,
     liveSystemInstruction,
-    selectedModel,
-    videoDevices,
+    selectedModel,    videoDevices,
     selectedVideoDeviceId,
     mapDisplayData,
     weatherUIData,
