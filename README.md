@@ -16,6 +16,7 @@ Apsara 2.5 is a full-stack JavaScript application with the following architectur
 - **Live Conversation**: Real-time audio, video, and screen sharing with AI
 - **Google Authentication**: OAuth integration for personalized experiences
 - **Multimodal Input/Output**: Support for text, images, audio, and video
+- **Image Generation**: Create and edit images using natural language prompts
 - **Persistent Storage**: Save and restore conversations
 
 ### Integrated Tools
@@ -24,6 +25,7 @@ Apsara 2.5 is a full-stack JavaScript application with the following architectur
 - **Weather Information**: Get current weather for locations
 - **Note-Taking**: Create and manage notes during AI interactions
 - **Tab Switching**: Control application behavior during live sessions
+- **Image Generation**: Create and edit images using Gemini's image generation model
 
 ### User Experience
 - **Theme Support**: Light and dark mode
@@ -42,6 +44,7 @@ Apsara 2.5 is a full-stack JavaScript application with the following architectur
 - **gmail-tools.js**: Gmail API integration
 - **calendar-tools.js**: Google Calendar API integration
 - **maps-tools.js**: Google Maps API integration (disabled due to billing issues)
+- **image-gen.js**: Image generation and editing using Gemini's image generation model
 
 ### Frontend (`/frontend`)
 - **src/components/**: React components for UI elements

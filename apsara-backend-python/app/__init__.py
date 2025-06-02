@@ -1,1 +1,0 @@
-# Apsara 2.5 Backend Application 
