@@ -1,4 +1,4 @@
-import React, { Fragment } from 'react';
+import React, { Fragment, useEffect, useState } from 'react';
 import { Menu, Sun, Moon, MessageSquare, Settings, Check, ChevronsUpDown, LogOut, Mail } from 'lucide-react';
 import { Listbox, Transition } from '@headlessui/react';
 
@@ -15,11 +15,28 @@ export default function Header({
     userProfile,
     onSignOut
 }) {
+  // State to track if we're on mobile
+  const [isMobile, setIsMobile] = useState(false);
+  
+  // Effect to detect mobile devices
+  useEffect(() => {
+    const checkIfMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    
+    // Check on mount and on resize
+    checkIfMobile();
+    window.addEventListener('resize', checkIfMobile);
+    
+    return () => {
+      window.removeEventListener('resize', checkIfMobile);
+    };
+  }, []);
   const selectedModelObject = models.find(m => m.id === currentModel);
 
   return (
     <header className="bg-white dark:bg-gray-800 shadow-sm z-20 py-2 px-3 sm:px-4 flex-shrink-0 border-b border-gray-200 dark:border-gray-700/50">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-nowrap">
         {/* Mobile Hamburger Button */}
         <button
           onClick={() => setIsSidebarOpen(true)} 
@@ -89,13 +106,40 @@ export default function Header({
           </Listbox>
         </div>
         
-        {/* Header Buttons - Improved spacing for mobile */}
-        <div className="flex items-center gap-1 sm:space-x-3">
-          {/* Auth Status Indicator - Only visible when authenticated */}
+        {/* Header Buttons */}
+        <div className="flex items-center gap-2 sm:gap-3 md:space-x-3">
+          {/* User Profile - Only visible when authenticated */}
           {isAuthenticated && (
-            <div className="hidden md:flex items-center mr-2 bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-300 rounded-full px-2 py-1 text-xs">
-              <Mail className="h-3 w-3 mr-1" />
-              <span className="truncate max-w-[100px]">{userProfile?.name?.split(' ')[0] || 'User'}</span>
+            <div className="flex-shrink-0 flex items-center ml-auto mr-2">
+              {/* Profile Picture - Fixed position with absolute sizing for all devices */}
+              <div className="relative flex-shrink-0">
+                {userProfile?.picture ? (
+                  <img 
+                    src={userProfile.picture} 
+                    alt="Profile" 
+                    className="h-8 w-8 sm:h-9 sm:w-9 md:h-9 md:w-9 rounded-full border-2 border-indigo-500 dark:border-indigo-500 shadow-lg object-cover" 
+                    title={userProfile.name || 'User'}
+                    style={{ minWidth: '32px' }} /* Force minimum width */
+                  />
+                ) : (
+                  <div 
+                    className="h-8 w-8 sm:h-9 sm:w-9 md:h-9 md:w-9 rounded-full bg-indigo-200 dark:bg-indigo-800 flex items-center justify-center text-base text-indigo-700 dark:text-indigo-300 font-semibold border-2 border-indigo-500 dark:border-indigo-500 shadow-lg"
+                    style={{ minWidth: '32px' }} /* Force minimum width */
+                  >
+                    {userProfile?.name?.charAt(0) || 'U'}
+                  </div>
+                )}
+                
+                {/* Status Indicator - Small dot in the corner with pulse animation */}
+                <div className="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-green-500 dark:bg-green-400 border-2 border-white dark:border-gray-800 animate-pulse"></div>
+              </div>
+              
+              {/* User Name with responsive display */}
+              {!isMobile && (
+                <div className="hidden md:flex items-center ml-2 bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-300 rounded-full px-2 py-1 text-xs">
+                  <span className="truncate max-w-[100px]">{userProfile?.name?.split(' ')[0] || 'User'}</span>
+                </div>
+              )}
             </div>
           )}
           

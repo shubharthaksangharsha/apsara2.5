@@ -83,11 +83,18 @@ const getUserProfile = async (tokens) => {
   const oauth2Client = createOAuth2Client();
   oauth2Client.setCredentials(tokens);
   
-  const people = google.people({ version: 'v1', auth: oauth2Client });
-  
   try {
+    // Use the userinfo.get endpoint which provides more complete profile data
     const res = await google.oauth2('v2').userinfo.get({ auth: oauth2Client });
-    return res.data;
+    
+    // Ensure the picture field is properly included
+    const userData = {
+      ...res.data,
+      // Make sure picture is included and properly formatted
+      picture: res.data.picture || null
+    };
+    
+    return userData;
   } catch (error) {
     console.error('Error fetching user profile:', error);
     throw error;
