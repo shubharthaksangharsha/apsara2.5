@@ -6,6 +6,14 @@ import { gmailToolSchemas, gmailToolHandlers } from './gmail-tools.js';
 import { calendarToolSchemas, calendarToolHandlers } from './calendar-tools.js';
 // Import from maps-tools.js
 import { mapsToolSchemas, mapsToolHandlers } from './maps-tools.js';
+// Import from image-gen.js
+import { generateImage, editImage } from './image-gen.js';
+
+// Store the last generated image for editing
+const imageStore = {
+  lastGeneratedImage: null,
+  lastMimeType: null
+};
 import fetch from 'node-fetch'; // Ensure fetch is available (used by maps-tools.js as well)
 
 // Tool declarations will be defined at the end of the file
@@ -48,6 +56,41 @@ const getBatteryStatusSchema = {
 
 // --- NEW TOOL SCHEMAS ---
 
+// Image Generation Tool Schema
+const generateImageSchema = {
+  name: 'generateImage',
+  description: 'Generates an image based on a text prompt using AI. The generated image will be displayed to the user along with descriptive text.',
+  parameters: {
+    type: 'OBJECT',
+    properties: {
+      prompt: { 
+        type: 'STRING', 
+        description: 'Detailed description of the image to generate. Be specific and descriptive for best results.' 
+      }
+    },
+    required: ['prompt']
+  }
+};
+
+// Image Editing Tool Schema
+const editImageSchema = {
+  name: 'editImage',
+  description: 'Edits an existing image based on a text prompt. This can modify the last generated or uploaded image.',
+  parameters: {
+    type: 'OBJECT',
+    properties: {
+      prompt: { 
+        type: 'STRING', 
+        description: 'Detailed description of the edits to apply to the image.' 
+      },
+      imageId: {
+        type: 'STRING',
+        description: 'Optional. ID of the image to edit. If not provided, the most recent image will be used.'
+      }
+    },
+    required: ['prompt']
+  }
+};
 
 const getWeatherSchema = {
   name: 'getWeather',
@@ -390,6 +433,95 @@ print(f"Note saved successfully to {notes_file}. File size: {file_size} bytes.")
   }
 }
 
+// Handler for image generation
+async function handleGenerateImage({ prompt }) {
+  console.log(`[Tool: generateImage] Generating image with prompt: "${prompt.substring(0, 100)}${prompt.length > 100 ? '...' : ''}"`);  
+  
+  try {
+    // Call the image generation function from image-gen.js
+    const result = await generateImage(prompt);
+    
+    if (!result.success) {
+      return {
+        status: 'error',
+        message: result.error || 'Failed to generate image',
+      };
+    }
+    
+    // Store the generated image for later editing
+    imageStore.lastGeneratedImage = result.imageData;
+    imageStore.lastMimeType = result.mimeType || 'image/png';
+    console.log(`[Tool: generateImage] Stored image in memory cache for future editing`);
+    
+    // Send both the image data and the description back to the model and client
+    return {
+      status: 'success',
+      message: 'Image generated successfully',
+      imageData: result.imageData,
+      mimeType: result.mimeType,
+      description: result.description,
+      action: 'imageGenerated',
+      timestamp: result.timestamp,
+    };
+  } catch (error) {
+    console.error(`[Tool: generateImage] Error: ${error.message}`);
+    return {
+      status: 'error',
+      message: `Failed to generate image: ${error.message}`
+    };
+  }
+}
+
+// Handler for image editing
+async function handleEditImage({ prompt, imageId }) {
+  console.log(`[Tool: editImage] Editing image with prompt: "${prompt.substring(0, 100)}${prompt.length > 100 ? '...' : ''}"`);  
+  
+  try {
+    // Check if we have a stored image to edit
+    if (!imageStore.lastGeneratedImage) {
+      console.log(`[Tool: editImage] No previous image found to edit. Generating a new image instead.`);
+      return handleGenerateImage({ prompt });
+    }
+    
+    console.log(`[Tool: editImage] Found previous image to edit. Using stored image with edit prompt.`);
+    
+    // Call the image editing function with the stored image
+    const result = await editImage(
+      prompt, 
+      imageStore.lastGeneratedImage, 
+      imageStore.lastMimeType || 'image/png'
+    );
+    
+    if (!result.success) {
+      return {
+        status: 'error',
+        message: result.error || 'Failed to edit image',
+      };
+    }
+    
+    // Update the stored image with the edited version
+    imageStore.lastGeneratedImage = result.imageData;
+    imageStore.lastMimeType = result.mimeType || 'image/png';
+    
+    // Send both the image data and the description back to the model and client
+    return {
+      status: 'success',
+      message: 'Image edited successfully',
+      imageData: result.imageData,
+      mimeType: result.mimeType,
+      description: result.description,
+      action: 'imageEdited',
+      timestamp: result.timestamp,
+    };
+  } catch (error) {
+    console.error(`[Tool: editImage] Error: ${error.message}`);
+    return {
+      status: 'error',
+      message: `Failed to edit image: ${error.message}`
+    };
+  }
+}
+
 // Handler for loading saved notes
 async function handleLoadNotes({ limit }) {
   console.log(`[Tool: loadNotes] Loading notes${limit ? ` (limit: ${limit})` : ''}`);
@@ -513,28 +645,34 @@ print(json.dumps(result))
 // Map of tool names to their handler functions
 // Combine imported handlers from all tool files
 export const toolHandlers = {
-  getCurrentTime: handleGetCurrentTime,
-  echo: handleEcho,
-  getBatteryStatus: handleGetBatteryStatus,
+  getCurrentTime: { handler: handleGetCurrentTime, schema: getCurrentTimeSchema },
+  echo: { handler: handleEcho, schema: echoSchema },
+  getBatteryStatus: { handler: handleGetBatteryStatus, schema: getBatteryStatusSchema },
+  getWeather: { handler: handleGetWeather, schema: getWeatherSchema },
+  captureScreenshot: { handler: handleCaptureScreenshot, schema: captureScreenshotSchema },
+  switchTab: { handler: handleSwitchTab, schema: switchTabSchema },
+  takeNotes: { handler: handleTakeNotes, schema: takeNotesSchema },
+  loadNotes: { handler: handleLoadNotes, schema: loadNotesSchema },
+  generateImage: { handler: handleGenerateImage, schema: generateImageSchema },
+  editImage: { handler: handleEditImage, schema: editImageSchema },
   ...gmailToolHandlers, // Spread Gmail handlers
   ...calendarToolHandlers, // Spread Calendar handlers
   // Maps handlers removed due to billing issues
-  getWeather: handleGetWeather,
-  switchTab: handleSwitchTab,
-  takeNotes: handleTakeNotes,
-  loadNotes: handleLoadNotes
 };
 
 // --- Define Tool Set ---
-// Base tool declarations (available without authentication)
+// Base tool declarations that don't require authentication
 const baseToolDeclarations = [
   getCurrentTimeSchema,
   echoSchema,
   getBatteryStatusSchema,
   getWeatherSchema,
+  captureScreenshotSchema,
   switchTabSchema,
   takeNotesSchema,
   loadNotesSchema,
+  generateImageSchema,
+  editImageSchema,
 ];
 
 // Google-specific tool declarations (require authentication)

@@ -1496,19 +1496,41 @@ async function handleLiveConnection(ws, req) {
                                       ].includes(call.name);
                                       
                                       let result;
-                                      if (isGoogleTool) {
-                                          // For Google tools, pass the req object and safe args
-                                          if (!req.isAuthenticated || !req.userTokens) {
-                                              throw new Error('Authentication required for this Google tool');
-                                          }
-                                          const safeArgs = call.args && typeof call.args === 'object' ? call.args : {};
-                                          result = await toolHandlers[call.name](req, safeArgs);
-                                      } else {
-                                          // For other tools, just pass the args
-                                          result = await toolHandlers[call.name](call.args || {});
-                                      }
-                                      console.log(`[Live Backend] Tool ${call.name} executed. Result:`, JSON.stringify(result));
-                                     responsesToSend.push({ id: call.id, name: call.name, response: { result: result } });
+                                       // Get the handler function - handle both object structure and direct function
+                                       const handlerFn = typeof toolHandlers[call.name] === 'function' 
+                                           ? toolHandlers[call.name] 
+                                           : toolHandlers[call.name]?.handler;
+                                       
+                                       if (!handlerFn) {
+                                           throw new Error(`Handler function not found for tool: ${call.name}`);
+                                       }
+                                       
+                                       if (isGoogleTool) {
+                                           // For Google tools, pass the req object and safe args
+                                           if (!req.isAuthenticated || !req.userTokens) {
+                                               throw new Error('Authentication required for this Google tool');
+                                           }
+                                           const safeArgs = call.args && typeof call.args === 'object' ? call.args : {};
+                                           result = await handlerFn(req, safeArgs);
+                                       } else {
+                                           // For other tools, just pass the args
+                                           result = await handlerFn(call.args || {});
+                                       }
+                                       
+                                       // Process image generation separately before adding to responses
+                                       let responseResult = result;
+                                       if ((call.name === 'generateImage' || call.name === 'editImage') && result?.imageData) {
+                                           // Create a simplified version of the result for Google
+                                           responseResult = {
+                                               message: 'Image generated successfully',
+                                               status: 'success',
+                                               timestamp: new Date().toISOString()
+                                           };
+                                       }
+                                       
+                                      console.log(`[Live Backend] Tool ${call.name} executed. Result:`, 
+                                          (call.name === 'generateImage' || call.name === 'editImage') ? 'Image data (not logged)' : JSON.stringify(responseResult));
+                                      responsesToSend.push({ id: call.id, name: call.name, response: { result: responseResult } });
 
                                      // --- Check for Map Display Data and send separate event ---
                                      if (result?._mapDisplayData && ws.readyState === WebSocket.OPEN) {
@@ -1519,6 +1541,19 @@ async function handleLiveConnection(ws, req) {
                                         }));
                                      }
                                      // --- End Map Display Check ---
+                                     
+                                     // --- Check for Image Generation Data and send separate event ---
+                                     if ((call.name === 'generateImage' || call.name === 'editImage') && 
+                                         result?.imageData && ws.readyState === WebSocket.OPEN) {
+                                        console.log(`[Live Backend] Sending ${call.name === 'generateImage' ? 'imageGenerated' : 'imageEdited'} event with data`);
+                                        ws.send(JSON.stringify({
+                                            event: call.name === 'generateImage' ? 'imageGenerated' : 'imageEdited',
+                                            imageData: result.imageData,
+                                            mimeType: result.mimeType || 'image/png',
+                                            description: result.description || ''
+                                        }));
+                                     }
+                                     // --- End Image Generation Check ---
 
                                      // Notify frontend of custom tool result (send the non-map part)
                                      if (ws.readyState === WebSocket.OPEN) {

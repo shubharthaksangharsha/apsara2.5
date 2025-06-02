@@ -1048,10 +1048,33 @@ export function useLiveSession({ currentVoice, transcriptionEnabled = true, slid
 
           let turnOrGenComplete = false; // Flag to check if completion happened
 
-          // --- Process Events FIRST (Including our new map event) ---
+          // --- Process Events FIRST (Including map and image events) ---
           if (data.event === 'map_display_update') {
               console.log("🗺️ [Live WS - useLiveSession] Received 'map_display_update'. Data:", data.mapData);
               setMapDisplayData(data.mapData); // Update map state
+          } else if (data.event === 'imageGenerated' || data.event === 'imageEdited') {
+              console.log(`🖼️ [Live WS - useLiveSession] Received '${data.event}'. Processing image data...`);
+              // Create a message with image and description
+              const imageMessage = {
+                role: 'model',
+                id: `img-${Date.now()}`,
+                parts: [
+                  // Add the text description if available
+                  ...(data.description ? [{ text: data.description }] : []),
+                  // Add the image data
+                  {
+                    inlineData: {
+                      mimeType: data.mimeType || 'image/png',
+                      data: data.imageData
+                    }
+                  }
+                ],
+                timestamp: new Date().toISOString()
+              };
+              
+              // Add the message to the chat
+              addLiveMessage(imageMessage);
+              console.log(`🖼️ [Live WS - useLiveSession] Image ${data.event === 'imageGenerated' ? 'generation' : 'editing'} complete`);
           } else if (data.event === 'backend_connected') {
                 console.log("🔵 [Live WS] Processing 'backend_connected'.");
                 addLiveMessage({ role: 'system', text: 'Backend ready. AI connection pending.' });
