@@ -58,3 +58,26 @@ plt.show()
 
 --- 2025-05-15 16:05:15 - Saving code again ---
 I am saving the code in the notes again
+
+--- 2025-06-03 06:20:51 - Bunnings Fan Heaters ---
+| Name | Price | Link |
+|---|---|---|
+| Click 2000W Fan Heater | $14.90 | https://www.bunnings.com.au/products/lighting-electrical/heaters/fan-heaters |
+| Click Low Profile Fan Heater | $19 | https://www.bunnings.com.au/products/lighting-electrical/heaters/fan-heaters |
+| Click Oscillating Fan Heater | $25 | https://www.bunnings.com.au/products/lighting-electrical/heaters/fan-heaters |
+| Arlec 2400W Fan Heater with Adjustable Thermostat | $29 | https://www.bunnings.com.au/products/lighting-electrical/heaters/fan-heaters |
+| Click 2400W Ceramic Heater | $35 | https://www.bunnings.com.au/products/lighting-electrical/heaters/fan-heaters |
+| Arlec 2400W Fan Heater with Adjustable Thermostat and Oscillation | $38.80 | https://www.bunnings.com.au/products/lighting-electrical/heaters/fan-heaters |
+| Click 2000W Ceramic Fan Heater | $39 | https://www.bunnings.com.au/products/lighting-electrical/heaters/fan-heaters |
+| Arlec 2000W Fan Heater With Digital Control | $39 | https://www.bunnings.com.au/products/lighting-electrical/heaters/fan-heaters |
+| Click 2000W Low Profile Ceramic Heater | $39 | https://www.bunnings.com.au/products/lighting-electrical/heaters/fan-heaters |
+| Mistral Shoe Dryer | $49 | https://www.bunnings.com.au/products/lighting-electrical/heaters/fan-heaters |
+| Scandia Fan | $65 | https://www.bunnings.com.au/products/lighting-electrical/heaters/fan-heaters |
+| Mistral Foot Warmer | $69 | https://www.bunnings.com.au/products/lighting-electrical/heaters/fan-heaters |
+| Click Flame Effect Heater | $79 | https://www.bunnings.com.au/products/lighting-electrical/heaters/fan-heaters |
+| De'Longhi 1800W Ivory White Capsule Fan Heater | $89 | https://www.bunnings.com.au/products/lighting-electrical/heaters/fan-heaters |
+| Mill 1800W White Compact Fan Heater | $89 | https://www.bunnings.com.au/products/lighting-electrical/heaters/fan-heaters |
+| Dimplex 2kW Convector Heater With Turbo Fan | $99 | https://www.bunnings.com.au/products/lighting-electrical/heaters/fan-heaters |
+| Scandia Fan Swing | $99 | https://www.bunnings.com.au/products/lighting-electrical/heaters/fan-heaters |
+
+Note: All links point to the main Bunnings fan heaters page as individual product links were not available.

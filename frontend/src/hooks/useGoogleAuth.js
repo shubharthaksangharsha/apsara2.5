@@ -22,20 +22,58 @@ export function useGoogleAuth() {
           console.log('Auth status response:', data);
           if (data.isAuthenticated) {
             setIsAuthenticated(true);
-            setUserProfile(data.profile || data.user); // Handle either profile or user key
+            
+            // Store profile data in localStorage to avoid repeated fetching
+            if (data.profile || data.user) {
+              const profileData = data.profile || data.user;
+              // Store the profile data without the picture URL to avoid rate limiting issues
+              const safeProfile = {
+                ...profileData,
+                // Don't store the Google picture URL, use initials instead
+                _hasPicture: !!profileData.picture
+              };
+              localStorage.setItem('apsara_user_profile', JSON.stringify(safeProfile));
+              setUserProfile(safeProfile);
+            }
           } else {
             setIsAuthenticated(false);
             setUserProfile(null);
+            localStorage.removeItem('apsara_user_profile');
           }
         }
       } catch (error) {
         console.error('Error checking auth status:', error);
+        // Try to load from localStorage as fallback
+        const savedProfile = localStorage.getItem('apsara_user_profile');
+        if (savedProfile) {
+          try {
+            setUserProfile(JSON.parse(savedProfile));
+            setIsAuthenticated(true);
+          } catch (e) {
+            console.error('Error parsing saved profile:', e);
+          }
+        }
       } finally {
         setIsAuthLoading(false);
       }
     };
 
-    checkAuthStatus();
+    // Check if we have cached profile data
+    const savedProfile = localStorage.getItem('apsara_user_profile');
+    if (savedProfile) {
+      try {
+        setUserProfile(JSON.parse(savedProfile));
+        setIsAuthenticated(true);
+        setIsAuthLoading(false);
+      } catch (e) {
+        console.error('Error parsing saved profile:', e);
+        // If there's an error with the cached data, perform a fresh check
+        checkAuthStatus();
+      }
+    } else {
+      // No cached data, perform a fresh check
+      checkAuthStatus();
+    }
     
     // Also check if we're returning from an OAuth redirect
     const checkForRedirect = () => {
@@ -49,9 +87,7 @@ export function useGoogleAuth() {
     
     checkForRedirect();
     
-    // Set interval to periodically check auth status (every 5 seconds)
-    const intervalId = setInterval(checkAuthStatus, 5000);
-    return () => clearInterval(intervalId);
+    // No interval needed - we check auth status once and store it
   }, []);
 
   // Function to initiate Google sign-in

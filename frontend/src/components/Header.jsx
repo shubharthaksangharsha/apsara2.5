@@ -1,4 +1,18 @@
 import React, { Fragment, useEffect, useState } from 'react';
+
+// Profile Image Component that uses initials to avoid Google rate limiting
+const ProfileImage = ({ profilePicture, userName }) => {
+  // Always use initials avatar to avoid Google rate limiting issues
+  return (
+    <div 
+      className="h-8 w-8 sm:h-9 sm:w-9 md:h-9 md:w-9 rounded-full bg-indigo-200 dark:bg-indigo-800 flex items-center justify-center text-base text-indigo-700 dark:text-indigo-300 font-semibold border-2 border-indigo-500 dark:border-indigo-500 shadow-lg"
+      style={{ minWidth: '32px' }}
+      title={userName}
+    >
+      {userName?.charAt(0) || 'U'}
+    </div>
+  );
+};
 import { Menu, Sun, Moon, MessageSquare, Settings, Check, ChevronsUpDown, LogOut, Mail } from 'lucide-react';
 import { Listbox, Transition } from '@headlessui/react';
 
@@ -114,12 +128,9 @@ export default function Header({
               {/* Profile Picture - Fixed position with absolute sizing for all devices */}
               <div className="relative flex-shrink-0">
                 {userProfile?.picture ? (
-                  <img 
-                    src={userProfile.picture} 
-                    alt="Profile" 
-                    className="h-8 w-8 sm:h-9 sm:w-9 md:h-9 md:w-9 rounded-full border-2 border-indigo-500 dark:border-indigo-500 shadow-lg object-cover" 
-                    title={userProfile.name || 'User'}
-                    style={{ minWidth: '32px' }} /* Force minimum width */
+                  <ProfileImage 
+                    profilePicture={userProfile.picture}
+                    userName={userProfile.name || 'User'}
                   />
                 ) : (
                   <div 
