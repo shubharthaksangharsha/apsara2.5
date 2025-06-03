@@ -161,6 +161,55 @@ The application uses Google OAuth to:
 - Enhance file processing capabilities
 - Implement collaborative features
 
+## Screenshots
+
+### Welcome and Login Screens
+
+![Welcome Screen with Suggestions](./screenshots/welcome_screen_suggestions1.jpeg)
+*Welcome screen with AI task suggestions*
+
+![Alternative Suggestions](./screenshots/welcome_screen_suggestions2.jpeg)
+*Welcome screen with different AI task suggestions*
+
+![Login Screen](./screenshots/login_screen.jpeg)
+*Google authentication login screen*
+
+![Google Sign-in](./screenshots/google_signin_screen.jpeg)
+*Google sign-in option to enable Gmail, Calendar, and Maps functionality*
+
+### Chat Interface
+
+![Main Chat Interface](./screenshots/main_chat_interface.jpeg)
+*Main chat interface with sidebar navigation*
+
+![Chat with Suggestions](./screenshots/chat_with_suggestions.jpeg)
+*Chat interface showing query suggestions*
+
+### Live Session Features
+
+![Live Session Settings](./screenshots/live_session_settings.jpeg)
+*Live session configuration screen with available tools*
+
+![Native Audio Settings](./screenshots/native_audio_settings.jpeg)
+*Native audio settings with quality options and features*
+
+![Live Session Active](./screenshots/live_session_active.jpeg)
+*Active live session with video and transcription*
+
+### AI Capabilities
+
+![Code Execution Example](./screenshots/code_execution_example.jpeg)
+*Example of code generation and execution with data visualization*
+
+![Conversation Example 1](./screenshots/conversation_example1.jpeg)
+*Natural language conversation with the AI assistant*
+
+![Conversation Example 2](./screenshots/conversation_example2.jpeg)
+*Advanced interaction with the AI showing context awareness*
+
+![API Results Example](./screenshots/api_results_example.jpeg)
+*Example of API integration with structured results*
+
 ## License
 ISC License
 
