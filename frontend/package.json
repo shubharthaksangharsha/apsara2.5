@@ -12,6 +12,7 @@
     "@headlessui/react": "^2.2.2",
     "@tailwindcss/typography": "^0.5.16",
     "@vis.gl/react-google-maps": "^1.5.2",
+    "cookie-parser": "^1.4.7",
     "lucide-react": "^0.507.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",

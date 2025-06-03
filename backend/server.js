@@ -8,7 +8,6 @@ import fs from 'fs';
 import dotenv from 'dotenv';
 import { WebSocketServer, WebSocket } from 'ws';
 import multer from 'multer';
-import genai from '@google/genai';
 import {
   GoogleGenAI,
   HarmCategory,
@@ -18,7 +17,7 @@ import {
   DynamicRetrievalConfigMode,
   createPartFromUri,
 } from '@google/genai';
-const { Blob: BlobGoogle } = genai;
+// const { Blob: BlobGoogle } = genai;
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { parse } from 'url';
@@ -435,6 +434,7 @@ const getDefaultSystemInstruction = () => {
     const toolListString = customToolNames.join(', ');
     return `You are Apsara, a real-time AI assistant designed for live interactions, acting like a voice assistant. Your capabilities include:
 - Understanding and responding in multiple languages if requested.
+- Access to URL context if user provide any URL using url Context tool
 - Access to up-to-date information via Google Search.
 - Ability to execute code snippets directly.
 - Access to a comprehensive suite of custom tools for interacting with external services. Available tools:${toolListString}.
@@ -1413,6 +1413,11 @@ async function handleLiveConnection(ws, req) {
                 toolsArray.push({ googleSearch: {} });
             }
             
+            // Add URL Context if supported by the model
+            if (capabilities.url) {
+                toolsArray.push({urlContext: {}});
+            }
+            
             // Add Code Execution if supported by the model
             if (capabilities.code) {
                 toolsArray.push({ codeExecution: {} });
@@ -1463,6 +1468,20 @@ async function handleLiveConnection(ws, req) {
                     console.log(`[Live Backend] Google <${sessionIdShort}> 'onmessage' [${messageType}]:`, JSON.stringify(evt).substring(0, 150) + "...");
                     }
 
+                    // Log if url_context_metadata is present at the candidate level
+                    if (evt.candidates && evt.candidates[0] && evt.candidates[0].url_context_metadata) {
+                        console.log(`[Live Backend] DETECTED URL_CONTEXT_METADATA (candidates) <${sessionIdShort}>:`, JSON.stringify(evt.candidates[0].url_context_metadata));
+                    }
+                    // Log if url_context_metadata is present within serverContent (less likely but good to check)
+                    if (evt.serverContent && evt.serverContent.url_context_metadata) {
+                        console.log(`[Live Backend] DETECTED URL_CONTEXT_METADATA (serverContent) <${sessionIdShort}>:`, JSON.stringify(evt.serverContent.url_context_metadata));
+                    }
+                    // Log if urlContextMetadata is present directly in the event (as per Gemini docs for non-streaming/unary?)
+                    if (evt.urlContextMetadata) { // This is how it appears in the Gemini Node.js SDK for generateContent, might differ for live
+                        console.log(`[Live Backend] DETECTED URL_CONTEXT_METADATA (direct evt) <${sessionIdShort}>:`, JSON.stringify(evt.urlContextMetadata));
+                    }
+
+                    // Check for outputTranscription specifically
                     if (evt.serverContent?.outputTranscription) {
                         console.log(`[Live Backend] Received outputTranscription from Gemini <${sessionIdShort}>:`, evt.serverContent.outputTranscription);
                     }
