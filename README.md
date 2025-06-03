@@ -1,5 +1,9 @@
 # Apsara 2.5
 
+[![GitHub Repository](https://img.shields.io/badge/GitHub-Repository-blue?logo=github)](https://github.com/shubharthaksangharsha/apsara2.5)
+[![Version](https://img.shields.io/badge/version-2.5-green)](https://github.com/shubharthaksangharsha/apsara2.5)
+[![License](https://img.shields.io/badge/license-ISC-orange)](https://github.com/shubharthaksangharsha/apsara2.5)
+
 Apsara 2.5 is an advanced AI assistant application leveraging Google's Gemini API to provide interactive chat, live conversation, and multimodal capabilities. This application combines the power of large language models with a user-friendly interface to deliver a comprehensive AI assistant experience.
 
 ## Application Gallery
@@ -208,9 +212,17 @@ The application uses Google OAuth to:
 - Enhance file processing capabilities
 - Implement collaborative features
 
+## Keywords and Tags
+apsara2.5, AI Assistant, Gemini API, Google Integration, React, Node.js, Express, WebSocket, Multimodal AI, Voice Chat, Video Chat, Image Generation, URL Context Tool, Gmail Integration, Calendar Integration, OAuth Authentication
 
 ## License
 ISC License
 
 ## Author
-Shubharthak
+
+**Shubharthak Sangharsha**
+- [GitHub](https://github.com/shubharthaksangharsha/)
+- [LinkedIn](https://www.linkedin.com/in/shubharthaksangharsha/)
+- [Website/Portfolio](https://ss-ai.space/)
+
+© 2025 Apsara 2.5 - Advanced AI Assistant
