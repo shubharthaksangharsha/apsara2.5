@@ -1,0 +1,16 @@
+{
+    "name": "apsara2.5",
+    "version": "1.0.0",
+    "description": "Apsara Live Assistant",
+    "scripts": {
+        "start": "concurrently \"cd backend && node server.js\" \"cd frontend && npm run dev\"",
+        "install-all": "npm install && cd backend && npm install && cd ../frontend && npm install",
+        "backend": "cd backend && node server.js",
+        "frontend": "cd frontend && npm run dev"
+    },
+    "author": "shubharthak",
+    "license": "ISC",
+    "dependencies": {
+        "concurrently": "^8.2.2"
+    }
+}
