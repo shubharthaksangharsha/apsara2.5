@@ -7,6 +7,13 @@ apsara-js/frontend/build/
 apsara-js/backend/node_modules/
 apsara-js/backend/dist/
 
+# Uploads (prevent large files)
+backend/uploads/*
+apsara-js/backend/uploads/*
+uploads/*
+!backend/uploads/.gitkeep
+!apsara-js/backend/uploads/.gitkeep
+
 # Python
 apsara-backend-python/venv/
 apsara-backend-python/__pycache__/
