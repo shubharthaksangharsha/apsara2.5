@@ -72,6 +72,7 @@ Apsara 2.5 is a full-stack JavaScript application with the following architectur
 - **Note-Taking**: Create and manage notes during AI interactions
 - **Tab Switching**: Control application behavior during live sessions
 - **Image Generation**: Create and edit images using Gemini's image generation model
+- **URL Context Tool**: Extract and analyze content from web pages to provide context-aware responses
 
 ### User Experience
 - **Theme Support**: Light and dark mode
