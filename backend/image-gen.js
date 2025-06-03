@@ -3,7 +3,7 @@ import { GoogleGenAI, Modality } from "@google/genai";
 
 // Initialize the Gemini API client
 async function getGeminiClient() {
-  const apiKey = process.env.GOOGLE_API_KEY;
+  const apiKey = process.env.GEMINI_API_KEY;
   return new GoogleGenAI({ apiKey });
 }
 
