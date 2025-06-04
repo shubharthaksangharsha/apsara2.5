@@ -1388,6 +1388,7 @@ async function handleLiveConnection(ws, req) {
        },
        // Only enable output audio transcription if enabled
        ...(transcriptionEnabled && { outputAudioTranscription: {} }),
+       ...(transcriptionEnabled && { inputAudioTranscription: {} }),
        // Use media resolution from URL parameter, fallback to medium if not specified
        mediaResolution: mediaResolution,
        // --- Add Tools Configuration based on model capabilities ---
@@ -1462,11 +1463,11 @@ async function handleLiveConnection(ws, req) {
                     const sessionIdShort = session?.conn?.id?.substring(0, 8) ?? 'N/A';
                     const messageType = Object.keys(evt).find(key => evt[key] !== undefined && key !== 'type') || 'unknown';
                     // Reduce log verbosity for content chunks
-                    if (evt.serverContent?.modelTurn?.parts?.some(p => p.inlineData)) {
-                        console.log(`[Live Backend] Google <${sessionIdShort}> 'onmessage' [${messageType}]: Received chunk with media data.`);
-                    } else {
-                    console.log(`[Live Backend] Google <${sessionIdShort}> 'onmessage' [${messageType}]:`, JSON.stringify(evt).substring(0, 150) + "...");
-                    }
+                    // if (evt.serverContent?.modelTurn?.parts?.some(p => p.inlineData)) {
+                        // console.log(`[Live Backend] Google <${sessionIdShort}> 'onmessage' [${messageType}]: Received chunk with media data.`);
+                    // } else {
+                    // console.log(`[Live Backend] Google <${sessionIdShort}> 'onmessage' [${messageType}]:`, JSON.stringify(evt).substring(0, 150) + "...");
+                    // }
 
                     // Log if url_context_metadata is present at the candidate level
                     if (evt.candidates && evt.candidates[0] && evt.candidates[0].url_context_metadata) {
@@ -1482,8 +1483,13 @@ async function handleLiveConnection(ws, req) {
                     }
 
                     // Check for outputTranscription specifically
-                    if (evt.serverContent?.outputTranscription) {
-                        console.log(`[Live Backend] Received outputTranscription from Gemini <${sessionIdShort}>:`, evt.serverContent.outputTranscription);
+                    // if (evt.serverContent?.outputTranscription) {
+                        // console.log(`[Live Backend] Received outputTranscription from Gemini <${sessionIdShort}>:`, evt.serverContent.outputTranscription);
+                    // }
+
+                    // Check for outputTranscription specifically
+                    if (evt.serverContent?.inputTranscription) {
+                        console.log(`[Live Backend] Received inputTranscription from Gemini <${sessionIdShort}>:`, evt.serverContent.inputTranscription);
                     }
 
                     try {
@@ -1721,12 +1727,12 @@ async function handleLiveConnection(ws, req) {
 
                 } else if (parsedMessage.type === 'video_chunk' && parsedMessage.chunk) {
                     // Handle Video Chunk Input (received as JSON from frontend)
-                    console.log(`[Live Backend] Received VIDEO CHUNK JSON from client <${currentSessionId}>. Sending via sendRealtimeInput.`);
+                    // console.log(`[Live Backend] Received VIDEO CHUNK JSON from client <${currentSessionId}>. Sending via sendRealtimeInput.`);
                      // Ensure the chunk format matches what sendRealtimeInput expects
                      // It expects { video: { data: base64string, mimeType: 'image/jpeg' } }
                      // Our frontend sends { type: 'video_chunk', chunk: { mimeType: 'image/jpeg', data: base64data } }
-                     console.log('RECEIVED video data**')
-                     console.log(parsedMessage)
+                    //  console.log('RECEIVED video data**')
+                    //  console.log(parsedMessage)
                      if (parsedMessage.chunk.data && parsedMessage.chunk.mimeType) {
                         await currentSession.sendRealtimeInput({
                             video: {
@@ -1734,7 +1740,7 @@ async function handleLiveConnection(ws, req) {
                                 mimeType: parsedMessage.chunk.mimeType
                             }
                         });
-                        console.log(`[Live Backend] Sent Video Chunk data via sendRealtimeInput for <${currentSessionId}>.`);
+                        // console.log(`[Live Backend] Sent Video Chunk data via sendRealtimeInput for <${currentSessionId}>.`);
                      } else {
                          console.warn(`[Live Backend] Received video_chunk JSON but chunk data/mimeType missing <${currentSessionId}>.`);
                      }
@@ -1749,7 +1755,7 @@ async function handleLiveConnection(ws, req) {
                                 mimeType: parsedMessage.chunk.mimeType
                             }
                         });
-                        console.log(`[Live Backend] Sent Screen Chunk data via sendRealtimeInput for <${currentSessionId}>.`);
+                        // console.log(`[Live Backend] Sent Screen Chunk data via sendRealtimeInput for <${currentSessionId}>.`);
                      } else {
                          console.warn(`[Live Backend] Received screen_chunk JSON but chunk data/mimeType missing <${currentSessionId}>.`);
                      }
@@ -1760,12 +1766,12 @@ async function handleLiveConnection(ws, req) {
                 }
            } else {
                 // --- Handle Raw Binary Data (Assume Audio PCM) ---
-                console.log(`[Live Backend] Received RAW BUFFER (Audio PCM assumed) from client <${currentSessionId}>. Size: ${message.length}. Sending via sendRealtimeInput.`);
+                // console.log(`[Live Backend] Received RAW BUFFER (Audio PCM assumed) from client <${currentSessionId}>. Size: ${message.length}. Sending via sendRealtimeInput.`);
                 const base64Pcm = message.toString('base64');
                 await currentSession.sendRealtimeInput({
                      audio: { data: base64Pcm, mimeType: 'audio/pcm' } // Assuming PCM if not JSON
                 });
-                console.log(`[Live Backend] Sent Audio PCM data via sendRealtimeInput for <${currentSessionId}>.`);
+                // console.log(`[Live Backend] Sent Audio PCM data via sendRealtimeInput for <${currentSessionId}>.`);
            }
        } catch (error) {
            console.error(`[Live Backend] Error processing client message or sending to Google <${currentSessionId}>:`, error);

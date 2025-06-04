@@ -81,3 +81,137 @@ I am saving the code in the notes again
 | Scandia Fan Swing | $99 | https://www.bunnings.com.au/products/lighting-electrical/heaters/fan-heaters |
 
 Note: All links point to the main Bunnings fan heaters page as individual product links were not available.
+
+
+--- 2025-06-03 16:42:10  ---
+Top stories from Hacker News:
+
+1. My AI skeptic friend is now using AI
+2. Fly.io is shutting down precursor products, Docker Machines and Nomad Machines
+3. Replacing Python with... (Zig)
+
+
+--- 2025-06-03 17:44:49 - Summary of Shubharthak Sangharsha's Website ---
+Shubharthak Sangharsha's personal website highlights his work as a software engineering student passionate about Machine Learning and Computer Vision. Key projects include Apsara AI (a voice assistant with features like Spotify control and calendar management), a Dynamic Volume Controller using hand gestures, a Face Mask Detection system, and a NodeMCU Smart Car. He has experience as a Backend Web Development Intern at Curve Tomorrow. His skills include Python, Ruby, C++, Java, JavaScript, HTML, CSS, Flask, Ruby on Rails, NumPy, Pandas, OpenCV, TensorFlow, PyTorch, NLP, LLMs, LangChain, MySQL, Git, AWS, Unix, Big Data, Selenium, and Prompt Engineering. He is currently pursuing a Master of Artificial Intelligence and Machine Learning at the University of Adelaide and holds a B.E. in Computer Science and Engineering from Chandigarh University.
+
+--- 2025-06-03 17:47:23 - Bubble Sort Visualization with Alternate Colors ---
+Visualization of bubble sort with iterations colored green, red, black, blue, and yellow.
+
+--- 2025-06-03 17:48:39 - Battery Level and Time in Adelaide ---
+Current time in Adelaide: 2025-06-04T03:18:38.142+09:30. Battery level: 100% and charging.
+
+--- 2025-06-03 17:51:03 - Information from Shubharthak Sangharsha's Website ---
+HTML Code: 
+
+Shubharthak Sangharasha - Personal Website
+
+Welcome
+About Me
+Projects
+Work Experience
+Skills
+Education
+Contact
+
+Shubharthak Sangharasha
+
+Welcome to my personal website.
+
+Explore Projects
+Download Resume
+
+About Me
+
+Hello, I'm Shubharthak Sangharasha, a software engineering student deeply passionate about Machine Learning and Computer Vision. My work ranges from crafting intelligent voice assistants like Apsara AI to real-time gesture-based volume controllers.
+
+I'm driven by a commitment to continuous learning and the belief that technology can make a positive impact. Explore my projects to see how creativity and innovation come together in my work.
+
+Apsara AI - Voice Assistant
+
+Designed and developed using Python with integrations such as gTTS, Spotify, smptlib, speech recognition, etc.
+
+Capabilities include playing songs on Spotify, reading news, scheduling calendar meetings, connecting Bluetooth, searching Wikipedia, setting alarms, and more.
+
+Dynamic Volume Controller
+
+Built using Google's open-framework Mediapipe for real-time 3D face and hand landmarks estimation.
+
+Allows adjusting the computer volume using hand gestures, dynamically adjusting based on the person's distance from the laptop.
+
+Face Mask Detection
+
+Detects whether a person is wearing a mask using Tensorflow and MobileNetv2 architecture.
+
+Notifies the admin through email if mask enforcement is not followed and the mask is not worn for 30 seconds.
+
+NodeMCU Smart Car
+
+Engineered a Smart Car using NodeMCU ESP8266 for wireless control and monitoring.
+
+Integrated Blynk IoT for a user-friendly Android and web interface, providing remote accessibility.
+
+Work Experience
+
+Backend Web Development Intern
+Curve Tomorrow, Melbourne, Australia
+June 2022 - August 2022
+
+Implemented a User Log System for auditing purposes. Added a CMS (Content Management System) to enable admins to add/edit pages without developer's involvement, thereby reducing turn-around time from days to minutes. Collaborated with team members globally.
+
+Skills
+
+Programming Languages
+Python Ruby C C++ Java JavaScript
+
+Web Development
+HTML CSS Flask Ruby on Rails
+
+Data Science
+NumPy Pandas OpenCV
+
+Machine Learning
+TensorFlow PyTorch NLP LLMs LangChain
+
+Database Management
+MySQL
+
+Version Control
+Git
+
+Cloud Technologies
+AWS
+
+Other Skills
+Unix Big Data Selenium Prompt Engineering
+
+Education
+
+Master of Artificial Intelligence and Machine Learning
+University of Adelaide, Adelaide, SA, Australia
+2024 - Present
+
+B.E. in Computer Science and Engineering (AI / Machine Learning)
+Chandigarh University, Punjab, India
+2020 - 2024
+CGPA: 8.39
+
+12th (Senior Secondary), CBSE Board
+NP Co-ed, Lodhi Estate, New Delhi-110002
+2018 - 2019
+Percentage: 81.5%
+
+Contact Me
+
+Email
+shubharthaksangharsha@gmail.com
+
+LinkedIn
+linkedin.com/in/shubharthaksangharsha
+
+GitHub
+github.com/shubharthaksangharsha
+
+Stack Overflow
+stackoverflow.com/users/14835045/shubharthak
+
+© Shubharthak Sangharasha. All rights reserved. Design: HTML5 UP
