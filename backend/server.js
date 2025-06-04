@@ -392,7 +392,7 @@ async function fetchLiveModels() {
       return liveModelsCache.models;
     }
     
-    console.log('[Models] Fetching live models from Gemini API');
+    // console.log('[Models] Fetching live models from Gemini API');
     
     // Simplified implementation for stability
     // TODO: Replace with actual API call when endpoint is available
@@ -408,7 +408,7 @@ async function fetchLiveModels() {
     liveModelsCache.models = DEFAULT_LIVE_MODELS;
     liveModelsCache.timestamp = now;
     
-    console.log('[Models] Fetched and cached live models');
+    // console.log('[Models] Fetched and cached live models');
     return DEFAULT_LIVE_MODELS;
   } catch (error) {
     console.error('[Models] Error fetching live models:', error);
@@ -645,7 +645,7 @@ app.get('/health', (req,res)=>res.json({status:'ok'}));
 // Chat models endpoint
 app.get('/api/models', (req, res) => {
   try {
-    console.log('[GET /api/models] Serving chat models');
+    // console.log('[GET /api/models] Serving chat models');
     res.json(chatModels);
   } catch (error) {
     console.error('[GET /api/models] Error:', error);
@@ -656,9 +656,9 @@ app.get('/api/models', (req, res) => {
 // Live models endpoint with /api prefix
 app.get('/api/models/live', async (req, res) => {
   try {
-    console.log('[GET /api/models/live] Fetching live models');
+    // console.log('[GET /api/models/live] Fetching live models');
     const models = await fetchLiveModels();
-    console.log('[GET /api/models/live] Success, sending', models.length, 'models');
+    // console.log('[GET /api/models/live] Success, sending', models.length, 'models');
     res.json(models);
   } catch (error) {
     console.error('[GET /api/models/live] Error:', error);
@@ -669,7 +669,7 @@ app.get('/api/models/live', async (req, res) => {
 // Legacy endpoints (without /api prefix)
 app.get('/models', (req, res) => {
   try {
-    console.log('[GET /models] Serving chat models (legacy endpoint)');
+    // console.log('[GET /models] Serving chat models (legacy endpoint)');
     res.json(chatModels);
   } catch (error) {
     console.error('[GET /models] Error:', error);
@@ -679,9 +679,9 @@ app.get('/models', (req, res) => {
 
 app.get('/models/live', async (req, res) => {
   try {
-    console.log('[GET /models/live] Fetching live models (legacy endpoint)');
+    // console.log('[GET /models/live] Fetching live models (legacy endpoint)');
     const models = await fetchLiveModels();
-    console.log('[GET /models/live] Success, sending', models.length, 'models');
+    // console.log('[GET /models/live] Success, sending', models.length, 'models');
     res.json(models);
   } catch (error) {
     console.error('[GET /models/live] Error:', error);
@@ -1386,7 +1386,7 @@ async function handleLiveConnection(ws, req) {
        sessionResumption: {
            handle: requestedResumeHandle || null,
        },
-       // Only enable output audio transcription if enabled
+       // enable input and output audio transcription if enabled
        ...(transcriptionEnabled && { outputAudioTranscription: {} }),
        ...(transcriptionEnabled && { inputAudioTranscription: {} }),
        // Use media resolution from URL parameter, fallback to medium if not specified
@@ -1487,10 +1487,10 @@ async function handleLiveConnection(ws, req) {
                         // console.log(`[Live Backend] Received outputTranscription from Gemini <${sessionIdShort}>:`, evt.serverContent.outputTranscription);
                     // }
 
-                    // Check for outputTranscription specifically
-                    if (evt.serverContent?.inputTranscription) {
-                        console.log(`[Live Backend] Received inputTranscription from Gemini <${sessionIdShort}>:`, evt.serverContent.inputTranscription);
-                    }
+                    // Check for inputTranscription specifically
+                    // if (evt.serverContent?.inputTranscription) {
+                        // console.log(`[Live Backend] Received inputTranscription from Gemini <${sessionIdShort}>:`, evt.serverContent.inputTranscription);
+                    // }
 
                     try {
                          if (ws.readyState === WebSocket.OPEN) {

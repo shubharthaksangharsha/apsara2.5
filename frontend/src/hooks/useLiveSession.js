@@ -67,6 +67,7 @@ export function useLiveSession({ currentVoice, transcriptionEnabled = true, slid
   const screenCanvasElementRef = useRef(null); // <-- Canvas for snapshotting FOR SCREEN SHARE
   const isScreenSharingRef = useRef(isStreamingScreen); // <-- New ref for screen share status
   const outputTranscriptionBufferRef = useRef("");
+  const inputTranscriptionBufferRef = useRef(""); // Buffer for input transcription
   const lastTranscriptionChunkRef = useRef("");
   const audioCompressorRef = useRef(null); // For enhanced native audio processing
 
@@ -96,8 +97,8 @@ export function useLiveSession({ currentVoice, transcriptionEnabled = true, slid
   // --- Memoized Utility Functions ---
   const addLiveMessage = useCallback((msg) => {
     // Clear map data when a new message (esp. user message) is added? Debatable.
-    // setMapDisplayData(null); // Optional: Clear map on any new message
-    console.log(`➕ Adding new message ID ${msg.id}, text: "${msg.text?.substring(0, 20)}..."`);
+    setMapDisplayData(null); // Optional: Clear map on any new message
+    // console.log(`➕ Adding new message ID ${msg.id}, text: "${msg.text?.substring(0, 20)}..."`);
     setLiveMessages(prev => [...prev, { ...msg, id: msg.id || (Date.now() + Math.random() * 1000), timestamp: Date.now() }]);
   }, []);
 
@@ -126,11 +127,11 @@ export function useLiveSession({ currentVoice, transcriptionEnabled = true, slid
                   ...updatedMessage.parts[lastPartIndex],
                   text: updatedMessage.parts[lastPartIndex].text + updates.text
               };
-              console.log(`[Live WS] Appended text to last part of message ${id}`);
+              // console.log(`[Live WS] Appended text to last part of message ${id}`);
       } else {
               // If no parts, or last part isn't text, add a new text part
               updatedMessage.parts.push({ text: updates.text });
-              console.log(`[Live WS] Added new text part to message ${id}`);
+              // console.log(`[Live WS] Added new text part to message ${id}`);
           }
           // Remove the top-level text property from updates as it's handled in parts
           delete updates.text;
@@ -139,7 +140,7 @@ export function useLiveSession({ currentVoice, transcriptionEnabled = true, slid
       // Handle incoming parts updates (like images, code blocks) - merge them
       if (updates.parts) {
           updatedMessage.parts = [...updatedMessage.parts, ...updates.parts];
-           console.log(`[Live WS] Added ${updates.parts.length} new parts to message ${id}`);
+          //  console.log(`[Live WS] Added ${updates.parts.length} new parts to message ${id}`);
           delete updates.parts; // Remove parts from general updates
       }
 
@@ -216,12 +217,12 @@ export function useLiveSession({ currentVoice, transcriptionEnabled = true, slid
                        console.log(`➡️ Appended text part via addOrUpdate to message ${streamId}`);
                    } else {
                        updatedMessage.parts.push(part); // Add as new part if last wasn't text
-                       console.log(`➡️ Added new text part via addOrUpdate to message ${streamId}`);
+                      //  console.log(`➡️ Added new text part via addOrUpdate to message ${streamId}`);
                    }
               } else {
                    // For non-text parts (images, code), just append
                    updatedMessage.parts.push(part);
-                   console.log(`➡️ Added new non-text part via addOrUpdate to message ${streamId}:`, part);
+                  //  console.log(`➡️ Added new non-text part via addOrUpdate to message ${streamId}:`, part);
               }
 
               updatedMessages[index] = updatedMessage;
@@ -1034,8 +1035,9 @@ export function useLiveSession({ currentVoice, transcriptionEnabled = true, slid
     };
 
     ws.onmessage = (event) => {
+        let isInputTranscriptionEvent; // Declare at the top of the function scope
         // Directly process event.data, assuming each message event contains one JSON object
-        console.log('[Live WS] Received raw data:', event.data); // Log raw receive
+        // console.log('[Live WS] Received raw data:', event.data); // Log raw receive
 
         if (!event.data) {
             console.warn('[Live WS] Received empty message data.');
@@ -1045,15 +1047,16 @@ export function useLiveSession({ currentVoice, transcriptionEnabled = true, slid
         try {
           const data = JSON.parse(event.data);
           console.log('[Live WS] Successfully parsed data:', data);
+          isInputTranscriptionEvent = false; // Initialize within the try block
 
           let turnOrGenComplete = false; // Flag to check if completion happened
 
           // --- Process Events FIRST (Including map and image events) ---
           if (data.event === 'map_display_update') {
-              console.log("🗺️ [Live WS - useLiveSession] Received 'map_display_update'. Data:", data.mapData);
+              // console.log("🗺️ [Live WS - useLiveSession] Received 'map_display_update'. Data:", data.mapData);
               setMapDisplayData(data.mapData); // Update map state
           } else if (data.event === 'imageGenerated' || data.event === 'imageEdited') {
-              console.log(`🖼️ [Live WS - useLiveSession] Received '${data.event}'. Processing image data...`);
+              // console.log(`🖼️ [Live WS - useLiveSession] Received '${data.event}'. Processing image data...`);
               // Create a message with image and description
               const imageMessage = {
                 role: 'model',
@@ -1099,7 +1102,7 @@ export function useLiveSession({ currentVoice, transcriptionEnabled = true, slid
 
                  // -- Handle Model Turn Parts (Text/Audio) --
                  if (data.serverContent.modelTurn?.parts) {
-                     console.log("💬 [Live WS] Processing modelTurn parts.");
+                    //  console.log("💬 [Live WS] Processing modelTurn parts.");
                      let isAudioChunk = false;
                      data.serverContent.modelTurn.parts.forEach(part => {
                          // --- Use the unified addOrUpdate function ---
@@ -1125,7 +1128,7 @@ export function useLiveSession({ currentVoice, transcriptionEnabled = true, slid
                                             
                                             // Apply special handling for native audio if needed
                                             if (isNativeAudioModel) {
-                                                console.log('[Audio] Processing native audio chunk');
+                                                // console.log('[Audio] Processing native audio chunk');
                                                 // Native audio might need different processing in the future
                                                 // For now, we just queue it as normal
                                             }
@@ -1164,17 +1167,26 @@ export function useLiveSession({ currentVoice, transcriptionEnabled = true, slid
 
                  // -- Handle Turn/Generation Completion --
                  if (data.serverContent.turnComplete || data.serverContent.generationComplete) {
-                      console.log("🏁 [Live WS] Turn/Generation Complete detected.");
+                      // console.log("🏁 [Live WS] Turn/Generation Complete detected.");
                       turnOrGenComplete = true;
                  }
 
                  // --- Handle Interruption ---
                  if (data.serverContent.interrupted) {
-                    console.log("🛑 [Live WS] Interruption detected! Stopping playback.");
+                    // console.log("🛑 [Live WS] Interruption detected! Stopping playback.");
                     stopAndClearAudio(); // Stop playback and clear queue
                  }
 
                  // --- Handle Transcriptions (Input and Output) ---
+                 // --- Handle Input Transcription ---
+                 if (data.serverContent.inputTranscription?.text) {
+                    if (transcriptionEnabled) {
+                        inputTranscriptionBufferRef.current += data.serverContent.inputTranscription.text; // Accumulate
+                        isInputTranscriptionEvent = true; // Mark that this event was an input transcription
+                    }
+                 }
+
+                 // --- Handle Output Transcriptions (existing logic) ---
                  if (data.serverContent.outputTranscription?.text) {
                     if (transcriptionEnabled) {
                         const chunk = data.serverContent.outputTranscription.text;
@@ -1184,13 +1196,27 @@ export function useLiveSession({ currentVoice, transcriptionEnabled = true, slid
                         }
                     }
                  }
+
+                // --- Logic to flush input transcription (now definitively inside the main 'if (data.serverContent)') ---
+                // Flush when the model is responding or its turn is complete, AND input buffer has content
+                // Only consider the model's turn effectively ended for input display purposes when turnComplete or generationComplete is received.
+                const modelTurnEffectivelyEnded = data.serverContent.turnComplete || data.serverContent.generationComplete;
+
+                if (modelTurnEffectivelyEnded && !isInputTranscriptionEvent && transcriptionEnabled && inputTranscriptionBufferRef.current) {
+                    addLiveMessage({
+                        role: 'user',
+                        text: `${inputTranscriptionBufferRef.current}`,
+                        // icon: UserCircleIcon, // Optional: if you have a user icon component
+                    });
+                    inputTranscriptionBufferRef.current = ""; // Clear buffer after displaying
+                }
             } // end if data.serverContent
 
             // --- Process Other Top-Level Events ---
             else if (data.setupComplete) {
-                 console.log("✅ [Live WS] Processing 'setupComplete'.");
+                //  console.log("✅ [Live WS] Processing 'setupComplete'.");
             } else if (data.serverToolCall) {
-                 console.log("🔧 [Live WS] Processing 'serverToolCall':", data.serverToolCall);
+                //  console.log("🔧 [Live WS] Processing 'serverToolCall':", data.serverToolCall);
                  
                  // Check if this is a native audio model to adapt function call handling
                  const isNativeAudioModel = selectedModel?.includes('native-audio');
@@ -1199,7 +1225,7 @@ export function useLiveSession({ currentVoice, transcriptionEnabled = true, slid
                  if (functionCalls.length > 0) {
                      // Log each function call received
                      functionCalls.forEach((call, index) => {
-                         console.log(`[Live WS] Function call ${index+1}/${functionCalls.length}: ${call.name}`);
+                        //  console.log(`[Live WS] Function call ${index+1}/${functionCalls.length}: ${call.name}`);
                      });
                      
                      // Show function call in UI
@@ -1212,13 +1238,13 @@ export function useLiveSession({ currentVoice, transcriptionEnabled = true, slid
                      // Handle async function calls for each model type differently
                      // Native audio models require manual function call response handling
                      if (isNativeAudioModel) {
-                         console.log('[Live WS] Native audio model requires manual function call response handling');
+                        //  console.log('[Live WS] Native audio model requires manual function call response handling');
                          // For native audio models, we'd add UI components or handling here
                          // to allow the user to see and respond to function calls
                          // This is a placeholder for more complex implementation
                      } else {
                          // Standard automatic function call handling for non-native audio models
-                         console.log('[Live WS] Using automatic function call response handling');
+                        //  console.log('[Live WS] Using automatic function call response handling');
                      }
                  } else {
                      console.warn('[Live WS] Received serverToolCall event without function calls');
@@ -1411,7 +1437,7 @@ export function useLiveSession({ currentVoice, transcriptionEnabled = true, slid
                 liveStreamingMsgIdRef.current = null;
             }
 
-            // After handling outputTranscription chunk:
+            // After handling outputTranscription chunk (this block seems redundant with the one above, but keeping structure for now):
             if (data.serverContent?.outputTranscription?.text) {
               if (transcriptionEnabled) {
                 const chunk = data.serverContent.outputTranscription.text;
@@ -1425,7 +1451,7 @@ export function useLiveSession({ currentVoice, transcriptionEnabled = true, slid
             if ((data.serverContent?.turnComplete || data.serverContent?.generationComplete) && transcriptionEnabled && outputTranscriptionBufferRef.current) {
               addLiveMessage({
                 role: 'system',
-                text: `Transcript: ${outputTranscriptionBufferRef.current}`,
+                text: `${outputTranscriptionBufferRef.current}`,
                 icon: AudioLines
               });
               outputTranscriptionBufferRef.current = "";
@@ -1528,7 +1554,7 @@ export function useLiveSession({ currentVoice, transcriptionEnabled = true, slid
   const startRecording = useCallback(async () => {
         // Attempt to resume context on user interaction (clicking record)
         if (audioInputContextRef.current && audioInputContextRef.current.state === 'suspended') {
-             console.log("[Audio Input] Attempting to resume context before starting recording...");
+            //  console.log("[Audio Input] Attempting to resume context before starting recording...");
              try { await audioInputContextRef.current.resume(); }
              catch (e) { console.error("[Audio Input] Failed to resume context on record click:", e); }
         }
