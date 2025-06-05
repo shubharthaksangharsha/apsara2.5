@@ -19,24 +19,24 @@ export async function handleTakeNotes({ content, title }) {
       
       // Use Python to append the note to the file
       const pythonCode = `
-  import os
-  
-  # File to save notes to
-  notes_file = 'my-imp-notes.txt'
-  
-  # Note content to append
-  note_content = '''${formattedNote}'''
-  
-  # Create the file if it doesn't exist or append to it
-  with open(notes_file, 'a+') as f:
-      f.write(note_content)
-  
-  # Verify file exists and get its size
-  file_exists = os.path.exists(notes_file)
-  file_size = os.path.getsize(notes_file) if file_exists else 0
-  
-  print(f"Note saved successfully to {notes_file}. File size: {file_size} bytes.")
-  `;
+import os
+
+# File to save notes to
+notes_file = 'my-imp-notes.txt'
+
+# Note content to append
+note_content = """${formattedNote}"""
+
+# Create the file if it doesn't exist or append to it
+with open(notes_file, 'a+') as f:
+    f.write(note_content)
+
+# Verify file exists and get its size
+file_exists = os.path.exists(notes_file)
+file_size = os.path.getsize(notes_file) if file_exists else 0
+
+print(f"Note saved successfully to {notes_file}. File size: {file_size} bytes.")
+`;
   
       // Run the Python code
       const { spawn } = await import('child_process');
@@ -90,68 +90,67 @@ export async function handleTakeNotes({ content, title }) {
     try {
       // Use Python to read the notes file
       const pythonCode = `
-  import os
-  
-  # File to read notes from
-  notes_file = 'my-imp-notes.txt'
-  
-  # Check if file exists
-  if not os.path.exists(notes_file):
-      print(json.dumps({
-          "status": "error",
-          "message": "No saved notes found. Use the takeNotes tool to save notes first."
-      }))
-      exit(0)
-  
-  # Read the file content
-  with open(notes_file, 'r') as f:
-      content = f.read()
-  
-  # Get file stats
-  file_stats = os.stat(notes_file)
-  file_size = file_stats.st_size
-  last_modified = file_stats.st_mtime
-  
-  import json
-  import time
-  from datetime import datetime
-  
-  # Extract notes by splitting on the timestamp markers
-  # Each note starts with "--- YYYY-MM-DD HH:MM:SS"
-  notes = []
-  if content.strip():
-      # Split by the marker pattern
-      import re
-      note_pattern = r'---\\s+(\\d{4}-\\d{2}-\\d{2}\\s+\\d{2}:\\d{2}:\\d{2})(?:\\s+-\\s+(.+?))?\\s+---\\n([\\s\\S]+?)(?=\\n\\n---\\s+\\d{4}|$)'
-      matches = re.findall(note_pattern, content)
-      
-      for match in matches:
-          timestamp, title, note_content = match
-          notes.append({
-              "timestamp": timestamp,
-              "title": title.strip() if title else None,
-              "content": note_content.strip()
-          })
-  
-  # Reverse so newest are first
-  notes.reverse()
-  
-  # Apply limit if specified
-  limit_val = ${limit || 'None'}
-  if limit_val is not None and limit_val > 0:
-      notes = notes[:limit_val]
-  
-  # Prepare result
-  result = {
-      "status": "success",
-      "notes": notes,
-      "total_notes": len(notes),
-      "file_size": file_size,
-      "last_modified": datetime.fromtimestamp(last_modified).isoformat()
-  }
-  
-  print(json.dumps(result))
-  `;
+import os
+import json
+import time
+from datetime import datetime
+
+# File to read notes from
+notes_file = 'my-imp-notes.txt'
+
+# Check if file exists
+if not os.path.exists(notes_file):
+    print(json.dumps({
+        "status": "error",
+        "message": "No saved notes found. Use the takeNotes tool to save notes first."
+    }))
+    exit(0)
+
+# Read the file content
+with open(notes_file, 'r') as f:
+    content = f.read()
+
+# Get file stats
+file_stats = os.stat(notes_file)
+file_size = file_stats.st_size
+last_modified = file_stats.st_mtime
+
+# Extract notes by splitting on the timestamp markers
+# Each note starts with "--- YYYY-MM-DD HH:MM:SS"
+notes = []
+if content.strip():
+    # Split by the marker pattern
+    import re
+    note_pattern = r'---\\s+(\\d{4}-\\d{2}-\\d{2}\\s+\\d{2}:\\d{2}:\\d{2})(?:\\s+-\\s+(.+?))?\\s+---\\n([\\s\\S]+?)(?=\\n\\n---\\s+\\d{4}|$)'
+    matches = re.findall(note_pattern, content)
+    
+    for match in matches:
+        timestamp, title, note_content = match
+        notes.append({
+            "timestamp": timestamp,
+            "title": title.strip() if title else None,
+            "content": note_content.strip()
+        })
+
+# Reverse so newest are first
+notes.reverse()
+
+# Apply limit if specified
+limit_val = ${limit || 'None'}
+if limit_val is not None and limit_val > 0:
+    notes = notes[:limit_val]
+
+# Prepare result
+result = {
+    "status": "success",
+    "notes": notes,
+    "total_notes": len(notes),
+    "file_size": file_size,
+    "last_modified": datetime.fromtimestamp(last_modified).isoformat()
+}
+
+print(json.dumps(result))
+`;
   
       // Run the Python code
       const { spawn } = await import('child_process');

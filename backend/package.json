@@ -1,6 +1,6 @@
 {
   "name": "apsara-backend",
-  "version": "2.5.1",
+  "version": "2.5.2",
   "description": "Backend server for Apsara AI assistant",
   "main": "index.js",
   "type": "module",

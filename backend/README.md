@@ -3,13 +3,15 @@
 Backend server for Apsara 2.5, an advanced AI assistant powered by Google's Gemini API. This server provides REST API endpoints, WebSocket-based live connections, and a comprehensive suite of AI tools and integrations.
 
 ## 🔄 Version Information
-- **Current Version**: 2.5.1
+- **Current Version**: 2.5.2
 - **Architecture**: Modular, domain-driven design
 - **Key Improvements**:
   - Refactored from monolithic to modular architecture
   - Improved maintainability with clear separation of concerns
   - Enhanced developer experience
   - Better testability of individual components
+  - Fixed WebSocket connection handling
+  - Improved notes functionality
 
 ## 📁 Directory Structure
 
@@ -45,7 +47,11 @@ backend/
 │       └── notes/       # Notes management
 ├── utils/               # Helper utilities
 ├── websocket/           # WebSocket handlers
-│   └── liveHandler.js   # Live connection handler
+│   ├── index.js         # Main export point
+│   ├── server.js        # WebSocket server setup
+│   ├── handlers/        # Message and connection handlers
+│   ├── config/          # WebSocket configuration 
+│   └── utils/           # WebSocket utilities
 ├── uploads/             # Uploaded files directory
 ├── public/              # Static files
 ├── get_battery.py       # Python helper script for battery status
@@ -240,4 +246,4 @@ To update the version:
 
 ## 📄 License
 
-ISC 
+ISC
