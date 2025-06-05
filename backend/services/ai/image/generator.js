@@ -1,11 +1,6 @@
-// Image Generation implementation using Gemini API
-import { GoogleGenAI, Modality } from "@google/genai";
-
-// Initialize the Gemini API client
-async function getGeminiClient() {
-  const apiKey = process.env.GEMINI_API_KEY;
-  return new GoogleGenAI({ apiKey });
-}
+// services/ai/image/generator.js
+import { Modality } from "@google/genai";
+import { getGeminiClient } from "../client.js";
 
 /**
  * Generate an image using Gemini's image generation capabilities
@@ -17,7 +12,7 @@ export async function generateImage(prompt) {
     console.log(`[Image Generation] Generating image with prompt: "${prompt.substring(0, 100)}${prompt.length > 100 ? '...' : ''}"`);
     
     const ai = await getGeminiClient();
-    console.log(process.env.GOOGLE_API_KEY)
+    
     // Set up the request to Gemini
     const response = await ai.models.generateContent({
       model: "gemini-2.0-flash-preview-image-generation",
@@ -27,7 +22,7 @@ export async function generateImage(prompt) {
         temperature: 0.8,
       },
     });
-    console.log(response)
+    
     let resultText = '';
     let imageData = null;
     

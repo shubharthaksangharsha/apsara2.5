@@ -1,162 +1,10 @@
-// backend/gmail-tools.js
-import { google } from 'googleapis';
+// services/google/gmail/handlers.js
+import { getAuthenticatedGmailClient } from '../auth/googleAuth.js';
+import { resolveEmailAlias } from './aliases.js';
 
-// --- Alias Mapping ---
-const emailAliases = {
-  'me': 'shubharthaksangharsha@gmail.com',
-  'myself': 'shubharthaksangharsha@gmail.com',
-  'bro': 'siddhant3s@gmail.com',
-  'bhaiya': 'siddhant3s@gmail.com',
-  'gf': 'pranchal018@gmail.com',
-  'wife': 'pranchal018@gmail.com',
-  'baby': 'pranchal018@gmail.com',
-  'love': 'pranchal018@gmail.com',
-  'mom': 'usharani20jan@gmail.com',
-  'mummy': 'usharani20jan@gmail.com',
-  'maa': 'usharani20jan@gmail.com',
-  'dad': 'doctorshersingh@gmail.com',
-  'papa': 'doctorshersingh@gmail.com',
-};
-
-// Helper to resolve alias or return original if not an alias or already email-like
-function resolveEmailAlias(aliasOrEmail) {
-    const lowerCaseInput = aliasOrEmail.toLowerCase().trim();
-    if (emailAliases[lowerCaseInput]) {
-        console.log(`[Alias Resolved] "${aliasOrEmail}" -> "${emailAliases[lowerCaseInput]}"`);
-        return emailAliases[lowerCaseInput];
-    }
-    // Basic check if it looks like an email already
-    if (lowerCaseInput.includes('@') && lowerCaseInput.includes('.')) {
-        return aliasOrEmail.trim(); // Return original if it looks like an email
-    }
-    // If it's not an alias and doesn't look like an email, flag it.
-    // Returning null might be better than returning the invalid input.
-    // The AI should ideally provide a valid address or alias.
-    console.warn(`[Alias Not Found/Invalid] Input "${aliasOrEmail}" is not a known alias or a valid email format.`);
-    return null;
-}
-
-// Import modules at the top level for ES modules
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
-
-// Get current directory for ES modules
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-// Helper function to get an authenticated Gmail client
-// This centralizes the auth logic for all Gmail tools in this file
-async function getAuthenticatedGmailClient(req) {
-  // Get credentials from credentials.json
-  let credentials;
-  try {
-    // Validate request object has authentication tokens
-    if (!req || typeof req !== 'object') {
-      throw new Error('Invalid request object provided to Gmail tool');
-    }
-    
-    // Check for authentication tokens
-    if (!req.userTokens || !req.isAuthenticated) {
-      throw new Error('No authentication tokens available. User must be logged in to use Gmail features.');
-    }
-
-    // Log authentication token presence for debugging
-    console.log(`[GmailTool] Authentication check passed, userTokens present: ${!!req.userTokens}, isAuthenticated: ${req.isAuthenticated}`);
-    
-    try {
-      const credentialsJson = fs.readFileSync(path.join(__dirname, './credentials.json'), 'utf8');
-      credentials = JSON.parse(credentialsJson);
-    } catch (error) {
-      console.error(`Error reading credentials.json: ${error.message}`);
-      throw new Error('Unable to load credentials. Please check your Google project configuration.');
-    }
-    
-    const { client_id, client_secret } = credentials.web;
-    const redirectUri = credentials.web.redirect_uris[0];
-    const { access_token, refresh_token } = req.userTokens;
-    
-    if (!client_id || !client_secret || !redirectUri || !refresh_token) {
-      throw new Error('Missing required OAuth credentials for Gmail access');
-    }
-    
-    const oauth2Client = new google.auth.OAuth2(client_id, client_secret, redirectUri);
-    oauth2Client.setCredentials({ refresh_token, access_token });
-
-    // It's good practice to ensure the access token is fresh, though googleapis often handles this.
-    try {
-      await oauth2Client.getAccessToken();
-    } catch (error) {
-      console.error(`[GmailTool] Error refreshing access token: ${error.message}`);
-      // Re-throw the error since we can't proceed without valid credentials
-      throw error;
-    }
-    
-    return google.gmail({ version: 'v1', auth: oauth2Client });
-  } catch (error) {
-    console.error(`[GmailTool] Authentication error: ${error.message}`);
-    throw error;
-  }
-}
-
-// --- Tool Schemas for Gmail ---
-
-export const sendGmailSchema = {
-  name: 'sendGmail',
-  description: 'Sends an email message via Gmail using the pre-authorized server account. You can use predefined aliases like "me", "bro", "gf", "mom", "dad".',
-  parameters: {
-    type: 'OBJECT',
-    properties: {
-      to: { type: 'STRING', description: 'The recipient\'s email address or a predefined alias (e.g., "mom", "bro@example.com").' },
-      subject: { type: 'STRING', description: 'The subject of the email.' },
-      body: { type: 'STRING', description: 'The plain text content of the email.' },
-    },
-    // required: ['to', 'subject', 'body']
-  }
-};
-
-export const draftGmailSchema = {
-  name: 'draftGmail',
-  description: 'Creates a draft email message in Gmail using the pre-authorized server account. Does not send. You can use predefined aliases like "me", "bro", "gf", "mom", "dad".',
-  parameters: {
-    type: 'OBJECT',
-    properties: {
-      to: { type: 'STRING', description: 'Optional. The recipient\'s email address or a predefined alias.' },
-      subject: { type: 'STRING', description: 'Optional. The subject of the draft.' },
-      body: { type: 'STRING', description: 'Optional. The plain text content of the draft.' },
-    },
-    // required: []
-  }
-};
-
-export const listGmailMessagesSchema = {
-  name: 'listGmailMessages',
-  description: 'Lists recent email messages from the authenticated Gmail account.',
-  parameters: {
-    type: 'OBJECT',
-    properties: {
-      maxResults: { type: 'INTEGER', description: 'Optional. Maximum number of messages to return (e.g., 5 or 10). Defaults to 5.' },
-      query: { type: 'STRING', description: 'Optional. Gmail search query (e.g., "is:unread", "from:boss@example.com").' }
-    },
-    // required: []
-  }
-};
-
-export const getGmailMessageSchema = {
-  name: 'getGmailMessage',
-  description: 'Retrieves the full content (or snippet) of a specific email by its ID.',
-  parameters: {
-    type: 'OBJECT',
-    properties: {
-      messageId: { type: 'STRING', description: 'The ID of the Gmail message to retrieve.' },
-      format: { type: 'STRING', enum: ['full', 'metadata', 'raw'], description: 'Optional. Format of the message parts to retrieve. Defaults to "metadata". "full" includes payload.'}
-    },
-    // required: ['messageId']
-  }
-};
-
-// --- Tool Handlers for Gmail ---
-
+/**
+ * Sends an email via Gmail
+ */
 export async function handleSendGmail(req, args) {
   console.log(`[GmailTool: sendGmail] Received request with args:`, JSON.stringify(args));
   
@@ -220,6 +68,9 @@ export async function handleSendGmail(req, args) {
   }
 }
 
+/**
+ * Creates a draft email in Gmail
+ */
 export async function handleDraftGmail(req, args) {
   console.log(`[GmailTool: draftGmail] Received request with args:`, JSON.stringify(args));
   
@@ -283,6 +134,9 @@ export async function handleDraftGmail(req, args) {
   }
 }
 
+/**
+ * Lists Gmail messages
+ */
 export async function handleListGmailMessages(req, { maxResults = 5, query = '' }) {
   console.log(`[GmailTool: listGmailMessages] Request: maxResults=${maxResults}, query="${query}"`);
   try {
@@ -333,6 +187,9 @@ export async function handleListGmailMessages(req, { maxResults = 5, query = '' 
   }
 }
 
+/**
+ * Gets a specific Gmail message by ID
+ */
 export async function handleGetGmailMessage(req, { messageId, format = 'metadata' }) {
   console.log(`[GmailTool: getGmailMessage] Request: messageId=${messageId}, format=${format}`);
   if (!messageId) return { status: 'error', message: 'Message ID is required.' };
@@ -372,7 +229,6 @@ export async function handleGetGmailMessage(req, { messageId, format = 'metadata
     const toHeader = res.data.payload?.headers?.find(h => h.name.toLowerCase() === 'to');
     const dateHeader = res.data.payload?.headers?.find(h => h.name.toLowerCase() === 'date');
 
-
     return {
       status: 'success',
       id: res.data.id,
@@ -398,19 +254,9 @@ export async function handleGetGmailMessage(req, { messageId, format = 'metadata
   }
 }
 
-// --- Export all schemas and handlers from this file ---
-export const gmailToolSchemas = [
-  sendGmailSchema,
-  draftGmailSchema,
-  listGmailMessagesSchema,
-  getGmailMessageSchema,
-  // Add more Gmail schemas here
-];
-
 export const gmailToolHandlers = {
   sendGmail: handleSendGmail,
   draftGmail: handleDraftGmail,
   listGmailMessages: handleListGmailMessages,
   getGmailMessage: handleGetGmailMessage,
-  // Add more Gmail handlers here
 };

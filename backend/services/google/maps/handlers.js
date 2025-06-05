@@ -1,24 +1,9 @@
-// backend/maps-tools.js
-import fetch from 'node-fetch'; // Or use axios or native fetch
+// services/google/maps/handlers.js
+import fetch from 'node-fetch';
 
-// --- Tool Schemas for Maps ---
-
-export const getGoogleMapsRouteSchema = {
-  name: 'getGoogleMapsRoute',
-  description: 'Gets travel duration, distance, and route details between two locations using Google Maps.',
-  parameters: {
-    type: 'OBJECT',
-    properties: {
-      origin: { type: 'STRING', description: 'The starting address, place name, or coordinates (lat,lng).' },
-      destination: { type: 'STRING', description: 'The destination address, place name, or coordinates (lat,lng).' },
-      travelMode: { type: 'STRING', enum: ['DRIVING', 'WALKING', 'BICYCLING', 'TRANSIT'], description: 'Optional. The mode of travel. Defaults to DRIVING.' }
-    },
-    // required: ['origin', 'destination']
-  }
-};
-
-// --- Tool Handlers for Maps ---
-
+/**
+ * Gets route information between two locations using Google Maps
+ */
 export async function handleGetGoogleMapsRoute({ origin, destination, travelMode = 'DRIVING' }) {
   if (!origin || !destination) {
     return { status: 'error', message: 'Origin and destination are required to get a Google Maps route.' };
@@ -97,12 +82,6 @@ export async function handleGetGoogleMapsRoute({ origin, destination, travelMode
     return { status: 'error', message: `Failed to get route: ${error.message}` };
   }
 }
-
-// --- Export all schemas and handlers ---
-export const mapsToolSchemas = [
-  getGoogleMapsRouteSchema,
-  // Add more maps schemas here
-];
 
 export const mapsToolHandlers = {
   getGoogleMapsRoute: handleGetGoogleMapsRoute,

@@ -1,99 +1,9 @@
-// backend/calendar-tools.js
-import { google } from 'googleapis';
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
+// services/google/calendar/handlers.js
+import { getAuthenticatedCalendarClient } from '../auth/googleAuth.js';
 
-// Get current directory for ES modules
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-// Helper function to get an authenticated Calendar client using the request object
-async function getAuthenticatedCalendarClient(req) {
-  try {
-    // Validate request object has authentication tokens
-    if (!req || typeof req !== 'object') {
-      throw new Error('Invalid request object provided to Calendar tool');
-    }
-    
-    // Check for authentication tokens
-    if (!req.userTokens || !req.isAuthenticated) {
-      throw new Error('No authentication tokens available. User must be logged in to use Calendar features.');
-    }
-    
-    // Get credentials from credentials.json
-    let credentials;
-    try {
-      const credentialsJson = fs.readFileSync(path.join(__dirname, './credentials.json'), 'utf8');
-      credentials = JSON.parse(credentialsJson);
-    } catch (error) {
-      console.error(`Error reading credentials.json: ${error.message}`);
-      throw new Error('Unable to load credentials. Please check your Google project configuration.');
-    }
-    
-    const { client_id, client_secret } = credentials.web;
-    const redirectUri = credentials.web.redirect_uris[0];
-    const { access_token, refresh_token } = req.userTokens;
-    
-    if (!client_id || !client_secret || !redirectUri || !refresh_token) {
-      throw new Error('Missing required OAuth credentials for Calendar access');
-    }
-    
-    const oauth2Client = new google.auth.OAuth2(client_id, client_secret, redirectUri);
-    oauth2Client.setCredentials({ refresh_token, access_token });
-    
-    // It's good practice to ensure the access token is fresh, though googleapis often handles this.
-    try {
-      await oauth2Client.getAccessToken();
-    } catch (error) {
-      console.error(`[CalendarTool] Error refreshing access token: ${error.message}`);
-      throw error;
-    }
-    
-    return google.calendar({ version: 'v3', auth: oauth2Client });
-  } catch (error) {
-    console.error(`[CalendarTool] Authentication error: ${error.message}`);
-    throw error;
-  }
-}
-
-// --- Tool Schemas for Calendar ---
-
-export const createCalendarEventSchema = {
-  name: 'createCalendarEvent',
-  description: 'Creates a new event in the primary Google Calendar.',
-  parameters: {
-    type: 'OBJECT',
-    properties: {
-      summary: { type: 'STRING', description: 'The title or summary of the event (e.g., "Team Meeting").' },
-      description: { type: 'STRING', description: 'Optional. A longer description for the event.' },
-      startDateTime: { type: 'STRING', description: 'The start date and time in ISO 8601 format (e.g., "2024-08-15T10:00:00-07:00"). Must include time zone offset.' },
-      endDateTime: { type: 'STRING', description: 'The end date and time in ISO 8601 format (e.g., "2024-08-15T11:00:00-07:00"). Must include time zone offset.' },
-      attendees: { type: 'ARRAY', items: { type: 'STRING' }, description: 'Optional. List of attendee email addresses.' },
-      location: { type: 'STRING', description: 'Optional. The location of the event.' }
-      // timezone: { type: 'string', description: 'Optional. IANA Timezone (e.g., "America/Los_Angeles"). If not provided, calendar default is used.'} // Let API handle timezone from ISO string for simplicity
-    },
-    // required: ['summary', 'startDateTime', 'endDateTime']
-  }
-};
-
-export const listCalendarEventsSchema = {
-  name: 'listCalendarEvents',
-  description: 'Lists upcoming events from the primary Google Calendar.',
-  parameters: {
-    type: 'OBJECT',
-    properties: {
-      maxResults: { type: 'INTEGER', description: 'Optional. Maximum number of events to return (e.g., 5 or 10). Defaults to 10.' },
-      timeMin: { type: 'STRING', description: 'Optional. The start of the time range (ISO 8601 format). Defaults to the current time.' },
-      // timeMax: { type: 'string', description: 'Optional. The end of the time range (ISO 8601 format). If not set, lists indefinitely from timeMin.'}
-    },
-    // required: []
-  }
-};
-
-
-// --- Tool Handlers for Calendar (Placeholders/Basic Implementation) ---
-
+/**
+ * Creates a new calendar event
+ */
 export async function handleCreateCalendarEvent(req, args) {
   console.log(`[CalendarTool: createEvent] Received request with args:`, JSON.stringify(args));
   
@@ -140,14 +50,11 @@ export async function handleCreateCalendarEvent(req, args) {
       location: location,
       start: {
         dateTime: startDateTime,
-        // timeZone: args.timeZone, // Often inferred from dateTime offset
       },
       end: {
         dateTime: endDateTime,
-        // timeZone: args.timeZone,
       },
       attendees: args.attendees ? args.attendees.map(email => ({ email })) : [],
-      // Reminders, recurrence, etc. can be added here
     };
 
     const res = await calendar.events.insert({
@@ -169,6 +76,9 @@ export async function handleCreateCalendarEvent(req, args) {
   }
 }
 
+/**
+ * Lists upcoming calendar events
+ */
 export async function handleListCalendarEvents(req, args) {
   console.log(`[CalendarTool: listEvents] Received request with args:`, JSON.stringify(args));
   
@@ -238,12 +148,6 @@ export async function handleListCalendarEvents(req, args) {
     return { status: 'error', message: errorMessage };
   }
 }
-
-// --- Export all schemas and handlers from this file ---
-export const calendarToolSchemas = [
-  createCalendarEventSchema,
-  listCalendarEventsSchema,
-];
 
 export const calendarToolHandlers = {
   createCalendarEvent: handleCreateCalendarEvent,
