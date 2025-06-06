@@ -22,7 +22,7 @@ import { useAppSettings } from './hooks/useAppSettings';
 import { useConversations } from './hooks/useConversations';
 import { useChatApi } from './hooks/useChatApi';
 import { useFileUpload } from './hooks/useFileUpload';
-import { useLiveSession } from './hooks/useLiveSession';
+import { useLiveSession } from './hooks/useLiveSession/index';
 import { useGoogleAuth } from './hooks/useGoogleAuth';
 import { getModelCapabilities } from './utils/modelCapabilities'; // Import capability checker
 
