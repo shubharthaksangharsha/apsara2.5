@@ -2,7 +2,10 @@
  * Constants for app settings
  */
 
-export const BACKEND_URL = 'http://localhost:9000'; // Consider moving to a config file
+import { BACKEND_URL } from '../common-constants';
+
+// Re-export BACKEND_URL for backward compatibility
+export { BACKEND_URL };
 
 // Default values
 export const DEFAULT_TEMPERATURE = 0.7;
