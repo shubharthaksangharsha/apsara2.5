@@ -1,20 +1,41 @@
 import { useState, useEffect, useCallback } from 'react';
-import { getModelCapabilities } from '../utils/modelCapabilities'; // Import the utility
+import { LS_KEYS, DEFAULT_TEMPERATURE, DEFAULT_MAX_OUTPUT_TOKENS, 
+         DEFAULT_THINKING_ENABLED, DEFAULT_THINKING_BUDGET } from './constants';
+import { loadFromStorage, saveToStorage, removeFromStorage } from './settings-persistence';
+import { updateSettingsBasedOnCapabilities } from './capabilities-utils';
+import { getModelCapabilities } from '../../utils/modelCapabilities';
 
-const BACKEND_URL = 'http://localhost:9000'; // Consider moving to a config file
-
+/**
+ * Hook for managing application settings and model capabilities
+ * 
+ * @param {string} initialSystemInstruction - Initial system instruction from backend
+ * @returns {Object} Settings state and functions
+ */
 export function useAppSettings(initialSystemInstruction) {
   // --- State Initialization ---
-  const [currentModel, setCurrentModel] = useState(() => localStorage.getItem('currentModel') || ''); // Default might come from fetched models later
-  const [currentVoice, setCurrentVoice] = useState(() => localStorage.getItem('currentVoice') || ''); // For TTS if used elsewhere
+  const [currentModel, setCurrentModel] = useState(() => 
+    loadFromStorage(LS_KEYS.CURRENT_MODEL, ''));
+    
+  const [currentVoice, setCurrentVoice] = useState(() => 
+    loadFromStorage(LS_KEYS.CURRENT_VOICE, ''));
+    
   const [systemInstruction, setSystemInstruction] = useState(''); // Initialize empty, set later
-  const [temperature, setTemperature] = useState(() => parseFloat(localStorage.getItem('temperature') || '0.7'));
-  const [maxOutputTokens, setMaxOutputTokens] = useState(() => parseInt(localStorage.getItem('maxOutputTokens') || '8192', 10)); // Default to 8k often safer
+  
+  const [temperature, setTemperature] = useState(() => 
+    loadFromStorage(LS_KEYS.TEMPERATURE, DEFAULT_TEMPERATURE, parseFloat));
+    
+  const [maxOutputTokens, setMaxOutputTokens] = useState(() => 
+    loadFromStorage(LS_KEYS.MAX_OUTPUT_TOKENS, DEFAULT_MAX_OUTPUT_TOKENS, val => parseInt(val, 10)));
+    
   // Initialize tool selection flags to false by default (no localStorage dependency)
   const [enableGoogleSearch, setEnableGoogleSearch] = useState(false);
   const [enableCodeExecution, setEnableCodeExecution] = useState(false);
-  const [enableThinking, setEnableThinking] = useState(() => localStorage.getItem('enableThinking') === 'true');
-  const [thinkingBudget, setThinkingBudget] = useState(() => parseInt(localStorage.getItem('thinkingBudget') || '0', 10));
+  
+  const [enableThinking, setEnableThinking] = useState(() => 
+    loadFromStorage(LS_KEYS.ENABLE_THINKING, DEFAULT_THINKING_ENABLED, val => val === 'true'));
+    
+  const [thinkingBudget, setThinkingBudget] = useState(() => 
+    loadFromStorage(LS_KEYS.THINKING_BUDGET, DEFAULT_THINKING_BUDGET, val => parseInt(val, 10)));
 
   // Store model capabilities
   const [modelCapabilities, setModelCapabilities] = useState(getModelCapabilities(currentModel));
@@ -30,64 +51,35 @@ export function useAppSettings(initialSystemInstruction) {
 
   // Update capabilities and dependent settings when model changes
   useEffect(() => {
-    const capabilities = getModelCapabilities(currentModel);
-    setModelCapabilities(capabilities);
-
-      // Reset tool selection flags when model changes
-    // Only allow tools that are supported by the current model
-    if (!capabilities.supportsSearch) {
-      setEnableGoogleSearch(false);
-    }
-    
-    if (!capabilities.supportsCodeExecution) {
-      setEnableCodeExecution(false);
-    }
-
-    // Default thinking settings based on model, then check localStorage for overrides
-    let modelDefaultThinking = false;
-    let modelDefaultBudget = 0;
-
-    if (currentModel === 'gemini-2.5-pro-exp-03-25' || currentModel === 'gemini-2.5-flash-preview-04-17') {
-      modelDefaultThinking = true;
-      if (currentModel === 'gemini-2.5-flash-preview-04-17') {
-        modelDefaultBudget = 100;
+    const capabilities = updateSettingsBasedOnCapabilities(
+      currentModel,
+      null, // Pass null to use the default getModelCapabilities function
+      { enableThinking, thinkingBudget },
+      { setEnableGoogleSearch, setEnableCodeExecution, setEnableThinking, setThinkingBudget },
+      { 
+        enableThinking: localStorage.getItem(LS_KEYS.ENABLE_THINKING),
+        thinkingBudget: localStorage.getItem(LS_KEYS.THINKING_BUDGET)
       }
-    }
-
-    const savedThinking = localStorage.getItem('enableThinking');
-    const savedThinkingBudget = localStorage.getItem('thinkingBudget');
-
-    if (capabilities.supportsThinking) {
-      // If localStorage has a value, use it; otherwise, use model default
-      setEnableThinking(savedThinking !== null ? savedThinking === 'true' : modelDefaultThinking);
-    } else {
-      setEnableThinking(false);
-    }
-
-    if (capabilities.supportsThinkingBudget) {
-      // If localStorage has a value, use it; otherwise, use model default
-      setThinkingBudget(savedThinkingBudget !== null ? parseInt(savedThinkingBudget, 10) : modelDefaultBudget);
-    } else {
-      setThinkingBudget(0); // Reset to 0 if not supported
-    }
-
+    );
+    
+    setModelCapabilities(capabilities);
   }, [currentModel]);
 
   // --- Persistence Effects ---
   useEffect(() => {
-    localStorage.setItem('currentModel', currentModel);
+    saveToStorage(LS_KEYS.CURRENT_MODEL, currentModel);
   }, [currentModel]);
 
   useEffect(() => {
-    localStorage.setItem('currentVoice', currentVoice);
+    saveToStorage(LS_KEYS.CURRENT_VOICE, currentVoice);
   }, [currentVoice]);
 
   useEffect(() => {
-    localStorage.setItem('temperature', temperature.toString());
+    saveToStorage(LS_KEYS.TEMPERATURE, temperature, val => val.toString());
   }, [temperature]);
 
   useEffect(() => {
-    localStorage.setItem('maxOutputTokens', maxOutputTokens.toString());
+    saveToStorage(LS_KEYS.MAX_OUTPUT_TOKENS, maxOutputTokens, val => val.toString());
   }, [maxOutputTokens]);
 
   // Tool settings (enableGoogleSearch, enableCodeExecution) are no longer persisted to localStorage
@@ -96,17 +88,17 @@ export function useAppSettings(initialSystemInstruction) {
   // Persist thinking setting only if the model supports it AND the setting is true
   useEffect(() => {
     if (modelCapabilities.supportsThinking) {
-      localStorage.setItem('enableThinking', enableThinking.toString());
+      saveToStorage(LS_KEYS.ENABLE_THINKING, enableThinking, val => val.toString());
     } else {
-      localStorage.removeItem('enableThinking');
+      removeFromStorage(LS_KEYS.ENABLE_THINKING);
     }
   }, [enableThinking, modelCapabilities.supportsThinking]);
 
   useEffect(() => {
     if (modelCapabilities.supportsThinkingBudget) {
-      localStorage.setItem('thinkingBudget', thinkingBudget.toString());
+      saveToStorage(LS_KEYS.THINKING_BUDGET, thinkingBudget, val => val.toString());
     } else {
-      localStorage.removeItem('thinkingBudget');
+      removeFromStorage(LS_KEYS.THINKING_BUDGET);
     }
   }, [thinkingBudget, modelCapabilities.supportsThinkingBudget]);
 
@@ -115,8 +107,6 @@ export function useAppSettings(initialSystemInstruction) {
     if (modelCapabilities.supportsSystemInstruction) {
       setSystemInstruction(newInstruction);
       // TODO: Add backend call here if system instruction needs to be saved server-side
-      // e.g., fetch(`${BACKEND_URL}/system`, { method: 'POST', ... });
-      // For now, it's only saved in local state within the hook instance
       console.log("System instruction updated (local state):", newInstruction);
     } else {
       console.warn("System instructions are not supported by the current model.");
@@ -156,4 +146,4 @@ export function useAppSettings(initialSystemInstruction) {
     isThinkingSupportedByModel: modelCapabilities.supportsThinking,
     isThinkingBudgetSupportedByModel: modelCapabilities.supportsThinkingBudget,
   };
-}
+} 

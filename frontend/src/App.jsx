@@ -16,21 +16,18 @@ import MapDisplay from './components/MapDisplay'; // <-- Import MapDisplay
 // import ImageUploadButton from './components/ImageUploadButton'; // Assuming this path is correct
 // import ImagePreviewBar from './components/ImagePreviewBar';   // Assuming this path is correct
 
+// Import common constants
+import { BACKEND_URL, MAX_LOCALSTORAGE_SIZE_MB, BYTES_PER_MB, MAX_STORAGE_BYTES } from './hooks/common-constants';
+
 // Import the custom hook
-import { useTheme } from './hooks/useTheme';
-import { useAppSettings } from './hooks/useAppSettings';
-import { useConversations } from './hooks/useConversations';
-import { useChatApi } from './hooks/useChatApi';
-import { useFileUpload } from './hooks/useFileUpload';
+import { useTheme } from './hooks/useTheme/index';
+import { useAppSettings } from './hooks/useAppSettings/index';
+import { useConversations } from './hooks/useConversations/index';
+import { useChatApi } from './hooks/useChatApi/index';
+import { useFileUpload } from './hooks/useFileUpload/index';
 import { useLiveSession } from './hooks/useLiveSession/index';
-import { useGoogleAuth } from './hooks/useGoogleAuth';
+import { useGoogleAuth } from './hooks/useGoogleAuth/index';
 import { getModelCapabilities } from './utils/modelCapabilities'; // Import capability checker
-
-const BACKEND_URL = 'http://localhost:9000';
-
-const MAX_LOCALSTORAGE_SIZE_MB = 4.5; // Set a limit slightly below 5MB
-const BYTES_PER_MB = 1024 * 1024;
-const MAX_STORAGE_BYTES = MAX_LOCALSTORAGE_SIZE_MB * BYTES_PER_MB;
 
 // Define suggested prompts with optional target models and tool usage
 const suggestedPrompts = [
