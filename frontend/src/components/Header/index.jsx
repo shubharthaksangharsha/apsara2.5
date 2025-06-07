@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import ModelSelector from '../ModelSelector';
+import ModelSelector from './components/ModelSelector';
 import HeaderButtons from './components/HeaderButtons';
 import { MOBILE_BREAKPOINT } from './constants';
 
