@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import ModelSelector from './components/ModelSelector';
 import HeaderButtons from './components/HeaderButtons';
+import MobileMenuButton from './components/MobileMenuButton';
 import { MOBILE_BREAKPOINT } from './constants';
 
 /**
@@ -17,6 +18,7 @@ import { MOBILE_BREAKPOINT } from './constants';
  * @param {boolean} props.isAuthenticated - Whether user is authenticated
  * @param {Object} props.userProfile - User profile data
  * @param {Function} props.onSignOut - Sign out handler
+ * @param {Function} props.onToggleSidebar - Function to toggle sidebar visibility
  * @returns {JSX.Element} Header component
  */
 export default function Header({
@@ -30,6 +32,7 @@ export default function Header({
   isAuthenticated,
   userProfile,
   onSignOut,
+  onToggleSidebar,
 }) {
   // Track if we're on mobile for responsive design
   const [isMobile, setIsMobile] = useState(window.innerWidth < MOBILE_BREAKPOINT);
@@ -46,8 +49,10 @@ export default function Header({
 
   return (
     <header className="flex items-center justify-between h-14 px-3 sm:px-4 md:px-6 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 shadow-sm z-20">
-      {/* Left side - empty placeholder for layout balance */}
-      <div className="w-10"></div>
+      {/* Left side - Mobile menu button */}
+      <div className="w-10">
+        <MobileMenuButton onClick={onToggleSidebar} />
+      </div>
 
       {/* Center: Model selector */}
       <div className="flex-grow flex justify-center">

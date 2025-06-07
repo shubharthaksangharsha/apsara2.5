@@ -298,7 +298,7 @@ export default function App() {
     console.log('[App.jsx] Sending with files:', filesForMessage);
 
     // Pass filesForMessage to the backend
-    await originalSendToBackend(text, targetConvoId, initialConvoData, targetModelId, filesForMessage);
+    await originalSendToBackend(text, targetConvoId, initialConvoData, targetModelId, filesForMessage, activeConvoId);
     
     // Clear and revoke URLs for the images that were successfully sent
     clearAndRevokeImages(successfullyUploadedImages); 
@@ -736,6 +736,7 @@ export default function App() {
             isAuthenticated={isAuthenticated}
             userProfile={userProfile}
             onSignOut={handleSignOut}
+            onToggleSidebar={handleSidebarHamburgerClick}
           />
         
         {/* Chat Messages Area - Now in scrollable container with FIXED height */}

@@ -14,24 +14,32 @@ import {
  * @param {Object} props - Component props
  * @param {MediaStream} props.videoStream - The MediaStream object for video
  * @param {Function} props.onFlipCamera - Handler for when the flip camera button is clicked
+ * @param {Function} props.onSwitchCamera - Alternative prop for onFlipCamera (for backward compatibility)
  * @param {boolean} props.cameraEnabled - Whether the camera is currently enabled
+ * @param {boolean} props.isWebcamActive - Alternative prop for cameraEnabled (for backward compatibility)
  * @param {boolean} props.isFlipAvailable - Whether a flip camera option is available
  * @returns {JSX.Element|null} VideoStreamDisplay component or null if camera disabled
  */
 export default function VideoStreamDisplay({ 
   videoStream, 
   onFlipCamera, 
+  onSwitchCamera,
   cameraEnabled,
+  isWebcamActive,
   isFlipAvailable = false
 }) {
   const videoRef = useRef(null);
   const [hasAttached, setHasAttached] = useState(false);
+  
+  // Support both prop naming conventions for backward compatibility
+  const isCameraEnabled = cameraEnabled !== undefined ? cameraEnabled : isWebcamActive;
+  const flipCameraHandler = onFlipCamera || onSwitchCamera;
 
   // Attach or detach the video stream when camera enabled state changes
   useEffect(() => {
     const videoElement = videoRef.current;
     
-    if (videoElement && cameraEnabled && videoStream) {
+    if (videoElement && isCameraEnabled && videoStream) {
       console.log('[VideoStreamDisplay] Attaching video stream');
       if (videoElement.srcObject !== videoStream) {
         videoElement.srcObject = videoStream;
@@ -43,7 +51,7 @@ export default function VideoStreamDisplay({
         
         setHasAttached(true);
       }
-    } else if (videoElement && (!cameraEnabled || !videoStream)) {
+    } else if (videoElement && (!isCameraEnabled || !videoStream)) {
       console.log('[VideoStreamDisplay] Detaching video stream');
       // Clean up the video element when disabled
       if (videoElement.srcObject) {
@@ -60,10 +68,10 @@ export default function VideoStreamDisplay({
         videoElement.srcObject = null;
       }
     };
-  }, [videoStream, cameraEnabled]);
+  }, [videoStream, isCameraEnabled]);
 
   // Don't render anything if camera is disabled
-  if (!cameraEnabled) return null;
+  if (!isCameraEnabled) return null;
 
   return (
     <div className={CONTAINER_CLASS}>
@@ -76,9 +84,9 @@ export default function VideoStreamDisplay({
       />
       <div className={BOTTOM_BAR_CLASS}>
         <div className={LABEL_CLASS}>{CAMERA_LABEL}</div>
-        {isFlipAvailable && (
+        {isFlipAvailable && flipCameraHandler && (
           <CameraFlipButton 
-            onClick={onFlipCamera} 
+            onClick={flipCameraHandler} 
             disabled={!hasAttached} 
           />
         )}

@@ -53,7 +53,8 @@ export function useChatApi({
       systemInstruction,
       isSystemInstructionApplicable,
       enableThinking,
-      thinkingBudget
+      thinkingBudget,
+      activeConvoId
     );
   };
 

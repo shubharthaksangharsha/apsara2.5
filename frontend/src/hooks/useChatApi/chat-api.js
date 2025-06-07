@@ -48,7 +48,8 @@ export const sendToBackend = async (
   systemInstruction,
   isSystemInstructionApplicable,
   enableThinking,
-  thinkingBudget
+  thinkingBudget,
+  activeConvoId = null
 ) => {
   const convoIdToUse = targetConvoId || activeConvoId;
   if (!convoIdToUse && !initialConvoData) {
