@@ -10,8 +10,7 @@ import MessageInput from './components/MessageInput';
 import SettingsPanel from './components/SettingsPanel';
 import LivePopup from './components/LivePopup';
 import EmptyChatContent from './components/EmptyChatContent'; // Import the refactored component
-import FileUploadPopup from './components/FileUploadPopup';
-import FilePreviewBar from './components/FilePreviewBar'; // <-- This is for general files
+import { FileUploadPopup, FilePreviewBar } from './components/Files';
 import MapDisplay from './components/MapDisplay'; // <-- Import MapDisplay
 // import ImageUploadButton from './components/ImageUploadButton'; // Assuming this path is correct
 // import ImagePreviewBar from './components/ImagePreviewBar';   // Assuming this path is correct
