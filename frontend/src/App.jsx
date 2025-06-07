@@ -9,7 +9,7 @@ import ChatWindow from './components/ChatWindow';
 import MessageInput from './components/MessageInput';
 import SettingsPanel from './components/SettingsPanel';
 import LivePopup from './components/LivePopup';
-import EmptyChatContent from './components/EmptyChatContent'; // Import the new component
+import EmptyChatContent from './components/EmptyChatContent'; // Import the refactored component
 import FileUploadPopup from './components/FileUploadPopup';
 import FilePreviewBar from './components/FilePreviewBar'; // <-- This is for general files
 import MapDisplay from './components/MapDisplay'; // <-- Import MapDisplay
@@ -734,7 +734,6 @@ export default function App() {
             setDarkMode={setDarkMode}
             setLiveOpen={setLiveOpen}
             setSettingsOpen={setSettingsOpen}
-            setIsSidebarOpen={setIsSidebarOpen}
             isAuthenticated={isAuthenticated}
             userProfile={userProfile}
             onSignOut={handleSignOut}
