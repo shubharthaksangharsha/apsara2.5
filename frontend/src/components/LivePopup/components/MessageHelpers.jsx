@@ -1,10 +1,13 @@
 import React from 'react';
+import { Terminal } from 'lucide-react';
 
 /**
- * Helper to render message content for CHAT tab specifically
+ * Renders message content specifically for chat tab
+ * Only shows user messages, error messages, and icon system messages
+ * Filters model messages to only include text parts
  * 
- * @param {Object} msg - Message object to render
- * @returns {JSX.Element|null} Rendered message content
+ * @param {Object} msg - The message object to render
+ * @returns {JSX.Element|null} The rendered content or null if nothing to render
  */
 export const renderChatMessageContent = (msg) => {
   // Show user messages as is
@@ -51,10 +54,11 @@ export const renderChatMessageContent = (msg) => {
 };
 
 /**
- * Helper to render message content with potential icon
+ * Renders general message content with support for rich content
+ * Handles messages with icons, code blocks, and structured parts
  * 
- * @param {Object} msg - Message object to render
- * @returns {JSX.Element|null} Rendered message content
+ * @param {Object} msg - The message object to render
+ * @returns {JSX.Element|null} The rendered content or null if nothing to render
  */
 export const renderMessageContent = (msg) => {
   // --- Handle messages with explicit icons (usually system messages) ---
@@ -129,10 +133,10 @@ export const renderMessageContent = (msg) => {
 };
 
 /**
- * Helper to get status indicator JSX
+ * Returns status indicator JSX based on connection status
  * 
  * @param {string} connectionStatus - Current connection status
- * @returns {JSX.Element} Status indicator JSX
+ * @returns {JSX.Element} Visual indicator for connection status
  */
 export const getStatusIndicator = (connectionStatus) => {
   switch (connectionStatus) {

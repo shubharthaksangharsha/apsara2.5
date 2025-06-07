@@ -14,12 +14,22 @@ export const MEDIA_RESOLUTIONS = [
   { value: 'MEDIA_RESOLUTION_HIGH', label: 'High' },
 ];
 
-// Default values
-export const DEFAULT_FORM_VALUES = {
+// Default form values for calendar event creation
+export const DEFAULT_EVENT_FORM = {
   summary: '',
-  startDateTime: '', // Expect ISO 8601 format e.g., "2024-08-15T10:00:00-07:00"
-  endDateTime: '',   // Expect ISO 8601 format
+  startDateTime: '',
+  endDateTime: '',
   description: '',
   location: '',
-  attendees: '', // Comma-separated emails
-}; 
+  attendees: '',
+};
+
+// List of loggable keywords for system messages
+export const LOGGABLE_KEYWORDS = [
+  'Preparing live session', 'Initiating connection', 'Browser-Backend WS connected',
+  'Backend ready', 'Live AI connection active', 'Requesting video stream',
+  'Webcam access granted', 'Video stream active', 'Video stream stopped',
+  'Starting recording', 'Mic access granted', 'Recording active',
+  'Using tool:', 'Tool getGoogleMapsRoute result:',
+  'Recording stopped.'
+]; 

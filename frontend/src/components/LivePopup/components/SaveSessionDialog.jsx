@@ -4,14 +4,14 @@ import React from 'react';
  * Dialog for saving the current session
  * 
  * @param {Object} props - Component props
- * @param {boolean} props.isOpen - Whether dialog is open
- * @param {string} props.sessionTitle - Current session title
- * @param {Function} props.onTitleChange - Handler for title change
- * @param {Function} props.onClose - Handler for dialog close
- * @param {Function} props.onSave - Handler for save action
- * @returns {JSX.Element|null} SaveSessionDialog component
+ * @param {boolean} props.isOpen - Whether the dialog is open
+ * @param {Function} props.onClose - Handler to close the dialog
+ * @param {string} props.sessionTitle - Current session title input value
+ * @param {Function} props.onSessionTitleChange - Handler for session title changes
+ * @param {Function} props.onSave - Handler for saving the session
+ * @returns {JSX.Element|null} Dialog component or null if closed
  */
-const SaveSessionDialog = ({ isOpen, sessionTitle, onTitleChange, onClose, onSave }) => {
+const SaveSessionDialog = ({ isOpen, onClose, sessionTitle, onSessionTitleChange, onSave }) => {
   if (!isOpen) return null;
   
   return (
@@ -24,6 +24,7 @@ const SaveSessionDialog = ({ isOpen, sessionTitle, onTitleChange, onClose, onSav
         onClick={e => e.stopPropagation()}
       >
         <h3 className="text-base sm:text-lg font-semibold text-gray-800 dark:text-gray-100 mb-3 sm:mb-4">Save Current Session</h3>
+        
         <div className="mb-4">
           <label htmlFor="sessionTitle" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
             Session Title
@@ -32,11 +33,12 @@ const SaveSessionDialog = ({ isOpen, sessionTitle, onTitleChange, onClose, onSav
             type="text"
             id="sessionTitle"
             value={sessionTitle}
-            onChange={(e) => onTitleChange(e.target.value)}
+            onChange={e => onSessionTitleChange(e.target.value)}
             placeholder="My Chat Session"
             className="w-full p-2 border rounded-md bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 focus:ring-1 focus:ring-indigo-500 text-sm"
           />
         </div>
+        
         <div className="flex justify-end gap-2">
           <button
             onClick={onClose}

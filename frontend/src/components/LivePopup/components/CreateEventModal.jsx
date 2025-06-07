@@ -1,19 +1,28 @@
 import React from 'react';
+import { DEFAULT_EVENT_FORM } from '../constants';
 
 /**
- * Modal for creating a new calendar event
+ * Modal for creating calendar events
  * 
  * @param {Object} props - Component props
- * @param {boolean} props.isOpen - Whether modal is open
+ * @param {boolean} props.isOpen - Whether the modal is open
+ * @param {Function} props.onClose - Handler to close the modal
  * @param {Object} props.formData - Form data for the event
- * @param {Function} props.onFormChange - Handler for form changes
- * @param {Function} props.onClose - Handler for modal close
+ * @param {Function} props.onFormChange - Handler for form field changes
  * @param {Function} props.onSubmit - Handler for form submission
- * @returns {JSX.Element|null} CreateEventModal component
+ * @param {boolean} props.isConnected - Whether connection is active
+ * @returns {JSX.Element|null} Modal component or null if closed
  */
-const CreateEventModal = ({ isOpen, formData, onFormChange, onClose, onSubmit }) => {
+const CreateEventModal = ({ isOpen, onClose, formData = DEFAULT_EVENT_FORM, onFormChange, onSubmit, isConnected = false }) => {
   if (!isOpen) return null;
   
+  // Handle form field changes
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    onFormChange({ ...formData, [name]: value });
+  };
+  
+  // Handle form submission
   const handleSubmit = (e) => {
     e.preventDefault();
     onSubmit();
@@ -29,6 +38,7 @@ const CreateEventModal = ({ isOpen, formData, onFormChange, onClose, onSubmit })
         onClick={e => e.stopPropagation()}
       >
         <h3 className="text-base sm:text-lg font-semibold text-gray-800 dark:text-gray-100 mb-4 sm:mb-5">Create New Calendar Event</h3>
+        
         <form onSubmit={handleSubmit} className="space-y-3 sm:space-y-4 text-xs sm:text-sm">
           <div>
             <label htmlFor="eventSummary" className="block text-[11px] sm:text-xs font-medium text-gray-700 dark:text-gray-300 mb-0.5 sm:mb-1">Summary*</label>
@@ -37,11 +47,12 @@ const CreateEventModal = ({ isOpen, formData, onFormChange, onClose, onSubmit })
               name="summary"
               id="eventSummary"
               value={formData.summary}
-              onChange={onFormChange}
+              onChange={handleChange}
               required
               className="w-full p-1.5 sm:p-2 border rounded-md bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 focus:ring-1 focus:ring-indigo-500 text-xs sm:text-sm"
             />
           </div>
+          
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
             <div>
               <label htmlFor="eventStartDateTime" className="block text-[11px] sm:text-xs font-medium text-gray-700 dark:text-gray-300 mb-0.5 sm:mb-1">Start Date & Time*</label>
@@ -50,7 +61,7 @@ const CreateEventModal = ({ isOpen, formData, onFormChange, onClose, onSubmit })
                 name="startDateTime"
                 id="eventStartDateTime"
                 value={formData.startDateTime}
-                onChange={onFormChange}
+                onChange={handleChange}
                 required
                 className="w-full p-1.5 sm:p-2 border rounded-md bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 focus:ring-1 focus:ring-indigo-500 text-xs sm:text-sm"
               />
@@ -62,23 +73,25 @@ const CreateEventModal = ({ isOpen, formData, onFormChange, onClose, onSubmit })
                 name="endDateTime"
                 id="eventEndDateTime"
                 value={formData.endDateTime}
-                onChange={onFormChange}
+                onChange={handleChange}
                 required
                 className="w-full p-1.5 sm:p-2 border rounded-md bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 focus:ring-1 focus:ring-indigo-500 text-xs sm:text-sm"
               />
             </div>
           </div>
+          
           <div>
             <label htmlFor="eventDescription" className="block text-[11px] sm:text-xs font-medium text-gray-700 dark:text-gray-300 mb-0.5 sm:mb-1">Description</label>
             <textarea
               name="description"
               id="eventDescription"
+              rows="2"
               value={formData.description}
-              onChange={onFormChange}
-              rows={3}
-              className="w-full p-1.5 sm:p-2 border rounded-md bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 focus:ring-1 focus:ring-indigo-500 text-xs sm:text-sm"
-            ></textarea>
+              onChange={handleChange}
+              className="w-full p-1.5 sm:p-2 border rounded-md bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 focus:ring-1 focus:ring-indigo-500 custom-scrollbar text-xs sm:text-sm"
+            />
           </div>
+          
           <div>
             <label htmlFor="eventLocation" className="block text-[11px] sm:text-xs font-medium text-gray-700 dark:text-gray-300 mb-0.5 sm:mb-1">Location</label>
             <input
@@ -86,10 +99,11 @@ const CreateEventModal = ({ isOpen, formData, onFormChange, onClose, onSubmit })
               name="location"
               id="eventLocation"
               value={formData.location}
-              onChange={onFormChange}
+              onChange={handleChange}
               className="w-full p-1.5 sm:p-2 border rounded-md bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 focus:ring-1 focus:ring-indigo-500 text-xs sm:text-sm"
             />
           </div>
+          
           <div>
             <label htmlFor="eventAttendees" className="block text-[11px] sm:text-xs font-medium text-gray-700 dark:text-gray-300 mb-0.5 sm:mb-1">Attendees (comma-separated emails)</label>
             <input
@@ -97,22 +111,24 @@ const CreateEventModal = ({ isOpen, formData, onFormChange, onClose, onSubmit })
               name="attendees"
               id="eventAttendees"
               value={formData.attendees}
-              onChange={onFormChange}
-              placeholder="john@example.com, jane@example.com"
+              onChange={handleChange}
               className="w-full p-1.5 sm:p-2 border rounded-md bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 focus:ring-1 focus:ring-indigo-500 text-xs sm:text-sm"
+              placeholder="user1@example.com, user2@example.com"
             />
           </div>
-          <div className="flex justify-end gap-2 pt-2">
+          
+          <div className="flex flex-col sm:flex-row justify-end gap-2 sm:gap-3 pt-2 sm:pt-3">
             <button
               type="button"
               onClick={onClose}
-              className="px-3 py-1.5 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
+              className="w-full sm:w-auto px-3 py-1.5 sm:px-4 sm:py-2 rounded-md text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="px-3 py-1.5 bg-blue-500 text-white text-sm rounded hover:bg-blue-600 transition-colors"
+              disabled={!isConnected}
+              className="w-full sm:w-auto px-3 py-1.5 sm:px-4 sm:py-2 rounded-md text-xs sm:text-sm font-medium text-white bg-green-600 hover:bg-green-700 transition-colors disabled:opacity-50"
             >
               Create Event
             </button>
