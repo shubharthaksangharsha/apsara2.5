@@ -10,10 +10,19 @@ import { FALLBACK_MODELS } from './constants';
  * @param {Object} props - Component props
  * @param {string} props.selectedModel - The currently selected model ID
  * @param {Function} props.onSelectModel - Handler for when a model is selected
+ * @param {Function} props.setCurrentModel - Alternative handler for backward compatibility
  * @param {boolean} props.disabled - Whether the component is disabled
  * @returns {JSX.Element} ModelSelector component
  */
-export default function ModelSelector({ selectedModel, onSelectModel, disabled = false }) {
+export default function ModelSelector({ 
+  selectedModel, 
+  onSelectModel, 
+  setCurrentModel,
+  disabled = false 
+}) {
+  // Use setCurrentModel as fallback if onSelectModel is not provided
+  const handleModelSelect = onSelectModel || setCurrentModel;
+
   const [models, setModels] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -86,9 +95,11 @@ export default function ModelSelector({ selectedModel, onSelectModel, disabled =
   useEffect(() => {
     if (models.length > 0 && (!selectedModel || !models.some(m => m.id === selectedModel))) {
       const defaultModel = models.find(m => m.isDefault) || models[0];
-      onSelectModel(defaultModel.id);
+      if (handleModelSelect) {
+        handleModelSelect(defaultModel.id);
+      }
     }
-  }, [models, selectedModel, onSelectModel]);
+  }, [models, selectedModel, handleModelSelect]);
   
   // Function to show tooltip with model info
   const handleModelInfoClick = (e, model) => {
@@ -156,7 +167,7 @@ export default function ModelSelector({ selectedModel, onSelectModel, disabled =
             <div className="relative flex">
               <select
                 value={selectedModel}
-                onChange={(e) => onSelectModel(e.target.value)}
+                onChange={(e) => handleModelSelect(e.target.value)}
                 disabled={disabled}
                 className="w-full px-3 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm text-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 dark:text-gray-300 disabled:opacity-60 disabled:cursor-not-allowed appearance-none"
               >
