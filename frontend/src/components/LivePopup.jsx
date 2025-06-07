@@ -1182,7 +1182,8 @@ export default function LivePopup({
                         <VideoStreamDisplay 
                           videoStream={mediaStream} 
                           isWebcamActive={isStreamingVideo} 
-                          onSwitchCamera={flipCamera} 
+                          onSwitchCamera={flipCamera}
+                          isFlipAvailable={true}
                         /> 
                       ) : (
                         <span className="text-[10px] md:text-xs text-gray-400 dark:text-gray-500">Your Camera</span>

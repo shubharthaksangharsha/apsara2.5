@@ -926,12 +926,17 @@ export default function App() {
       )}
 
       {/* THESE ARE THE FLOATING, TOP-RIGHT VIEWS */}
-      {/* {liveOpen && isStreamingVideo && mediaStream && (
-        <VideoStreamDisplay videoStream={mediaStream} isWebcamActive={isStreamingVideo} />
+      {liveOpen && isStreamingVideo && mediaStream && (
+        <VideoStreamDisplay 
+          videoStream={mediaStream} 
+          isWebcamActive={isStreamingVideo} 
+          onSwitchCamera={flipCamera}
+          isFlipAvailable={true}
+        />
       )}
       {liveOpen && isStreamingScreen && screenStream && (
         <ScreenShareDisplay screenStream={screenStream} isScreenSharingActive={isStreamingScreen} />
-      )} */}
+      )}
 
       {/* File Upload Popup - Use Imported Component */}
       {fileUploadOpen && (
