@@ -3,8 +3,8 @@ import { Switch } from '@headlessui/react';
 import { Send, UploadCloud, Zap } from 'lucide-react';
 
 // Import the components for image handling
-import ImageUploadButton from '../ImageUploadButton';
-import ImagePreviewBar from '../ImagePreviewBar';
+import ImageUploadButton from '../ImageUpload';
+import { ImagePreviewBar } from '../ImagePreview';
 
 // Import constants
 import {
