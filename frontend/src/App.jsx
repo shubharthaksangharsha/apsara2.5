@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { BellRing, FileUp, Menu, Mic, Moon, Send, Settings, Sun, User, X, MessageSquare, UploadCloud, AudioLines, Cog, Trash2, MicOff, BrainCircuit, Image as ImageIcon, BookOpen, Link as LinkIcon, UserIcon, Code, Sparkles, Plane, UtensilsCrossed, History, Film, PenTool, Globe, FileText, Lightbulb, Target, Search, LogOut } from 'lucide-react';
 
 // Import the new components
@@ -12,6 +12,8 @@ import LivePopup from './components/LivePopup';
 import EmptyChatContent from './components/EmptyChatContent'; // Import the refactored component
 import { FileUploadPopup, FilePreviewBar } from './components/Files';
 import MapDisplay from './components/MapDisplay'; // <-- Import MapDisplay
+import VideoStreamDisplay from './components/VideoStreamDisplay';
+import ScreenShareDisplay from './components/ScreenShareDisplay';
 // import ImageUploadButton from './components/ImageUploadButton'; // Assuming this path is correct
 // import ImagePreviewBar from './components/ImagePreviewBar';   // Assuming this path is correct
 
