@@ -20,7 +20,7 @@ export const MAX_OUTPUT_TOKENS_MAX = 8192;
 
 export const THINKING_BUDGET_MIN = 0;
 export const THINKING_BUDGET_MAX = 2000;
-export const THINKING_BUDGET_STEP = 50;
+export const THINKING_BUDGET_STEP = 5;
 
 // Mobile breakpoint (matches with Tailwind sm breakpoint)
 export const MOBILE_BREAKPOINT = 640; // px 
