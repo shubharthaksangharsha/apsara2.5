@@ -14,8 +14,6 @@ import { FileUploadPopup, FilePreviewBar } from './components/Files';
 import MapDisplay from './components/MapDisplay'; // <-- Import MapDisplay
 import VideoStreamDisplay from './components/VideoStreamDisplay';
 import ScreenShareDisplay from './components/ScreenShareDisplay';
-// import ImageUploadButton from './components/ImageUploadButton'; // Assuming this path is correct
-// import ImagePreviewBar from './components/ImagePreviewBar';   // Assuming this path is correct
 
 // Import common constants
 import { BACKEND_URL, MAX_LOCALSTORAGE_SIZE_MB, BYTES_PER_MB, MAX_STORAGE_BYTES } from './hooks/common-constants';
@@ -927,7 +925,7 @@ export default function App() {
          </div>
       )}
 
-      {/* THESE ARE THE FLOATING, TOP-RIGHT VIEWS */}
+      {/* THESE ARE THE FLOATING, TOP-RIGHT VIEWS
       {liveOpen && isStreamingVideo && mediaStream && (
         <VideoStreamDisplay 
           videoStream={mediaStream} 
@@ -938,7 +936,7 @@ export default function App() {
       )}
       {liveOpen && isStreamingScreen && screenStream && (
         <ScreenShareDisplay screenStream={screenStream} isScreenSharingActive={isStreamingScreen} />
-      )}
+      )} */}
 
       {/* File Upload Popup - Use Imported Component */}
       {fileUploadOpen && (
