@@ -1,7 +1,7 @@
 # Apsara 2.5
 
 [![GitHub Repository](https://img.shields.io/badge/GitHub-Repository-blue?logo=github)](https://github.com/shubharthaksangharsha/apsara2.5)
-[![Version](https://img.shields.io/badge/version-2.5-green)](https://github.com/shubharthaksangharsha/apsara2.5)
+[![Version](https://img.shields.io/badge/version-2.5.2-green)](https://github.com/shubharthaksangharsha/apsara2.5)
 [![License](https://img.shields.io/badge/license-ISC-orange)](https://github.com/shubharthaksangharsha/apsara2.5)
 
 Apsara 2.5 is an advanced AI assistant application leveraging Google's Gemini API to provide interactive chat, live conversation, and multimodal capabilities. This application combines the power of large language models with a user-friendly interface to deliver a comprehensive AI assistant experience.
@@ -55,9 +55,10 @@ Apsara 2.5 is an advanced AI assistant application leveraging Google's Gemini AP
 ## Project Overview
 
 Apsara 2.5 is a full-stack JavaScript application with the following architecture:
-- **Frontend**: React-based single-page application with Tailwind CSS
-- **Backend**: Node.js/Express server integrating with Google Gemini API
+- **Frontend**: React-based single-page application with Tailwind CSS and modular component structure
+- **Backend**: Node.js/Express server with domain-driven design integrating with Google Gemini API
 - **Communication**: REST API and WebSocket for real-time interactions
+- **Authentication**: Google OAuth for personalized experiences and Google Workspace integration
 
 ## Key Features
 
@@ -68,15 +69,35 @@ Apsara 2.5 is a full-stack JavaScript application with the following architectur
 - **Multimodal Input/Output**: Support for text, images, audio, and video
 - **Image Generation**: Create and edit images using natural language prompts
 - **Persistent Storage**: Save and restore conversations
+- **Thinking Mode**: View the AI's reasoning process for complex responses
 
-### Integrated Tools
-- **Gmail Integration**: Send emails, draft messages, and access inbox
-- **Calendar Integration**: Create events and view upcoming appointments
+### Google Workspace Integration
+- **Gmail**
+  - 📨 **Read Emails** - Access and display email content
+  - ✉️ **Send Emails** - Compose and send new emails
+  - 📝 **Draft Emails** - Create and save email drafts
+  - 📎 **Email Attachments** - Handle file attachments in emails
+
+- **Calendar**
+  - 📅 **View Calendar** - Display upcoming events and appointments
+  - ➕ **Create Events** - Schedule new calendar events
+  - 🔄 **Update Events** - Modify existing calendar entries
+  - 🔔 **Event Reminders** - Set and manage event notifications
+
+- **Meeting**
+  - 🎦 **Create Meetings** - Schedule Google Meet sessions
+  - 📋 **List Meetings** - View upcoming and past meetings
+  - 🔗 **Generate Meeting Links** - Create shareable meeting URLs
+  - 👥 **Manage Participants** - Add or remove meeting attendees
+
+### Additional Tools
 - **Weather Information**: Get current weather for locations
 - **Note-Taking**: Create and manage notes during AI interactions
 - **Tab Switching**: Control application behavior during live sessions
 - **Image Generation**: Create and edit images using Gemini's image generation model
-- **URL Context Tool**: Extract and analyze content from web pages to provide context-aware responses
+- **URL Context Tool**: Extract and analyze content from web pages
+- **Code Execution**: Generate and run code examples
+- **Battery Status**: Check system battery level
 
 ### User Experience
 - **Theme Support**: Light and dark mode
@@ -85,33 +106,67 @@ Apsara 2.5 is a full-stack JavaScript application with the following architectur
 - **File Uploads**: Share files with the AI assistant
 - **Session Management**: Save and restore AI conversations
 - **Code Highlighting**: Proper formatting for code in responses
+- **Model Selection**: Choose from multiple Gemini models
+- **Voice Selection**: Multiple voice options for audio responses
 
 ## Project Structure
 
-### Backend (`/backend`)
-- **server.js**: Main Express server with REST and WebSocket endpoints
-- **tools.js**: Tool declarations and handlers for AI functionality
-- **auth-utils.js**: Google OAuth authentication utilities
-- **gmail-tools.js**: Gmail API integration
-- **calendar-tools.js**: Google Calendar API integration
-- **maps-tools.js**: Google Maps API integration (disabled due to billing issues)
-- **image-gen.js**: Image generation and editing using Gemini's image generation model
+### Backend Architecture
+```
+backend/
+├── config/              # Application configuration
+├── middleware/          # Express middleware
+├── routes/              # API routes
+├── services/            # Business logic
+│   ├── ai/              # AI services
+│   ├── google/          # Google API integrations
+│   └── tools/           # AI tool implementations
+├── utils/               # Helper utilities
+├── websocket/           # WebSocket handlers
+├── uploads/             # Uploaded files directory
+├── public/              # Static files
+└── index.js             # Application entry point
+```
 
-### Frontend (`/frontend`)
-- **src/components/**: React components for UI elements
-  - **LivePopup.jsx**: Component for live video/audio sessions
-  - **ChatWindow.jsx**: Main chat interface component
-  - **Sidebar.jsx**: Navigation and conversation management
-  - **Header.jsx**: Application header with controls
-  - **WelcomeScreen.jsx**: Initial application screen
-- **src/hooks/**: Custom React hooks
-  - **useGoogleAuth.js**: Google authentication logic
-  - **useChatApi.js**: Chat API communication
-  - **useLiveSession.js**: Live session management
-  - **useConversations.js**: Conversation state management
-- **src/utils/**: Utility functions
-  - **liveSessionStorage.js**: Save/load live sessions
-  - **modelCapabilities.js**: Model feature detection
+### Frontend Architecture
+```
+frontend/
+├── src/
+│   ├── components/           # UI components with modular structure
+│   │   ├── [ComponentName]/  # Each component in its own directory
+│   │   │   ├── index.jsx     # Main component file
+│   │   │   ├── constants.js  # Component-specific constants
+│   │   │   ├── README.md     # Component documentation
+│   │   │   └── components/   # Sub-components
+│   ├── hooks/                # Custom React hooks
+│   │   ├── [HookName]/       # Each hook in its own directory
+│   │   │   ├── index.js      # Main hook file
+│   │   │   ├── constants.js  # Hook-specific constants
+│   │   │   └── README.md     # Hook documentation
+│   ├── utils/                # Utility functions
+│   ├── assets/               # Static assets
+│   └── App.jsx               # Main application component
+├── public/                   # Public assets
+└── index.html                # HTML entry point
+```
+
+## WebSocket API
+
+The live interaction features are powered by a WebSocket API that supports the following parameters:
+
+- `modalities` - Input/output modalities: `AUDIO`, `VIDEO`, or `TEXT`
+- `voice` - Voice name (e.g., `Puck`, `Charon`, `Kore`)
+- `model` - Model ID (e.g., `gemini-2.0-flash-live-001`)
+- `system` - Custom system instructions
+- `mediaResolution` - Video resolution (e.g., `MEDIA_RESOLUTION_MEDIUM`)
+- `transcription` - Enable/disable transcription
+- `slidingwindow` - Enable/disable sliding window for context
+- `nativeAudio` - Use native audio generation for improved quality
+
+Example connection URL:
+```
+ws://localhost:9000/live?modalities=AUDIO&voice=Puck&model=gemini-2.0-flash-live-001&nativeAudio=true
+```
 
 ## Setup Instructions
 
@@ -121,7 +176,7 @@ Apsara 2.5 is a full-stack JavaScript application with the following architectur
   - Gemini API
   - Gmail API
   - Calendar API
-  - (Optional) Maps API
+  - Maps API (optional)
 
 ### Backend Setup
 1. Navigate to the backend directory:
@@ -136,8 +191,11 @@ Apsara 2.5 is a full-stack JavaScript application with the following architectur
 
 3. Create a `.env` file with the following variables:
    ```
-   GEMINI_API_KEY=your_gemini_api_key
    PORT=9000
+   GEMINI_API_KEY=your_gemini_api_key
+   GOOGLE_MAPS_API_KEY=your_google_maps_api_key
+   OPENWEATHERMAP_API_KEY=your_openweathermap_api_key
+   FRONTEND_URL=http://localhost:5173
    ```
 
 4. Place your Google OAuth credentials in `credentials.json` file (obtain from Google Cloud Console)
@@ -173,13 +231,37 @@ Apsara 2.5 is a full-stack JavaScript application with the following architectur
 - Google API libraries - Gemini, Gmail, Calendar integration
 - Multer - File upload handling
 - jsonwebtoken - Authentication
+- Cookie-parser - Cookie handling
+- WS - WebSocket implementation
 
 ### Frontend
 - React - UI library
 - Tailwind CSS - Styling
 - React Markdown - Content rendering
 - Lucide React - Icon library
+- Vite - Build tool
 - Google Maps integration
+
+## Development Guidelines
+
+The project follows these development principles:
+
+1. **Component Modularity** - Components follow a structured pattern:
+   ```
+   ComponentName/
+   ├── index.jsx       # Main component export
+   ├── constants.js    # Component-specific constants
+   ├── README.md       # Component documentation
+   └── components/     # Sub-components
+   ```
+
+2. **Custom Hooks for State Management** - Complex state and logic are extracted into reusable hooks
+
+3. **Comprehensive Documentation** - Each component and hook has its own README.md
+
+4. **Constants Extraction** - Magic values are moved to dedicated constants files
+
+5. **Responsive Design** - All components work across different screen sizes
 
 ## Key Features In-Depth
 
@@ -189,6 +271,8 @@ The live session feature allows real-time interaction with Gemini using audio, v
 - Real-time AI responses through audio synthesis
 - Video input processing for visual context
 - Screen sharing for collaborative scenarios
+- Native audio generation for higher quality voice responses
+- Sliding window context management for longer conversations
 
 ### Tool Integration
 Apsara 2.5 extends Gemini's capabilities with custom tools:
@@ -197,6 +281,8 @@ Apsara 2.5 extends Gemini's capabilities with custom tools:
 - Get current weather information
 - Create and access notes
 - Switch between application tabs
+- Generate and edit images
+- Capture screenshots during sessions
 
 ### Google Authentication
 The application uses Google OAuth to:
@@ -204,16 +290,18 @@ The application uses Google OAuth to:
 - Access user's Gmail and Calendar data
 - Maintain secure sessions
 - Display user profile information
+- Enable Google Workspace integration
 
 ## Future Enhancements
-- Re-enable Maps integration with proper billing
 - Improve voice transcription accuracy
 - Add more specialized tools
 - Enhance file processing capabilities
 - Implement collaborative features
+- Expand language support
+- Develop mobile applications
 
 ## Keywords and Tags
-apsara2.5, AI Assistant, Gemini API, Google Integration, React, Node.js, Express, WebSocket, Multimodal AI, Voice Chat, Video Chat, Image Generation, URL Context Tool, Gmail Integration, Calendar Integration, OAuth Authentication
+apsara2.5, AI Assistant, Gemini API, Google Workspace Integration, React, Node.js, Express, WebSocket, Multimodal AI, Voice Chat, Video Chat, Image Generation, Gmail Integration, Calendar Integration, Meeting Integration, OAuth Authentication
 
 ## License
 ISC License
@@ -223,6 +311,6 @@ ISC License
 **Shubharthak Sangharsha**
 - [GitHub](https://github.com/shubharthaksangharsha/)
 - [LinkedIn](https://www.linkedin.com/in/shubharthaksangharsha/)
-- [Website/Portfolio](https://ss-ai.space/)
+- [Website/Portfolio](https://devshubh.me/)
 
 © 2025 Apsara 2.5 - Advanced AI Assistant
