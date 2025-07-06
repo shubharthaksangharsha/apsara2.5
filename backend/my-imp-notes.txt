@@ -1,0 +1,278 @@
+
+
+--- 2025-05-15 15:13:27 - Poem Idea ---
+Write a poem for girlfriend Pranchal
+
+--- 2025-05-15 15:17:24 - Bubble Sort Visualization Code ---
+
+import matplotlib.pyplot as plt
+import numpy as np
+
+def bubble_sort(arr):
+    n = len(arr)
+    swapped = True
+    iterations = []
+    
+    # Add the initial state
+    temp_arr = arr[:]
+    iterations.append(temp_arr)
+
+    for i in range(n-1):
+        if not swapped:
+            break
+        swapped = False
+        for j in range(n-i-1):
+            if arr[j] > arr[j+1]:
+                arr[j], arr[j+1] = arr[j+1], arr[j]
+                swapped = True
+                #After swap
+                temp_arr = arr[:]
+                iterations.append(temp_arr)
+
+    return iterations
+
+# Example array
+arr = [5, 3, 8, 6, 1, 4, 9, 2, 1, 7]
+iterations = bubble_sort(arr)
+
+# Key iterations to display
+num_iterations = len(iterations)
+indices = [0, num_iterations // 4, num_iterations // 2, 3 * num_iterations // 4, num_iterations - 1]
+
+# Create subplots
+fig, axes = plt.subplots(1, len(indices), figsize=(15, 5))
+fig.suptitle("Bubble Sort Visualization", fontsize=16)
+
+for i, ax in enumerate(axes):
+    iteration_index = indices[i]
+    data = iterations[iteration_index]
+    
+    ax.bar(range(len(data)), data, color='green')
+    ax.set_title(f"Iteration {iteration_index+1}")
+    ax.set_xlabel("Index")
+    ax.set_ylabel("Value")
+
+plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+plt.show()
+
+
+--- 2025-05-15 16:05:15 - Saving code again ---
+I am saving the code in the notes again
+
+--- 2025-06-03 06:20:51 - Bunnings Fan Heaters ---
+| Name | Price | Link |
+|---|---|---|
+| Click 2000W Fan Heater | $14.90 | https://www.bunnings.com.au/products/lighting-electrical/heaters/fan-heaters |
+| Click Low Profile Fan Heater | $19 | https://www.bunnings.com.au/products/lighting-electrical/heaters/fan-heaters |
+| Click Oscillating Fan Heater | $25 | https://www.bunnings.com.au/products/lighting-electrical/heaters/fan-heaters |
+| Arlec 2400W Fan Heater with Adjustable Thermostat | $29 | https://www.bunnings.com.au/products/lighting-electrical/heaters/fan-heaters |
+| Click 2400W Ceramic Heater | $35 | https://www.bunnings.com.au/products/lighting-electrical/heaters/fan-heaters |
+| Arlec 2400W Fan Heater with Adjustable Thermostat and Oscillation | $38.80 | https://www.bunnings.com.au/products/lighting-electrical/heaters/fan-heaters |
+| Click 2000W Ceramic Fan Heater | $39 | https://www.bunnings.com.au/products/lighting-electrical/heaters/fan-heaters |
+| Arlec 2000W Fan Heater With Digital Control | $39 | https://www.bunnings.com.au/products/lighting-electrical/heaters/fan-heaters |
+| Click 2000W Low Profile Ceramic Heater | $39 | https://www.bunnings.com.au/products/lighting-electrical/heaters/fan-heaters |
+| Mistral Shoe Dryer | $49 | https://www.bunnings.com.au/products/lighting-electrical/heaters/fan-heaters |
+| Scandia Fan | $65 | https://www.bunnings.com.au/products/lighting-electrical/heaters/fan-heaters |
+| Mistral Foot Warmer | $69 | https://www.bunnings.com.au/products/lighting-electrical/heaters/fan-heaters |
+| Click Flame Effect Heater | $79 | https://www.bunnings.com.au/products/lighting-electrical/heaters/fan-heaters |
+| De'Longhi 1800W Ivory White Capsule Fan Heater | $89 | https://www.bunnings.com.au/products/lighting-electrical/heaters/fan-heaters |
+| Mill 1800W White Compact Fan Heater | $89 | https://www.bunnings.com.au/products/lighting-electrical/heaters/fan-heaters |
+| Dimplex 2kW Convector Heater With Turbo Fan | $99 | https://www.bunnings.com.au/products/lighting-electrical/heaters/fan-heaters |
+| Scandia Fan Swing | $99 | https://www.bunnings.com.au/products/lighting-electrical/heaters/fan-heaters |
+
+Note: All links point to the main Bunnings fan heaters page as individual product links were not available.
+
+
+--- 2025-06-03 16:42:10  ---
+Top stories from Hacker News:
+
+1. My AI skeptic friend is now using AI
+2. Fly.io is shutting down precursor products, Docker Machines and Nomad Machines
+3. Replacing Python with... (Zig)
+
+
+--- 2025-06-03 17:44:49 - Summary of Shubharthak Sangharsha's Website ---
+Shubharthak Sangharsha's personal website highlights his work as a software engineering student passionate about Machine Learning and Computer Vision. Key projects include Apsara AI (a voice assistant with features like Spotify control and calendar management), a Dynamic Volume Controller using hand gestures, a Face Mask Detection system, and a NodeMCU Smart Car. He has experience as a Backend Web Development Intern at Curve Tomorrow. His skills include Python, Ruby, C++, Java, JavaScript, HTML, CSS, Flask, Ruby on Rails, NumPy, Pandas, OpenCV, TensorFlow, PyTorch, NLP, LLMs, LangChain, MySQL, Git, AWS, Unix, Big Data, Selenium, and Prompt Engineering. He is currently pursuing a Master of Artificial Intelligence and Machine Learning at the University of Adelaide and holds a B.E. in Computer Science and Engineering from Chandigarh University.
+
+--- 2025-06-03 17:47:23 - Bubble Sort Visualization with Alternate Colors ---
+Visualization of bubble sort with iterations colored green, red, black, blue, and yellow.
+
+--- 2025-06-03 17:48:39 - Battery Level and Time in Adelaide ---
+Current time in Adelaide: 2025-06-04T03:18:38.142+09:30. Battery level: 100% and charging.
+
+--- 2025-06-03 17:51:03 - Information from Shubharthak Sangharsha's Website ---
+HTML Code: 
+
+Shubharthak Sangharasha - Personal Website
+
+Welcome
+About Me
+Projects
+Work Experience
+Skills
+Education
+Contact
+
+Shubharthak Sangharasha
+
+Welcome to my personal website.
+
+Explore Projects
+Download Resume
+
+About Me
+
+Hello, I'm Shubharthak Sangharasha, a software engineering student deeply passionate about Machine Learning and Computer Vision. My work ranges from crafting intelligent voice assistants like Apsara AI to real-time gesture-based volume controllers.
+
+I'm driven by a commitment to continuous learning and the belief that technology can make a positive impact. Explore my projects to see how creativity and innovation come together in my work.
+
+Apsara AI - Voice Assistant
+
+Designed and developed using Python with integrations such as gTTS, Spotify, smptlib, speech recognition, etc.
+
+Capabilities include playing songs on Spotify, reading news, scheduling calendar meetings, connecting Bluetooth, searching Wikipedia, setting alarms, and more.
+
+Dynamic Volume Controller
+
+Built using Google's open-framework Mediapipe for real-time 3D face and hand landmarks estimation.
+
+Allows adjusting the computer volume using hand gestures, dynamically adjusting based on the person's distance from the laptop.
+
+Face Mask Detection
+
+Detects whether a person is wearing a mask using Tensorflow and MobileNetv2 architecture.
+
+Notifies the admin through email if mask enforcement is not followed and the mask is not worn for 30 seconds.
+
+NodeMCU Smart Car
+
+Engineered a Smart Car using NodeMCU ESP8266 for wireless control and monitoring.
+
+Integrated Blynk IoT for a user-friendly Android and web interface, providing remote accessibility.
+
+Work Experience
+
+Backend Web Development Intern
+Curve Tomorrow, Melbourne, Australia
+June 2022 - August 2022
+
+Implemented a User Log System for auditing purposes. Added a CMS (Content Management System) to enable admins to add/edit pages without developer's involvement, thereby reducing turn-around time from days to minutes. Collaborated with team members globally.
+
+Skills
+
+Programming Languages
+Python Ruby C C++ Java JavaScript
+
+Web Development
+HTML CSS Flask Ruby on Rails
+
+Data Science
+NumPy Pandas OpenCV
+
+Machine Learning
+TensorFlow PyTorch NLP LLMs LangChain
+
+Database Management
+MySQL
+
+Version Control
+Git
+
+Cloud Technologies
+AWS
+
+Other Skills
+Unix Big Data Selenium Prompt Engineering
+
+Education
+
+Master of Artificial Intelligence and Machine Learning
+University of Adelaide, Adelaide, SA, Australia
+2024 - Present
+
+B.E. in Computer Science and Engineering (AI / Machine Learning)
+Chandigarh University, Punjab, India
+2020 - 2024
+CGPA: 8.39
+
+12th (Senior Secondary), CBSE Board
+NP Co-ed, Lodhi Estate, New Delhi-110002
+2018 - 2019
+Percentage: 81.5%
+
+Contact Me
+
+Email
+shubharthaksangharsha@gmail.com
+
+LinkedIn
+linkedin.com/in/shubharthaksangharsha
+
+GitHub
+github.com/shubharthaksangharsha
+
+Stack Overflow
+stackoverflow.com/users/14835045/shubharthak
+
+Â© Shubharthak Sangharasha. All rights reserved. Design: HTML5 UP
+
+--- 2025-06-04 04:19:56  ---
+You leapt from crumbling bridges
+Watching cityscapes turn to dust
+Filming helicopters crashing
+In the ocean from way above
+Got the music in you, baby
+Tell me why
+Got the music in you, baby
+Tell me why
+You've been locked in here forever
+And you just can't say goodbye
+Kisses on the foreheads of the lovers
+Wrapped in your arms
+You've been hiding them in hollowed out pianos
+Left in the dark
+Got the music in you, baby
+Tell me why
+Got the music in you, baby
+Tell me why
+You've been locked in here forever
+And you just can't say goodbye
+Your lips, my lips
+Apocalypse
+Your lips, my lips
+Apocalypse
+Go and sneak us through the rivers
+Flood is rising up on your knees
+Oh, please
+Come out and haunt me
+I know you want me
+Come out and haunt me
+Sharing all your secrets with each other
+Since you were kids
+Sleeping soundly with the locket that she gave you
+Clutched in your fist
+Got the music in you, baby
+Tell me why
+Got the music in you, baby
+Tell me why
+You've been locked in here forever
+And you just can't say goodbye
+You've been locked in here forever
+And you just can't say goodbye
+Ooh, oh
+When you're all alone
+I'll reach for you
+When you're feelin' low
+I'll be there too
+
+--- 2025-06-05 07:55:05 - Groq Summary ---
+Groq is a company focused on fast AI inference, offering a low-cost way to run Llama. They provide the GroqCloud™ Platform and GroqRack™ Cluster. They have an official Llama API and are the exclusive inference provider for Bell Canada. Groq also offers a free API key for developers. According to the webpage, Groq's technology is used by over 1 million developers. They offer instant speed and OpenAI endpoint compatibility. Groq is also valued at $2.8 billion after a recent funding round.
+
+--- 2025-07-04 16:49:43 - Girlfriend Email ---
+pranchal018@gmail.com is my girlfriend
+
+--- 2025-07-05 11:03:25  ---
+User's favorite color is always blue.
+
+--- 2025-07-05 18:27:52  ---
+My favorite color is black.
