@@ -1,6 +1,6 @@
 // routes/chat.js
 import express from 'express';
-import { buildApiRequest } from '../utils/apiHelpers.js';
+import { buildApiRequest, buildApiRequestWithCaching } from '../utils/apiHelpers.js';
 import { toolHandlers } from '../services/tools/index.js';
 
 const router = express.Router();
@@ -35,7 +35,8 @@ router.post('/', async (req, res) => {
       });
     }
     // Default Gemini
-    const apiRequest = buildApiRequest(req.body);
+    const cacheService = req.app.get('cacheService');
+    const apiRequest = await buildApiRequestWithCaching(req.body, cacheService);
     console.log(`[POST /chat] Request to Google API (Model: ${modelId}):`, JSON.stringify(apiRequest, null, 2));
     let result = await req.app.get('ai').models.generateContent(apiRequest);
     console.log(`[POST /chat] Response from Google API:`, JSON.stringify(result, null, 2));
@@ -201,7 +202,8 @@ router.post('/stream', async (req, res) => {
       'Connection': 'keep-alive',
     });
 
-    const apiRequest = buildApiRequest(req.body);
+    const cacheService = req.app.get('cacheService');
+    const apiRequest = await buildApiRequestWithCaching(req.body, cacheService);
     console.log(`[POST /chat/stream] Request to Google API (Model: ${modelId}):`, JSON.stringify(apiRequest, null, 2));
     
     // Start with streaming the initial request

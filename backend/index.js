@@ -14,6 +14,7 @@ import { authMiddleware } from './middleware/auth.js';
 
 // Import AI services
 import { initializeAI } from './services/ai.js';
+import CacheService from './services/cache.js';
 
 // Import route handlers
 import authRoutes from './routes/auth.js';
@@ -22,6 +23,7 @@ import systemRoutes from './routes/system.js';
 import fileRoutes from './routes/files.js';
 import chatRoutes from './routes/chat.js';
 import toolsRoutes from './routes/tools.js';
+import cacheRoutes from './routes/cache.js';
 
 // Import WebSocket handler
 import { setupWebSocketServer } from './websocket/liveHandler.js';
@@ -49,8 +51,12 @@ app.use(cookieParser());
 // Initialize Gemini AI client
 const ai = initializeAI(GEMINI_API_KEY);
 
-// Store AI client in app for use in routes
+// Initialize cache service
+const cacheService = new CacheService(GEMINI_API_KEY);
+
+// Store AI client and cache service in app for use in routes
 app.set('ai', ai);
+app.set('cacheService', cacheService);
 
 // Apply auth middleware to all requests
 app.use(authMiddleware);
@@ -88,6 +94,9 @@ app.post('/voices/select', (req, res, next) => {
 // Files routes
 app.use('/files', fileRoutes);
 
+// Cache routes
+app.use('/cache', cacheRoutes);
+
 // Tools routes
 app.use('/tools', toolsRoutes);
 
@@ -100,7 +109,7 @@ setupWebSocketServer(server, ai);
 // Start server
 server.listen(PORT, () => {
   console.log(`Server listening on port ${PORT}`);
-  console.log('REST: /health, /models, /voices, /voices/select, /system, /tools, /tools/invoke, /files, /chat, /chat/stream, /chat/function-result');
+  console.log('REST: /health, /models, /voices, /voices/select, /system, /tools, /tools/invoke, /files, /cache, /chat, /chat/stream, /chat/function-result');
   console.log('WS: ws://<host>/live[ /text /audio /video ]');
 });
 

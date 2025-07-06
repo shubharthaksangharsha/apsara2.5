@@ -1,7 +1,9 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { ClipboardCopy } from 'lucide-react';
 import StreamingApsaraLogo from '../../StreamingApsaraLogo';
 import { USER_MESSAGE_CLASSES, COPY_BUTTON_CLASSES, BACKEND_URL, IMAGE_CONTAINER_CLASSES, IMAGE_PREVIEW_CLASSES } from '../constants';
+import FileAttachment from '../../FileAttachment';
+import FileViewer from '../../FileViewer';
 
 /**
  * User message component with image attachments and copy functionality
@@ -27,7 +29,32 @@ const UserMessage = ({
   handleCopyMessage, 
   handleImageClick 
 }) => {
+  const [viewerFile, setViewerFile] = useState(null);
+  const [isViewerOpen, setIsViewerOpen] = useState(false);
+
   const hasImageAttachments = message.parts && message.parts.some(part => part.fileData && part.fileData.mimeType?.startsWith('image/'));
+  
+  // Extract non-image file attachments for FileAttachment component
+  const nonImageFiles = message.parts ? message.parts
+    .filter(part => part.fileData && !part.fileData.mimeType?.startsWith('image/'))
+    .map((part, index) => ({
+      id: part.fileData.fileUri?.split('/').pop() || `file-${message.id || uniqueId}-${index}`,
+      originalname: part.fileData.fileName || 'Attached File',
+      mimetype: part.fileData.mimeType,
+      size: part.fileData.fileSize || 0,
+      uri: part.fileData.fileUri,
+      tokenCount: part.fileData.tokenCount || 0 // Use cached token count
+    })) : [];
+
+  const handleFileClick = (file) => {
+    setViewerFile(file);
+    setIsViewerOpen(true);
+  };
+
+  const handleCloseViewer = () => {
+    setIsViewerOpen(false);
+    setViewerFile(null);
+  };
   
   return (
     <React.Fragment>
@@ -82,6 +109,19 @@ const UserMessage = ({
               </div>
             </div>
           )}
+          
+          {/* Non-image file attachments */}
+          {nonImageFiles.length > 0 && (
+            <div className="mt-2 pt-2 border-t border-indigo-400 border-opacity-50">
+              <FileAttachment 
+                files={nonImageFiles} 
+                onRemove={() => {}} // No remove functionality in chat history
+                readOnly={true} // Hide remove buttons in chat history
+                skipTokenCounting={true} // Use cached token counts, don't recalculate
+                onFileClick={handleFileClick} // Add file click handler
+              />
+            </div>
+          )}
         </div>
       </div>
       
@@ -106,6 +146,13 @@ const UserMessage = ({
           <StreamingApsaraLogo isVisible={true} />
         </div>
       )}
+
+      {/* File Viewer */}
+      <FileViewer
+        file={viewerFile}
+        isOpen={isViewerOpen}
+        onClose={handleCloseViewer}
+      />
     </React.Fragment>
   );
 };

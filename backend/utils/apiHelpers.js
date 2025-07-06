@@ -8,7 +8,38 @@ import {
   } from '@google/genai';
   import fs from 'fs';
   import path from 'path';
+  import { filterGeminiSupportedFiles } from './supportedFileTypes.js';
   import { customToolNames, getToolDeclarations } from '../services/tools/index.js';
+  
+  // Helper: check if request can use context caching
+  export function canUseContextCaching(contents, config) {
+    // Use caching for requests with:
+    // 1. Any files (expensive to process repeatedly)
+    // 2. Long system instructions
+    // 3. Large chat history (>5 messages)
+    // 4. Force caching via config
+    
+    // Count total files across all contents
+    let totalFiles = 0;
+    contents.forEach(content => {
+      if (content.parts) {
+        content.parts.forEach(part => {
+          if (part.fileData && Array.isArray(part.fileData)) {
+            totalFiles += part.fileData.length;
+          }
+        });
+      }
+    });
+    
+    const hasFiles = totalFiles > 0;
+    const hasLongSystemInstruction = config?.systemInstruction && config.systemInstruction.length > 200;
+    const hasLargeChatHistory = contents.length > 5;
+    const forceCaching = config?.enableCaching === true;
+    
+    console.log(`[canUseContextCaching] Files: ${totalFiles}, System instruction: ${config?.systemInstruction?.length || 0} chars, Chat history: ${contents.length} messages, Force: ${forceCaching}`);
+    
+    return hasFiles || hasLongSystemInstruction || hasLargeChatHistory || forceCaching;
+  }
   
   // Helper: build API request for /chat and /chat/stream
   export function buildApiRequest(body) {
@@ -36,8 +67,25 @@ import {
         });
   
         if (fileDataArray) {
-          fileDataArray.forEach(file => {
-            if (file.id && file.type && file.type.startsWith('image/')) {
+          // Filter out unsupported file types before processing
+          const supportedFiles = filterGeminiSupportedFiles(fileDataArray);
+          
+          if (supportedFiles.length < fileDataArray.length) {
+            console.warn(`[buildApiRequest] Filtered out ${fileDataArray.length - supportedFiles.length} unsupported files`);
+          }
+          
+          supportedFiles.forEach(file => {
+            if (file.uri && file.uri.trim() !== '') {
+              // Use Google Files API URI directly - this works for all supported file types
+              console.log(`[buildApiRequest] Adding file with URI: ${file.uri}`);
+              newParts.push({
+                fileData: {
+                  mimeType: file.mimetype || file.type,
+                  fileUri: file.uri
+                }
+              });
+            } else if (file.id && file.type && file.type.startsWith('image/')) {
+              // Fallback for legacy local file storage (deprecated)
               try {
                 const filePath = path.join(process.cwd(), 'uploads', file.id);
                 if (fs.existsSync(filePath)) {
@@ -55,6 +103,13 @@ import {
               } catch (e) {
                 console.error(`[buildApiRequest] Error processing image file ${file.id}:`, e);
               }
+            } else {
+              console.warn(`[buildApiRequest] File missing URI or unsupported format:`, {
+                id: file.id,
+                uri: file.uri,
+                type: file.type || file.mimetype,
+                originalname: file.originalname
+              });
             }
           });
           return { ...contentPart, parts: newParts };
@@ -245,4 +300,81 @@ import {
       }
     }
     return apiRequest;
+  }
+  
+  // Helper: build API request with optional caching support
+  export async function buildApiRequestWithCaching(body, cacheService = null) {
+    const apiRequest = buildApiRequest(body);
+    
+    // Check if we should use caching
+    if (!cacheService || !canUseContextCaching(body.contents, body.config)) {
+      return apiRequest;
+    }
+    
+    try {
+      // Extract files and system instruction for cache matching
+      const files = [];
+      const systemInstruction = body.config?.systemInstruction || '';
+      
+      // Collect files from contents
+      body.contents.forEach(content => {
+        if (content.parts) {
+          content.parts.forEach(part => {
+            if (part.fileData && Array.isArray(part.fileData)) {
+              files.push(...part.fileData);
+            }
+          });
+        }
+      });
+      
+      // Try to find existing suitable cache
+      const suitableCache = cacheService.findSuitableCache(systemInstruction, files);
+      
+      if (suitableCache) {
+        console.log(`[buildApiRequestWithCaching] Using existing cache: ${suitableCache.name}`);
+        // Use cached content instead of building full request
+        return {
+          model: apiRequest.model,
+          config: {
+            ...apiRequest.config,
+            cachedContent: suitableCache.name
+          },
+          contents: body.contents.slice(-2) // Only send recent messages when using cache
+        };
+      }
+      
+      // If we have files or long system instruction, create a new cache
+      if (files.length > 0 || systemInstruction.length > 200) {
+        console.log(`[buildApiRequestWithCaching] Creating new cache for ${files.length} files and system instruction (${systemInstruction.length} chars)`);
+        
+        try {
+          const cache = await cacheService.createCache(
+            apiRequest.model,
+            systemInstruction,
+            files,
+            2 // 2 hours TTL
+          );
+          
+          console.log(`[buildApiRequestWithCaching] Created cache: ${cache.name}`);
+          
+          // Use the new cache
+          return {
+            model: apiRequest.model,
+            config: {
+              ...apiRequest.config,
+              cachedContent: cache.name
+            },
+            contents: body.contents.slice(-2) // Only send recent messages when using cache
+          };
+        } catch (cacheError) {
+          console.warn(`[buildApiRequestWithCaching] Failed to create cache, using normal request:`, cacheError.message);
+          return apiRequest; // Fall back to normal request
+        }
+      }
+      
+      return apiRequest;
+    } catch (error) {
+      console.error(`[buildApiRequestWithCaching] Error in caching logic:`, error);
+      return apiRequest; // Fall back to normal request
+    }
   }

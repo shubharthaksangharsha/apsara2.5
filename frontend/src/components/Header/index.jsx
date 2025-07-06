@@ -15,6 +15,7 @@ import { MOBILE_BREAKPOINT } from './constants';
  * @param {Function} props.setDarkMode - Function to toggle dark mode
  * @param {Function} props.setLiveOpen - Function to open live session modal
  * @param {Function} props.setSettingsOpen - Function to open settings panel
+ * @param {Function} props.setCacheManagerOpen - Function to open cache manager
  * @param {boolean} props.isAuthenticated - Whether user is authenticated
  * @param {Object} props.userProfile - User profile data
  * @param {Function} props.onSignOut - Sign out handler
@@ -29,6 +30,7 @@ export default function Header({
   setDarkMode,
   setLiveOpen,
   setSettingsOpen,
+  setCacheManagerOpen,
   isAuthenticated,
   userProfile,
   onSignOut,
@@ -69,6 +71,7 @@ export default function Header({
         setDarkMode={setDarkMode}
         setLiveOpen={setLiveOpen}
         setSettingsOpen={setSettingsOpen}
+        setCacheManagerOpen={setCacheManagerOpen}
         isAuthenticated={isAuthenticated}
         userProfile={userProfile}
         onSignOut={onSignOut}

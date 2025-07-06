@@ -2,17 +2,6 @@
  * Constants for file-related components
  */
 
-// FilePreviewBar classes
-export const PREVIEW_BAR_CONTAINER = "px-4 py-2 bg-gray-50 dark:bg-gray-800/50 border-t border-b border-gray-200 dark:border-gray-700";
-export const PREVIEW_LIST_CONTAINER = "flex flex-col gap-2 max-h-32 overflow-y-auto custom-scrollbar";
-
-// FilePreviewItem classes
-export const PREVIEW_ITEM_CONTAINER = "flex items-center justify-between p-2 bg-gray-100 dark:bg-gray-700 rounded-md text-xs";
-export const ICON_CONTAINER = "flex items-center gap-2 overflow-hidden";
-export const FILE_NAME = "truncate";
-export const FILE_SIZE = "text-gray-500 dark:text-gray-400 flex-shrink-0";
-export const REMOVE_BUTTON = "p-1 text-gray-500 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400 rounded-full hover:bg-gray-200 dark:hover:bg-gray-600";
-
 // FileUploadPopup classes
 export const POPUP_OVERLAY = "fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm flex justify-center items-center z-50 p-4";
 export const POPUP_CONTAINER = "w-full max-w-lg bg-white dark:bg-gray-800 p-6 rounded-lg shadow-xl text-gray-800 dark:text-gray-200";

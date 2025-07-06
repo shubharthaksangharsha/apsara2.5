@@ -1,5 +1,5 @@
 import React from 'react';
-import { Sun, Moon, MessageSquare, Settings, LogOut } from 'lucide-react';
+import { Sun, Moon, MessageSquare, Settings, LogOut, Database } from 'lucide-react';
 import ProfileImage from './ProfileImage';
 
 /**
@@ -10,6 +10,7 @@ import ProfileImage from './ProfileImage';
  * @param {Function} props.setDarkMode - Function to toggle dark mode
  * @param {Function} props.setLiveOpen - Function to open live session modal
  * @param {Function} props.setSettingsOpen - Function to open settings panel
+ * @param {Function} props.setCacheManagerOpen - Function to open cache manager
  * @param {boolean} props.isAuthenticated - Whether user is authenticated
  * @param {Object} props.userProfile - User profile data
  * @param {Function} props.onSignOut - Sign out handler
@@ -21,6 +22,7 @@ const HeaderButtons = ({
   setDarkMode, 
   setLiveOpen, 
   setSettingsOpen, 
+  setCacheManagerOpen,
   isAuthenticated, 
   userProfile, 
   onSignOut, 
@@ -85,6 +87,15 @@ const HeaderButtons = ({
         title="Chat Settings"
       >
         <Settings className="h-4 w-4 sm:h-5 sm:w-5 transition-transform duration-150 ease-in-out group-hover:scale-110 group-hover:rotate-45" />
+      </button>
+
+      {/* Cache Manager Button */}
+      <button
+        onClick={() => setCacheManagerOpen(true)}
+        className="p-1.5 sm:p-2 rounded-full text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-purple-600 dark:hover:text-purple-400 transition-all duration-150 ease-in-out group"
+        title="Cache Management"
+      >
+        <Database className="h-4 w-4 sm:h-5 sm:w-5 transition-transform duration-150 ease-in-out group-hover:scale-110" />
       </button>
       
       {/* Sign Out Button - Only visible when authenticated */}

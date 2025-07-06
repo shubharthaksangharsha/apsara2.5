@@ -1,10 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Switch } from '@headlessui/react';
-import { Send, UploadCloud, Zap } from 'lucide-react';
+import { Send, Zap, FolderOpen, UploadCloud } from 'lucide-react';
 
 // Import the components for image handling
 import ImageUploadButton from '../ImageUpload';
 import { ImagePreviewBar } from '../ImagePreview';
+import FileAttachment from '../FileAttachment';
 
 // Import constants
 import {
@@ -35,13 +36,15 @@ import {
  * @param {Function} props.onStreamSend - Handler for sending messages (streaming mode)
  * @param {boolean} props.isLoading - Whether a message is currently being processed
  * @param {boolean} props.disabled - Whether the input is disabled (no active conversation)
- * @param {Function} props.onFileUploadClick - Handler for general file upload button
+ * @param {Function} props.onFileManagerClick - Handler for file manager button
  * @param {boolean} props.streamEnabled - Whether streaming mode is enabled
  * @param {Function} props.onStreamToggleChange - Handler for toggling streaming mode
  * @param {Array} props.selectedImagesForPrompt - List of images selected for the current prompt
  * @param {Function} props.onSelectImagesForPrompt - Handler for selecting images
  * @param {Function} props.onRemoveSelectedImage - Handler for removing a selected image
  * @param {Object} props.promptImageUploadStatus - Status of image uploads {'filename': 'success'|'error'|'uploading'|'pending'}
+ * @param {Array} props.attachedFiles - List of attached files (PDFs, documents, etc.)
+ * @param {Function} props.onRemoveAttachedFile - Handler for removing an attached file
  * @returns {JSX.Element} MessageInput component
  */
 export default function MessageInput({
@@ -49,13 +52,15 @@ export default function MessageInput({
   onStreamSend,
   isLoading,
   disabled,
-  onFileUploadClick,
+  onFileManagerClick,
   streamEnabled,
   onStreamToggleChange,
   selectedImagesForPrompt,
   onSelectImagesForPrompt,
   onRemoveSelectedImage,
   promptImageUploadStatus,
+  attachedFiles,
+  onRemoveAttachedFile,
 }) {
   const [text, setText] = useState('');
   const inputRef = useRef();
@@ -163,6 +168,16 @@ export default function MessageInput({
           uploadStatus={promptImageUploadStatus}
         />
       )}
+
+      {/* File Attachment Display - Shows attached files (PDFs, documents, etc.) */}
+      {attachedFiles && attachedFiles.length > 0 && (
+        <div className="max-w-3xl mx-auto mb-2">
+          <FileAttachment 
+            files={attachedFiles} 
+            onRemove={onRemoveAttachedFile}
+          />
+        </div>
+      )}
       <div className="max-w-3xl mx-auto">
         <div className={`${INPUT_WRAPPER_CLASS} ${isDragging ? 'pointer-events-none' : ''}`}>
           <textarea
@@ -190,15 +205,17 @@ export default function MessageInput({
             }}
           />
           <div className="flex items-center gap-1 p-1 flex-shrink-0">
-            {/* Button for general file upload */}
-            <button
-              onClick={onFileUploadClick}
-              disabled={isLoading || disabled}
-              className={ACTION_BUTTON_CLASS}
-              title="Attach General File"
-            >
-              <UploadCloud className="h-4 w-4 sm:h-5 sm:w-5" />
-            </button>
+            {/* Button for file manager */}
+            {onFileManagerClick && (
+              <button
+                onClick={onFileManagerClick}
+                disabled={isLoading || disabled}
+                className={ACTION_BUTTON_CLASS}
+                title="Upload & Manage Files"
+              >
+                <FolderOpen className="h-4 w-4 sm:h-5 sm:w-5" />
+              </button>
+            )}
 
             {/* Image Upload Button for prompt images */}
             <ImageUploadButton 

@@ -103,9 +103,12 @@ export const sendToBackend = async (
           fileData: {
             mimeType: file.mimetype,
             fileUri: file.uri,
+            fileName: file.originalname,
+            fileSize: file.size,
+            tokenCount: file.tokenCount || 0 // Preserve token count
           }
         });
-        console.log(`[useChatApi] Adding file to message: ${file.originalname}, URI: ${file.uri}`);
+        console.log(`[useChatApi] Adding file to message: ${file.originalname}, URI: ${file.uri}, tokens: ${file.tokenCount || 0}`);
       } else {
         console.warn(`[useChatApi] Skipping file due to missing URI or mimetype:`, file);
       }

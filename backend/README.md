@@ -128,7 +128,18 @@ backend/
 - `POST /files` - Upload a file
 - `GET /files` - List uploaded files
 - `GET /files/content` - Get file content
+- `POST /files/tokens` - Get token count for files
 - `DELETE /files/:fileId` - Delete a file
+
+### Context Caching
+- `POST /cache` - Create a new cache
+- `GET /cache` - List all caches
+- `GET /cache/:name` - Get specific cache details
+- `POST /cache/from-history` - Create cache from chat history
+- `POST /cache/force-create` - Force create cache for testing
+- `PUT /cache/:name/ttl` - Update cache TTL
+- `DELETE /cache/:name` - Delete a cache
+- `POST /cache/find-suitable` - Find suitable existing cache
 
 ### Tools
 - `GET /tools` - List available tools
@@ -247,3 +258,64 @@ To update the version:
 ## 📄 License
 
 ISC
+
+## 🗂️ Context Caching
+
+Apsara 2.5 includes **Gemini API explicit context caching** to reduce costs and improve performance for repeated content processing.
+
+### How It Works
+- **Automatic Detection**: Caching is triggered when beneficial (files, long instructions, chat history)
+- **Smart Reuse**: Existing suitable caches are automatically reused
+- **Cost Savings**: Cached tokens are billed at reduced rates
+- **Transparent**: Works seamlessly without breaking existing functionality
+
+### Caching Triggers
+Context caching is automatically enabled when:
+1. **Any files are uploaded** (files are expensive to process repeatedly)
+2. **System instructions are long** (>200 characters)
+3. **Chat history is extensive** (>5 messages)
+4. **Manual forcing** via `enableCaching: true` in request config
+
+### Cache Management
+- **Automatic Creation**: Caches are created automatically when beneficial
+- **Smart Reuse**: Existing caches are reused when suitable
+- **TTL Management**: Caches expire automatically (default 2 hours)
+- **Manual Control**: Full CRUD operations via API endpoints
+
+### API Usage
+```javascript
+// Automatic caching (recommended)
+POST /chat
+{
+  "contents": [...],
+  "config": {
+    "systemInstruction": "Long system instruction...",
+    // Caching will be triggered automatically
+  }
+}
+
+// Force caching
+POST /chat
+{
+  "contents": [...],
+  "config": {
+    "enableCaching": true,
+    "systemInstruction": "Any instruction"
+  }
+}
+
+// Manual cache management
+POST /cache/force-create
+{
+  "model": "models/gemini-1.5-flash",
+  "systemInstruction": "You are a helpful assistant.",
+  "files": [...],
+  "ttlHours": 2
+}
+```
+
+### Benefits
+- **Cost Reduction**: Significant savings on repeated file processing
+- **Performance**: Faster response times for cached content
+- **Automatic**: Works transparently without code changes
+- **Scalable**: Handles large documents and long conversations efficiently

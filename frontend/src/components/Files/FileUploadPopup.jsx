@@ -114,10 +114,10 @@ export default function FileUploadPopup({ onClose, onUpload, files = [] }) {
               <span className="font-semibold">Click to upload</span> or drag and drop
             </p>
             <p className="text-xs text-gray-500 dark:text-gray-400">
-              Supports PDFs, common document, and text files. You can upload multiple files.
+              Supports images, PDFs, documents, text files, audio, and video files.
             </p>
             <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-              Max file size is typically 20-50MB via Google's File API.
+              Max file size: 2GB per file via Google Files API.
             </p>
             <input
               ref={fileInputRef}
@@ -125,6 +125,7 @@ export default function FileUploadPopup({ onClose, onUpload, files = [] }) {
               className="hidden"
               onChange={handleChange}
               disabled={uploading}
+              accept="image/*,application/pdf,text/*,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation,audio/*,video/*"
               aria-hidden="true" 
             />
             <button

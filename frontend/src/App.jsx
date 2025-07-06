@@ -10,13 +10,18 @@ import MessageInput from './components/MessageInput';
 import SettingsPanel from './components/SettingsPanel';
 import LivePopup from './components/LivePopup';
 import EmptyChatContent from './components/EmptyChatContent'; // Import the refactored component
-import { FileUploadPopup, FilePreviewBar } from './components/Files';
+import { FileManager } from './components/Files';
+import CacheManager from './components/CacheManager';
 import MapDisplay from './components/MapDisplay'; // <-- Import MapDisplay
 import VideoStreamDisplay from './components/VideoStreamDisplay';
 import ScreenShareDisplay from './components/ScreenShareDisplay';
 
 // Import common constants
 import { BACKEND_URL, MAX_LOCALSTORAGE_SIZE_MB, BYTES_PER_MB, MAX_STORAGE_BYTES } from './hooks/common-constants';
+
+// Import the token counting service
+import { countTokensForFile } from './services/tokenCounter';
+import { isGeminiSupported, getFileTypeName } from './utils/fileTypes';
 
 // Import the custom hook
 import { useTheme } from './hooks/useTheme/index';
@@ -293,61 +298,36 @@ export default function App() {
       img => img.id && promptImageUploadStatus[img.name] === 'success'
     );
 
-    // Filter filesForMessage to include only successfully uploaded prompt images
-    // AND ensure these are also present in the general 'files' state if they were added there.
-    const filesForMessage = files.filter(f => 
+    // Include both successfully uploaded images AND all files from FileManager
+    const imageFiles = files.filter(f => 
         successfullyUploadedImages.some(sImg => sImg.id === f.id)
     );
+    
+    // Add all other files from FileManager (PDFs, documents, etc.)
+    const otherFiles = files.filter(f => 
+        !successfullyUploadedImages.some(sImg => sImg.id === f.id)
+    );
+    
+    // Combine all files to send to backend
+    const filesForMessage = [...imageFiles, ...otherFiles];
+    
+    // Ensure all files have token counts before sending
+    for (const file of filesForMessage) {
+      if (!file.tokenCount || file.tokenCount === 0) {
+        try {
+          const tokenCount = await countTokensForFile(file);
+          file.tokenCount = tokenCount;
+          console.log(`[App.jsx] Counted tokens for ${file.originalname}: ${tokenCount}`);
+        } catch (error) {
+          console.warn(`[App.jsx] Failed to count tokens for ${file.originalname}:`, error);
+        }
+      }
+    }
     
     console.log('[App.jsx] Sending with files:', filesForMessage);
 
-    // Pass filesForMessage to the backend
-    await originalSendToBackend(text, targetConvoId, initialConvoData, targetModelId, filesForMessage, activeConvoId);
-    
-    // Clear and revoke URLs for the images that were successfully sent
-    clearAndRevokeImages(successfullyUploadedImages); 
-
-    // Remove sent images from selectedImagesForPrompt
-    setSelectedImagesForPrompt(prevImages => prevImages.filter(img => 
-        !successfullyUploadedImages.some(sImg => sImg.name === img.name) // Match by name, as ID might be transient before backend confirmation
-    ));
-
-    // Update promptImageUploadStatus: remove entries for successfully sent images
-    setPromptImageUploadStatus(prevStatus => {
-        const newStatus = { ...prevStatus };
-        successfullyUploadedImages.forEach(img => {
-            if (newStatus[img.name] === 'success' || newStatus[img.name] === 'uploading') {
-                delete newStatus[img.name];
-            }
-        });
-        return newStatus;
-    });
-
-    // Remove these images from the main `files` state managed by useFileUpload
-    setFiles(prevFiles => prevFiles.filter(f => 
-        !successfullyUploadedImages.some(sImg => sImg.id === f.id) // Assuming sImg.id matches f.id for prompt images
-    ));
-
-    setIsAppLoading(false); 
-  };
-
-  const startStreamChat = async (text, targetConvoId = null, initialConvoData = null, targetModelId = null) => {
-    setIsAppLoading(true);
-
-    const successfullyUploadedImages = selectedImagesForPrompt.filter(
-      img => img.id && promptImageUploadStatus[img.name] === 'success'
-    );
-
-    const filesForMessage = files.filter(f => 
-        successfullyUploadedImages.some(sImg => sImg.id === f.id)
-    );
-
-    console.log('[App.jsx] Streaming with files:', filesForMessage);
-
-    // Pass null for tool override parameters, then the files
-    await originalStartStreamChat(text, targetConvoId, initialConvoData, targetModelId, null, null, filesForMessage);
-
-    clearAndRevokeImages(successfullyUploadedImages); 
+    // Clear UI immediately when message is sent
+    clearAndRevokeImages(successfullyUploadedImages);
     setSelectedImagesForPrompt(prevImages => prevImages.filter(img => 
         !successfullyUploadedImages.some(sImg => sImg.name === img.name)
     ));
@@ -360,9 +340,69 @@ export default function App() {
         });
         return newStatus;
     });
-    setFiles(prevFiles => prevFiles.filter(f => 
+    // Clear ALL files from attachment area immediately (including PDFs)
+    setFiles([]);
+
+    // Pass filesForMessage to the backend
+    await originalSendToBackend(text, targetConvoId, initialConvoData, targetModelId, filesForMessage, activeConvoId);
+
+    setIsAppLoading(false); 
+  };
+
+  const startStreamChat = async (text, targetConvoId = null, initialConvoData = null, targetModelId = null) => {
+    setIsAppLoading(true);
+
+    const successfullyUploadedImages = selectedImagesForPrompt.filter(
+      img => img.id && promptImageUploadStatus[img.name] === 'success'
+    );
+
+    // Include both successfully uploaded images AND all files from FileManager
+    const imageFiles = files.filter(f => 
+        successfullyUploadedImages.some(sImg => sImg.id === f.id)
+    );
+    
+    // Add all other files from FileManager (PDFs, documents, etc.)
+    const otherFiles = files.filter(f => 
         !successfullyUploadedImages.some(sImg => sImg.id === f.id)
+    );
+    
+    // Combine all files to send to backend
+    const filesForMessage = [...imageFiles, ...otherFiles];
+
+    // Ensure all files have token counts before sending
+    for (const file of filesForMessage) {
+      if (!file.tokenCount || file.tokenCount === 0) {
+        try {
+          const tokenCount = await countTokensForFile(file);
+          file.tokenCount = tokenCount;
+          console.log(`[App.jsx] Counted tokens for ${file.originalname}: ${tokenCount}`);
+        } catch (error) {
+          console.warn(`[App.jsx] Failed to count tokens for ${file.originalname}:`, error);
+        }
+      }
+    }
+
+    console.log('[App.jsx] Streaming with files:', filesForMessage);
+
+    // Clear UI immediately when message is sent
+    clearAndRevokeImages(successfullyUploadedImages);
+    setSelectedImagesForPrompt(prevImages => prevImages.filter(img => 
+        !successfullyUploadedImages.some(sImg => sImg.name === img.name)
     ));
+    setPromptImageUploadStatus(prevStatus => {
+        const newStatus = { ...prevStatus };
+        successfullyUploadedImages.forEach(img => {
+            if (newStatus[img.name] === 'success' || newStatus[img.name] === 'uploading') {
+                delete newStatus[img.name];
+            }
+        });
+        return newStatus;
+    });
+    // Clear ALL files from attachment area immediately (including PDFs)
+    setFiles([]);
+
+    // Pass null for tool override parameters, then the files
+    await originalStartStreamChat(text, targetConvoId, initialConvoData, targetModelId, null, null, filesForMessage);
 
     setIsAppLoading(false);
   };
@@ -381,6 +421,11 @@ export default function App() {
     if (imageToRemove.id) {
       removeFile(imageToRemove.id);
     }
+  };
+
+  // Handler to remove a file from attachments only (not from file manager)
+  const handleRemoveAttachedFile = (fileId) => {
+    setFiles(prevFiles => prevFiles.filter(f => f.id !== fileId));
   };
 
   const clearSelectedImagesForPrompt = () => {
@@ -478,8 +523,10 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   // Live chat popup
   const [liveOpen, setLiveOpen] = useState(false);
-  // File upload popup
-  const [fileUploadOpen, setFileUploadOpen] = useState(false);
+  // File manager popup
+  const [fileManagerOpen, setFileManagerOpen] = useState(false);
+
+  const [cacheManagerOpen, setCacheManagerOpen] = useState(false);
   // Live Settings Panel state
   const [liveSettingsOpen, setLiveSettingsOpen] = useState(false); // REMOVED - No longer needed as separate panel
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -737,6 +784,7 @@ export default function App() {
             setDarkMode={setDarkMode}
             setLiveOpen={setLiveOpen}
             setSettingsOpen={setSettingsOpen}
+            setCacheManagerOpen={setCacheManagerOpen}
             isAuthenticated={isAuthenticated}
             userProfile={userProfile}
             onSignOut={handleSignOut}
@@ -784,11 +832,6 @@ export default function App() {
         
         {/* Bottom Flex Container for File & Input */}
         <div className="w-full p-2 sm:p-3 border-t border-gray-200 dark:border-gray-700 flex flex-col gap-2 relative flex-shrink-0 bg-white dark:bg-gray-800">
-          {/* File Preview Bar - Conditionally render */}
-          {files && files.length > 0 && 
-           (files.some(f => !selectedImagesForPrompt.find(sImg => sImg.id === f.id && promptImageUploadStatus[sImg.name] === 'success')) || selectedImagesForPrompt.length === 0) && (
-            <FilePreviewBar files={files} onRemoveFile={removeFile} />
-          )}
           
           {/* Action Buttons Row - NEW */}
           <div className="flex justify-between items-center mb-1">
@@ -812,7 +855,7 @@ export default function App() {
           onStreamSend={startStreamChat}
           isLoading={isChatLoading}
           disabled={!activeConvoId}
-          onFileUploadClick={() => setFileUploadOpen(true)} // For general files
+          onFileManagerClick={() => setFileManagerOpen(true)} // For file management
           streamEnabled={streamToggleState}
           onStreamToggleChange={setStreamToggleState}
           // --> ADD THESE PROPS FOR IMAGE SELECTION <--
@@ -820,6 +863,9 @@ export default function App() {
           onSelectImagesForPrompt={handleSelectImagesForPrompt}
           onRemoveSelectedImage={handleRemoveSelectedImage}
           promptImageUploadStatus={promptImageUploadStatus} // Pass the status object
+          // --> ADD THESE PROPS FOR FILE ATTACHMENTS <--
+          attachedFiles={files}
+          onRemoveAttachedFile={handleRemoveAttachedFile}
         />
         </div>
       </main>
@@ -951,12 +997,37 @@ export default function App() {
         <ScreenShareDisplay screenStream={screenStream} isScreenSharingActive={isStreamingScreen} />
       )} */}
 
-      {/* File Upload Popup - Use Imported Component */}
-      {fileUploadOpen && (
-        <FileUploadPopup
-          onClose={() => setFileUploadOpen(false)}
-          onUpload={uploadFile}
-          files={files}
+      {/* File Manager Popup */}
+      {fileManagerOpen && (
+        <FileManager
+          isOpen={fileManagerOpen}
+          onClose={() => setFileManagerOpen(false)}
+          onFileSelect={(selectedFiles, options = {}) => {
+            // Add selected files to the current files state
+            setFiles(prevFiles => {
+              const newFiles = selectedFiles.filter(
+                newFile => !prevFiles.some(existing => existing.id === newFile.id)
+              );
+              return [...prevFiles, ...newFiles];
+            });
+            
+            // Store caching preference
+            if (options.enableCaching !== undefined) {
+              console.log('[App] File caching preference:', options.enableCaching);
+              // You could store this in state or pass it to chat requests
+            }
+            
+            // Close the FileManager after selecting files
+            setFileManagerOpen(false);
+          }}
+        />
+      )}
+
+      {/* Cache Manager Popup */}
+      {cacheManagerOpen && (
+        <CacheManager
+          isOpen={cacheManagerOpen}
+          onClose={() => setCacheManagerOpen(false)}
         />
       )}
 
