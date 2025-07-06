@@ -49,7 +49,7 @@ const ModelMessage = ({
     message.parts.forEach(part => {
       if (part.thought && typeof part.text === 'string') {
         thoughtContent += part.text + '\n'; // Accumulate thought text
-      } else if (part.text || part.executableCode || part.codeExecutionResult || part.inlineData) {
+      } else if (part.text || part.executableCode || part.codeExecutionResult || part.inlineData || part.imageLoading) {
         regularContentParts.push(part);
       }
     });
@@ -155,6 +155,22 @@ const ModelMessage = ({
                     alt="Generated content"
                     className="max-w-md h-auto rounded"
                   />
+                </div>
+              );
+            } else if (part.imageLoading) {
+              // Handle image loading spinner
+              console.log('🖼️ Rendering image loading spinner:', part);
+              return (
+                <div
+                  key={`${partId}-loading`}
+                  className="my-2 p-4 bg-gray-100 dark:bg-gray-900/30 rounded-md inline-block"
+                >
+                  <div className="flex items-center space-x-3">
+                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500"></div>
+                    <div className="text-sm text-gray-600 dark:text-gray-400">
+                      {part.loadingText || `Generating image...`}
+                    </div>
+                  </div>
                 </div>
               );
             }

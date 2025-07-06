@@ -346,15 +346,31 @@ export const startStreamChat = async (
                  console.log('Function call event:', functionCallData);
                  // Handle function call display in the UI
                  if (functionCallData.functionCall) {
+                     const isImageFunction = functionCallData.functionCall.name === 'generateImage' || 
+                                           functionCallData.functionCall.name === 'editImage';
+                     
+                     console.log('🔧 Function call detected:', functionCallData.functionCall.name, 'isImageFunction:', isImageFunction);
+                     
                      setConvos(prevConvos => prevConvos.map(c => {
                          if (c.id !== finalConvoId) return c;
                          const updatedMessages = c.messages.map(m => {
                              if (m.id === tempModelMessageId) {
                                  const currentParts = [...(m.parts || [])];
-                                 // Add function call display part (separate from actual function call)
-                                 currentParts.push({
-                                     text: `🔧 Calling function: ${functionCallData.functionCall.name}`
-                                 });
+                                 
+                                 if (isImageFunction) {
+                                     // Add image loading spinner for image generation functions
+                                     console.log('🖼️ Adding image loading spinner');
+                                     currentParts.push({
+                                         imageLoading: true,
+                                         functionName: functionCallData.functionCall.name,
+                                         loadingId: `${tempModelMessageId}-${functionCallData.functionCall.name}-loading`
+                                     });
+                                 } else {
+                                     // Add function call display part for other functions
+                                     currentParts.push({
+                                         text: `🔧 Calling function: ${functionCallData.functionCall.name}`
+                                     });
+                                 }
                                  return { ...m, parts: currentParts };
                              }
                              return m;
@@ -372,15 +388,32 @@ export const startStreamChat = async (
                  console.log('Function result event:', functionResultData);
                  // Handle function result display in the UI
                  if (functionResultData.functionCall && functionResultData.result) {
+                     const isImageFunction = functionResultData.functionCall.name === 'generateImage' || 
+                                           functionResultData.functionCall.name === 'editImage';
+                     
                      setConvos(prevConvos => prevConvos.map(c => {
                          if (c.id !== finalConvoId) return c;
                          const updatedMessages = c.messages.map(m => {
                              if (m.id === tempModelMessageId) {
                                  const currentParts = [...(m.parts || [])];
-                                 // Add function result display part (separate from actual function result)
-                                 currentParts.push({
-                                     text: `✅ ${functionResultData.functionCall.name} completed\n`
-                                 });
+                                 
+                                 if (isImageFunction) {
+                                     // Update loading spinner to show processing for image functions
+                                     const loadingPartIndex = currentParts.findIndex(p => 
+                                         p.imageLoading && p.functionName === functionResultData.functionCall.name
+                                     );
+                                     if (loadingPartIndex !== -1) {
+                                         currentParts[loadingPartIndex] = {
+                                             ...currentParts[loadingPartIndex],
+                                             loadingText: 'Processing image...'
+                                         };
+                                     }
+                                 } else {
+                                     // Add function result display part for other functions
+                                     currentParts.push({
+                                         text: `✅ ${functionResultData.functionCall.name} completed\n`
+                                     });
+                                 }
                                  return { ...m, parts: currentParts };
                              }
                              return m;
@@ -390,6 +423,57 @@ export const startStreamChat = async (
                  }
              } catch (e) {
                  console.error('Error parsing function result event:', e);
+             }
+        } else if (line.startsWith('event: image_result')) {
+             try {
+                 const imageResultPayload = line.slice(line.indexOf('data:') + 5).trim();
+                 const imageResultData = JSON.parse(imageResultPayload);
+                 console.log('🖼️ Image result event received:', imageResultData);
+                 
+                 // Handle image result - replace loading spinner with actual image
+                 if (imageResultData.inlineData) {
+                     setConvos(prevConvos => prevConvos.map(c => {
+                         if (c.id !== finalConvoId) return c;
+                         const updatedMessages = c.messages.map(m => {
+                             if (m.id === tempModelMessageId) {
+                                 const currentParts = [...(m.parts || [])];
+                                 
+                                 // Find and replace the loading spinner with the actual image
+                                 const loadingPartIndex = currentParts.findIndex(p => 
+                                     p.imageLoading && (p.functionName === 'generateImage' || p.functionName === 'editImage')
+                                 );
+                                 
+                                 console.log('🖼️ Looking for loading spinner, found at index:', loadingPartIndex);
+                                 console.log('🖼️ Current parts:', currentParts.map(p => ({ 
+                                     hasText: !!p.text, 
+                                     hasImage: !!p.inlineData, 
+                                     isLoading: !!p.imageLoading,
+                                     functionName: p.functionName 
+                                 })));
+                                 
+                                 if (loadingPartIndex !== -1) {
+                                     // Replace loading spinner with image
+                                     console.log('🖼️ Replacing loading spinner with image');
+                                     currentParts[loadingPartIndex] = {
+                                         inlineData: imageResultData.inlineData
+                                     };
+                                 } else {
+                                     // Fallback: add image as new part if no loading spinner found
+                                     console.log('🖼️ Loading spinner not found, adding image as new part');
+                                     currentParts.push({
+                                         inlineData: imageResultData.inlineData
+                                     });
+                                 }
+                                 
+                                 return { ...m, parts: currentParts };
+                             }
+                             return m;
+                         });
+                         return { ...c, messages: updatedMessages };
+                     }));
+                 }
+             } catch (e) {
+                 console.error('Error parsing image result event:', e);
              }
         }
         // Note: The original logic didn't explicitly handle event: done,

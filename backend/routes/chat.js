@@ -319,41 +319,67 @@ router.post('/stream', async (req, res) => {
       // Send function result events and add to conversation
       // Special handling for image generation tools
       let hasImageGeneration = false;
-      functionResults.forEach(({ status, value }) => {
+      for (const { status, value } of functionResults) {
         if (status === 'fulfilled') {
           const { functionCall, result } = value;
+          
+          console.log(`[POST /chat/stream] Function call result:`, {
+            functionName: functionCall.name,
+            resultKeys: Object.keys(result),
+            result: result
+          });
           
           // Check if this is an image generation or editing tool
           const isImageTool = functionCall.name === 'generateImage' || functionCall.name === 'editImage';
           
           if (isImageTool && result && result.imageData && result.mimeType) {
             console.log(`[POST /chat/stream] Found image data from function: ${functionCall.name}, sending directly to client`);
+            console.log(`[POST /chat/stream] Image result details:`, {
+              hasImageData: !!result.imageData,
+              imageDataLength: result.imageData ? result.imageData.length : 0,
+              mimeType: result.mimeType,
+              hasDescription: !!result.description,
+              action: result.action,
+              status: result.status
+            });
             hasImageGeneration = true;
             
-            // 1. Send function result event first (✅ generateImage completed)
+            // 1. Send function result event first
             const resultDataString = `event: function_result\ndata: ${JSON.stringify({ 
               functionCall: functionCall, 
-              result: result,
+              result: {
+                status: result.status,
+                message: result.message,
+                action: result.action,
+                timestamp: result.timestamp
+              },
               status: 'completed'
             })}\n\n`;
+            console.log(`[POST /chat/stream] Sending function result event:`, resultDataString);
             res.write(resultDataString);
-            res.write('\n'); // Ensure newline after event
-            // 2. Send the description as text response
-            if (result.description) {
+            
+            // 2. Send the description as text response if available
+            if (result.description && result.description.trim()) {
               const textDataString = `data: ${JSON.stringify({
                 text: result.description
               })}\n\n`;
+              console.log(`[POST /chat/stream] Sending description text:`, textDataString);
               res.write(textDataString);
             }
             
-            // 3. Send image data last
-            const imageDataString = `data: ${JSON.stringify({
+            // 3. Send image data with proper event type
+            const imageDataString = `event: image_result\ndata: ${JSON.stringify({
               inlineData: {
                 mimeType: result.mimeType,
                 data: result.imageData
-              }
+              },
+              action: result.action || 'imageGenerated'
             })}\n\n`;
+            console.log(`[POST /chat/stream] Sending image result event (data length: ${imageDataString.length})`);
             res.write(imageDataString);
+            
+            // 4. Add a small delay to ensure data is sent before ending
+            await new Promise(resolve => setTimeout(resolve, 100));
             
             // Add simplified response to conversation (without image data)
             updatedContents.push({
@@ -394,7 +420,7 @@ router.post('/stream', async (req, res) => {
         } else {
           console.error(`[POST /chat/stream] Function execution failed:`, status);
         }
-      });
+      }
       
       // For image generation tools, skip the follow-up request to avoid token limits
       if (hasImageGeneration) {

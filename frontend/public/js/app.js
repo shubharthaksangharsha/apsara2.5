@@ -986,6 +986,7 @@ async function handleStreamingResponse(messageData, assistantMessage) {
         const decoder = new TextDecoder();
         let buffer = '';
         let completeResponse = '';
+        let imageLoadingSpinner = null;
         
         // Process stream chunks
         while (true) {
@@ -1007,46 +1008,133 @@ async function handleStreamingResponse(messageData, assistantMessage) {
                 const eventType = lines.find(line => line.startsWith('event:'))?.substring(6).trim() || 'message';
                 const dataLine = lines.find(line => line.startsWith('data:'));
                 
+                console.log('Processing event:', eventType, 'with data line:', dataLine ? 'present' : 'missing');
+                
                 if (!dataLine) continue;
                 
-                const data = JSON.parse(dataLine.substring(5).trim());
+                let data;
+                try {
+                    data = JSON.parse(dataLine.substring(5).trim());
+                    console.log('Parsed data:', eventType === 'image_result' ? { ...data, inlineData: data.inlineData ? '...image data...' : undefined } : data);
+                } catch (parseError) {
+                    console.error('JSON parsing error for event:', eventType, parseError);
+                    console.log('Raw data line:', dataLine.substring(0, 200) + '...');
+                    continue;
+                }
                 
                 if (eventType === 'error') {
                     showError(data.error || 'An error occurred');
                     continue;
                 }
                 
-                if (eventType === 'image_chunk' || eventType === 'image_result') {
-                    // Handle image generation result
-                    if (data.inlineData) {
-                        const img = document.createElement('img');
-                        img.src = `data:${data.inlineData.mimeType};base64,${data.inlineData.data}`;
-                        img.alt = 'Generated Image';
-                        img.classList.add('generated-image');
+                if (eventType === 'function_call') {
+                    // Handle function call events - show loading spinner for image generation
+                    if (data.functionCall && (data.functionCall.name === 'generateImage' || data.functionCall.name === 'editImage')) {
+                        // Remove any existing loading spinner
+                        if (imageLoadingSpinner) {
+                            imageLoadingSpinner.remove();
+                        }
                         
-                        if (!messageElement.querySelector(`img[src="${img.src}"]`)) {
-                            messageElement.appendChild(img);
-                            
-                            // Add image to assistant message for storage
-                            if (!assistantMessage.images) {
-                                assistantMessage.images = [];
-                            }
-                            
-                            assistantMessage.images.push({
-                                mimeType: data.inlineData.mimeType,
-                                data: data.inlineData.data
-                            });
-                            
-                            // Update conversation with image
-                            const conversation = conversations.find(c => c.id === currentChatId);
-                            if (conversation) {
-                                const lastMessage = conversation.messages[conversation.messages.length - 1];
-                                if (lastMessage && lastMessage.role === 'assistant') {
-                                    lastMessage.images = assistantMessage.images;
-                                    saveConversation(conversation);
-                                }
+                        // Create loading spinner
+                        imageLoadingSpinner = document.createElement('div');
+                        imageLoadingSpinner.className = 'image-loading-spinner';
+                        imageLoadingSpinner.innerHTML = `
+                            <div class="spinner-container">
+                                <div class="spinner"></div>
+                                <p>Generating image...</p>
+                            </div>
+                        `;
+                        
+                        // Add to message content
+                        messageElement.appendChild(imageLoadingSpinner);
+                        scrollToBottom();
+                    }
+                    continue;
+                }
+                
+                if (eventType === 'function_result') {
+                    // Handle function result events - update loading spinner message
+                    if (data.functionCall && (data.functionCall.name === 'generateImage' || data.functionCall.name === 'editImage')) {
+                        if (imageLoadingSpinner) {
+                            const spinnerText = imageLoadingSpinner.querySelector('p');
+                            if (spinnerText) {
+                                spinnerText.textContent = 'Processing image...';
                             }
                         }
+                    }
+                    continue;
+                }
+                
+                if (eventType === 'image_chunk' || eventType === 'image_result') {
+                    console.log('🖼️ Image event received:', eventType, {
+                        hasInlineData: !!data.inlineData,
+                        mimeType: data.inlineData?.mimeType,
+                        dataLength: data.inlineData?.data?.length,
+                        action: data.action
+                    });
+                    
+                    // Remove loading spinner if present
+                    if (imageLoadingSpinner) {
+                        console.log('Removing loading spinner');
+                        imageLoadingSpinner.remove();
+                        imageLoadingSpinner = null;
+                    }
+                    
+                    // Handle image generation/editing result
+                    if (data.inlineData) {
+                        console.log('Creating image element with data:', data.inlineData.mimeType, data.inlineData.data.substring(0, 50) + '...');
+                        
+                        const img = document.createElement('img');
+                        img.src = `data:${data.inlineData.mimeType};base64,${data.inlineData.data}`;
+                        img.alt = data.action === 'imageEdited' ? 'Edited Image' : 'Generated Image';
+                        img.classList.add('generated-image');
+                        img.style.maxWidth = '100%';
+                        img.style.height = 'auto';
+                        img.style.borderRadius = '8px';
+                        img.style.marginTop = '10px';
+                        
+                        // Add error handling for image loading
+                        img.onerror = function() {
+                            console.error('Failed to load image');
+                            this.alt = 'Failed to load image';
+                            this.style.border = '1px solid red';
+                        };
+                        
+                        img.onload = function() {
+                            console.log('✅ Image loaded successfully:', this.naturalWidth, 'x', this.naturalHeight);
+                        };
+                        
+                        // Remove any existing images from the same action to avoid duplicates
+                        const existingImages = messageElement.querySelectorAll('img.generated-image');
+                        existingImages.forEach(existingImg => existingImg.remove());
+                        
+                        messageElement.appendChild(img);
+                        console.log('Image element appended to message');
+                        
+                        // Add image to assistant message for storage
+                        if (!assistantMessage.images) {
+                            assistantMessage.images = [];
+                        }
+                        
+                        // Update or add the image (replace if editing)
+                        assistantMessage.images = [{
+                            mimeType: data.inlineData.mimeType,
+                            data: data.inlineData.data
+                        }];
+                        
+                        // Update conversation with image
+                        const conversation = conversations.find(c => c.id === currentChatId);
+                        if (conversation) {
+                            const lastMessage = conversation.messages[conversation.messages.length - 1];
+                            if (lastMessage && lastMessage.role === 'assistant') {
+                                lastMessage.images = assistantMessage.images;
+                                saveConversation(conversation);
+                            }
+                        }
+                        
+                        scrollToBottom();
+                    } else {
+                        console.log('❌ No inlineData found in image event:', data);
                     }
                     continue;
                 }
@@ -1065,6 +1153,26 @@ async function handleStreamingResponse(messageData, assistantMessage) {
                     
                     // Render markdown
                     messageElement.innerHTML = marked.parse(completeResponse);
+                    
+                    // Re-add any existing images after markdown parsing
+                    if (assistantMessage.images && assistantMessage.images.length > 0) {
+                        assistantMessage.images.forEach(image => {
+                            const img = document.createElement('img');
+                            img.src = `data:${image.mimeType};base64,${image.data}`;
+                            img.alt = 'Generated Image';
+                            img.classList.add('generated-image');
+                            img.style.maxWidth = '100%';
+                            img.style.height = 'auto';
+                            img.style.borderRadius = '8px';
+                            img.style.marginTop = '10px';
+                            messageElement.appendChild(img);
+                        });
+                    }
+                    
+                    // Re-add loading spinner if still generating
+                    if (imageLoadingSpinner) {
+                        messageElement.appendChild(imageLoadingSpinner);
+                    }
                     
                     // Highlight code blocks
                     messageElement.querySelectorAll('pre code').forEach(block => {
@@ -1087,6 +1195,13 @@ async function handleStreamingResponse(messageData, assistantMessage) {
         }
         
         currentStreamController = null;
+        
+        // Remove any remaining loading spinner
+        if (imageLoadingSpinner) {
+            imageLoadingSpinner.remove();
+            imageLoadingSpinner = null;
+        }
+        
         // ▪ the stream is done; now actually attach the grounding HTML
         if (assistantMessage.groundingQueries?.length) {
             // find the last-assistant bubble's content div
