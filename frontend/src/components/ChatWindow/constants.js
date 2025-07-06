@@ -26,11 +26,11 @@ export const COPY_BUTTON_CLASSES = "flex items-center gap-1 px-2 py-1 rounded ho
 export const IMAGE_PREVIEW_CLASSES = "w-16 h-16 object-cover rounded";
 export const IMAGE_CONTAINER_CLASSES = "relative bg-white p-1 rounded cursor-pointer hover:ring-2 hover:ring-white transition-all";
 
-// Code block classes
-export const CODE_BLOCK_CONTAINER_CLASSES = "my-3 rounded-md overflow-hidden";
-export const CODE_BLOCK_HEADER_CLASSES = "px-4 py-2 text-xs text-gray-300 dark:text-gray-400 bg-gray-700 dark:bg-gray-900/70 flex justify-between items-center rounded-t-md";
-export const CODE_BLOCK_CONTENT_CLASSES = "p-4 overflow-x-auto custom-scrollbar text-sm bg-gray-800 dark:bg-black rounded-b-md";
-export const CODE_BLOCK_BUTTON_CLASSES = "p-1 text-gray-300 hover:text-white transition";
+// Code block classes - ChatGPT style (clean, no outer wrapper)
+export const CODE_BLOCK_CONTAINER_CLASSES = ""; // Not used anymore
+export const CODE_BLOCK_HEADER_CLASSES = "px-3 py-2 bg-gray-100 dark:bg-gray-700 flex justify-between items-center rounded-t-lg";
+export const CODE_BLOCK_CONTENT_CLASSES = "p-4 overflow-x-auto custom-scrollbar text-sm bg-gray-50 dark:bg-gray-800 rounded-b-lg";
+export const CODE_BLOCK_BUTTON_CLASSES = "flex items-center justify-center w-8 h-8 bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 text-gray-600 dark:text-gray-200 rounded transition-colors duration-200";
 
 // Code execution result classes
 export const EXECUTION_RESULT_CONTAINER_CLASSES = "my-2 text-sm";

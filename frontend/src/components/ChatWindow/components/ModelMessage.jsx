@@ -93,16 +93,14 @@ const ModelMessage = ({
                           const language = match ? match[1] : '';
                           
                           if (!inline && language) {
-                            // Multi-line code block - use our custom CodeBlock component
+                            // Multi-line code block - render directly without wrapper
                             return (
                               <CodeBlock
                                 codeContent={String(children).replace(/\n$/, '')}
                                 language={language}
                                 uniqueId={`${partId}-markdown-code-${i}`}
-                                isCollapsed={collapsedSections[`${partId}-markdown-code-${i}-code`]}
                                 copiedStates={copiedStates}
                                 handleCopyCode={handleCopyCode}
-                                toggleCollapse={toggleCollapse}
                               />
                             );
                           } else {
@@ -131,10 +129,8 @@ const ModelMessage = ({
                   codeContent={part.executableCode.code}
                   language={part.executableCode.language}
                   uniqueId={partId}
-                  isCollapsed={collapsedSections[`${partId}-code`]}
                   copiedStates={copiedStates}
                   handleCopyCode={handleCopyCode}
-                  toggleCollapse={toggleCollapse}
                 />
               );
             } else if (part.codeExecutionResult) {
@@ -181,17 +177,17 @@ const ModelMessage = ({
                         const language = match ? match[1] : '';
                         
                         if (!inline && language) {
-                          // Multi-line code block - use our custom CodeBlock component
+                          // Multi-line code block - render outside prose container
                           return (
-                            <CodeBlock
-                              codeContent={String(children).replace(/\n$/, '')}
-                              language={language}
-                              uniqueId={`${uniqueId}-fallback-code`}
-                              isCollapsed={collapsedSections[`${uniqueId}-fallback-code-code`]}
-                              copiedStates={copiedStates}
-                              handleCopyCode={handleCopyCode}
-                              toggleCollapse={toggleCollapse}
-                            />
+                            <div className="not-prose">
+                              <CodeBlock
+                                codeContent={String(children).replace(/\n$/, '')}
+                                language={language}
+                                uniqueId={`${uniqueId}-fallback-code`}
+                                copiedStates={copiedStates}
+                                handleCopyCode={handleCopyCode}
+                              />
+                            </div>
                           );
                         } else {
                           // Inline code - use default styling
@@ -218,10 +214,8 @@ const ModelMessage = ({
                 codeContent={message.executableCode.code}
                 language={message.executableCode.language}
                 uniqueId={`${uniqueId}-topLegacyCode`}
-                isCollapsed={collapsedSections[`${uniqueId}-topLegacyCode-code`]}
                 copiedStates={copiedStates}
                 handleCopyCode={handleCopyCode}
-                toggleCollapse={toggleCollapse}
               />
             )}
             {message.codeExecutionResult && (
