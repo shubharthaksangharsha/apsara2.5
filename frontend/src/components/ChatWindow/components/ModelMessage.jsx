@@ -177,17 +177,15 @@ const ModelMessage = ({
                         const language = match ? match[1] : '';
                         
                         if (!inline && language) {
-                          // Multi-line code block - render outside prose container
+                          // Multi-line code block - render directly without wrapper
                           return (
-                            <div className="not-prose">
-                              <CodeBlock
-                                codeContent={String(children).replace(/\n$/, '')}
-                                language={language}
-                                uniqueId={`${uniqueId}-fallback-code`}
-                                copiedStates={copiedStates}
-                                handleCopyCode={handleCopyCode}
-                              />
-                            </div>
+                            <CodeBlock
+                              codeContent={String(children).replace(/\n$/, '')}
+                              language={language}
+                              uniqueId={`${uniqueId}-fallback-code`}
+                              copiedStates={copiedStates}
+                              handleCopyCode={handleCopyCode}
+                            />
                           );
                         } else {
                           // Inline code - use default styling

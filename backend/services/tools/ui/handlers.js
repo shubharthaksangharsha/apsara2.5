@@ -75,6 +75,10 @@ export async function handleGenerateImage({ prompt }) {
     imageStore.lastGeneratedImage = result.imageData;
     imageStore.lastMimeType = result.mimeType || 'image/png';
     console.log(`[Tool: generateImage] Stored image in memory cache for future editing`);
+    console.log(`[Tool: generateImage] Stored image details:`, {
+      imageDataLength: result.imageData ? result.imageData.length : 0,
+      mimeType: imageStore.lastMimeType
+    });
     
     // Send both the image data and the description back to the model and client
     return {
@@ -100,6 +104,11 @@ export async function handleGenerateImage({ prompt }) {
  */
 export async function handleEditImage({ prompt, imageId }) {
   console.log(`[Tool: editImage] Editing image with prompt: "${prompt.substring(0, 100)}${prompt.length > 100 ? '...' : ''}"`);  
+  console.log(`[Tool: editImage] Image store status:`, {
+    hasImage: !!imageStore.lastGeneratedImage,
+    imageDataLength: imageStore.lastGeneratedImage ? imageStore.lastGeneratedImage.length : 0,
+    mimeType: imageStore.lastMimeType
+  });
   
   try {
     // Check if we have a stored image to edit
@@ -127,6 +136,11 @@ export async function handleEditImage({ prompt, imageId }) {
     // Update the stored image with the edited version
     imageStore.lastGeneratedImage = result.imageData;
     imageStore.lastMimeType = result.mimeType || 'image/png';
+    console.log(`[Tool: editImage] Updated stored image with edited version`);
+    console.log(`[Tool: editImage] Updated image details:`, {
+      imageDataLength: result.imageData ? result.imageData.length : 0,
+      mimeType: imageStore.lastMimeType
+    });
     
     // Send both the image data and the description back to the model and client
     return {

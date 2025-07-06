@@ -42,6 +42,9 @@ router.post('/', async (req, res) => {
     
     // Handle function calls if present (supports both parallel and compositional)
     const functionCalls = result.candidates[0].content.parts.filter(part => part.functionCall);
+    let imagePartsFromFunctions = [];
+    let finalResponseParts = [];
+    
     if (functionCalls && functionCalls.length > 0) {
       console.log(`[POST /chat] Processing ${functionCalls.length} function calls${functionCalls.length > 1 ? ' (parallel)' : ''}`);
       
@@ -76,49 +79,108 @@ router.post('/', async (req, res) => {
         })
       );
       
-      // Add all function responses to conversation
+      // Add all function responses to conversation and collect image data
+      // Special handling for image generation tools - don't send image data back to model
+      let hasImageGeneration = false;
       functionResults.forEach(({ status, value }) => {
         if (status === 'fulfilled') {
           const { functionCall, result } = value;
-          updatedContents.push({
-            role: 'user',
-            parts: [{
-              functionResponse: {
-                name: functionCall.name,
-                response: { result }
+          
+          // Check if this is an image generation or editing tool
+          const isImageTool = functionCall.name === 'generateImage' || functionCall.name === 'editImage';
+          
+          if (isImageTool && result && result.imageData && result.mimeType) {
+            console.log(`[POST /chat] Found image data from function: ${functionCall.name}, not sending back to model`);
+            hasImageGeneration = true;
+            
+            // Add image data for display
+            imagePartsFromFunctions.push({
+              inlineData: {
+                mimeType: result.mimeType,
+                data: result.imageData
               }
-            }]
-          });
+            });
+            
+            // Add a simple text response instead of the full image data
+            updatedContents.push({
+              role: 'user',
+              parts: [{
+                functionResponse: {
+                  name: functionCall.name,
+                  response: { 
+                    result: {
+                      status: result.status,
+                      message: result.message,
+                      description: result.description || 'Image generated successfully'
+                    }
+                  }
+                }
+              }]
+            });
+          } else {
+            // For non-image tools, send full result
+            updatedContents.push({
+              role: 'user',
+              parts: [{
+                functionResponse: {
+                  name: functionCall.name,
+                  response: { result }
+                }
+              }]
+            });
+          }
         } else {
           console.error(`[POST /chat] Function execution failed:`, status);
         }
       });
       
-      // Make another request with function results
-      const followUpRequest = {
-        ...apiRequest,
-        contents: updatedContents
-      };
+      // For image generation tools, skip the follow-up request to avoid token limits
+      if (hasImageGeneration) {
+        console.log(`[POST /chat] Skipping follow-up request for image generation tool`);
+        // Use the description from the image generation result as the response
+        const imageResult = functionResults.find(({ status, value }) => 
+          status === 'fulfilled' && 
+          (value.functionCall.name === 'generateImage' || value.functionCall.name === 'editImage')
+        );
+        
+        if (imageResult && imageResult.value.result.description) {
+          finalResponseParts = [{ text: imageResult.value.result.description }];
+        } else {
+          finalResponseParts = [{ text: 'Image generated successfully.' }];
+        }
+      } else {
+        // Make another request with function results for non-image tools
+        const followUpRequest = {
+          ...apiRequest,
+          contents: updatedContents
+        };
+        
+        console.log(`[POST /chat] Making follow-up request with function results`);
+        result = await req.app.get('ai').models.generateContent(followUpRequest);
+        console.log(`[POST /chat] Follow-up response:`, JSON.stringify(result, null, 2));
+      }
+    } else {
+      // No function calls - extract response parts normally
+      const c = result.candidates[0];
+      if (['SAFETY', 'RECITATION'].includes(c.finishReason)) return res.status(400).json({});
       
-      console.log(`[POST /chat] Making follow-up request with function results`);
-      result = await req.app.get('ai').models.generateContent(followUpRequest);
-      console.log(`[POST /chat] Follow-up response:`, JSON.stringify(result, null, 2));
+      // Check if the primary response is within parts (most common case)
+      if (c.content?.parts && Array.isArray(c.content.parts)) {
+          finalResponseParts = c.content.parts;
+      } else if (result.text) { // Fallback for simple text responses
+          finalResponseParts.push({ text: result.text });
+      }
     }
-    
-    const c = result.candidates[0];
-    if (['SAFETY', 'RECITATION'].includes(c.finishReason)) return res.status(400).json({});
-    
-    // Check if the primary response is within parts (most common case)
-    let finalResponseParts = [];
-    if (c.content?.parts && Array.isArray(c.content.parts)) {
-        finalResponseParts = c.content.parts;
-    } else if (result.text) { // Fallback for simple text responses
-        finalResponseParts.push({ text: result.text });
+
+    // Add any image parts from function results to the final response
+    if (imagePartsFromFunctions && imagePartsFromFunctions.length > 0) {
+      console.log(`[POST /chat] Adding ${imagePartsFromFunctions.length} image parts to final response`);
+      finalResponseParts = [...finalResponseParts, ...imagePartsFromFunctions];
     }
 
     // Return the full parts array structure
     return res.json({
-      response: finalResponseParts, // Send the array of parts
+      response: finalResponseParts, // Send the array of parts (including images)
       usageMetadata: result.usageMetadata,
       finishReason: c.finishReason,
       safetyRatings: c.safetyRatings,
@@ -255,43 +317,107 @@ router.post('/stream', async (req, res) => {
       );
       
       // Send function result events and add to conversation
+      // Special handling for image generation tools
+      let hasImageGeneration = false;
       functionResults.forEach(({ status, value }) => {
         if (status === 'fulfilled') {
           const { functionCall, result } = value;
           
-          // Send function result event to client
-          const resultDataString = `event: function_result\ndata: ${JSON.stringify({ 
-            functionCall: functionCall, 
-            result: result,
-            status: 'completed'
-          })}\n\n`;
-          res.write(resultDataString);
+          // Check if this is an image generation or editing tool
+          const isImageTool = functionCall.name === 'generateImage' || functionCall.name === 'editImage';
           
-          // Add function response to conversation
-          updatedContents.push({
-            role: 'user',
-            parts: [{
-              functionResponse: {
-                name: functionCall.name,
-                response: { result }
+          if (isImageTool && result && result.imageData && result.mimeType) {
+            console.log(`[POST /chat/stream] Found image data from function: ${functionCall.name}, sending directly to client`);
+            hasImageGeneration = true;
+            
+            // 1. Send function result event first (✅ generateImage completed)
+            const resultDataString = `event: function_result\ndata: ${JSON.stringify({ 
+              functionCall: functionCall, 
+              result: result,
+              status: 'completed'
+            })}\n\n`;
+            res.write(resultDataString);
+            res.write('\n'); // Ensure newline after event
+            // 2. Send the description as text response
+            if (result.description) {
+              const textDataString = `data: ${JSON.stringify({
+                text: result.description
+              })}\n\n`;
+              res.write(textDataString);
+            }
+            
+            // 3. Send image data last
+            const imageDataString = `data: ${JSON.stringify({
+              inlineData: {
+                mimeType: result.mimeType,
+                data: result.imageData
               }
-            }]
-          });
+            })}\n\n`;
+            res.write(imageDataString);
+            
+            // Add simplified response to conversation (without image data)
+            updatedContents.push({
+              role: 'user',
+              parts: [{
+                functionResponse: {
+                  name: functionCall.name,
+                  response: { 
+                    result: {
+                      status: result.status,
+                      message: result.message,
+                      description: result.description || 'Image generated successfully'
+                    }
+                  }
+                }
+              }]
+            });
+          } else {
+            // For non-image tools, send full result
+            updatedContents.push({
+              role: 'user',
+              parts: [{
+                functionResponse: {
+                  name: functionCall.name,
+                  response: { result }
+                }
+              }]
+            });
+            
+            // Send function result event to client
+            const resultDataString = `event: function_result\ndata: ${JSON.stringify({ 
+              functionCall: functionCall, 
+              result: result,
+              status: 'completed'
+            })}\n\n`;
+            res.write(resultDataString);
+          }
         } else {
           console.error(`[POST /chat/stream] Function execution failed:`, status);
         }
       });
       
-      // Make follow-up request with function results and stream that response
-      const followUpRequest = {
-        ...apiRequest,
-        contents: updatedContents
-      };
-      
-      console.log(`[POST /chat/stream] Making follow-up request with function results`);
-      console.log(`[POST /chat/stream] Follow-up request contents:`, JSON.stringify(followUpRequest.contents, null, 2));
-      
-      try {
+      // For image generation tools, skip the follow-up request to avoid token limits
+      if (hasImageGeneration) {
+        console.log(`[POST /chat/stream] Skipping follow-up request for image generation tool`);
+        // Send done event immediately
+        const finalData = {
+          finishReason: 'STOP',
+          usageMetadata: { promptTokenCount: 0, candidatesTokenCount: 0, totalTokenCount: 0 },
+          safetyRatings: []
+        };
+        const finalDataString = `event: done\ndata: ${JSON.stringify(finalData)}\n\n`;
+        res.write(finalDataString);
+      } else {
+        // Make follow-up request with function results and stream that response for non-image tools
+        const followUpRequest = {
+          ...apiRequest,
+          contents: updatedContents
+        };
+        
+        console.log(`[POST /chat/stream] Making follow-up request with function results`);
+        console.log(`[POST /chat/stream] Follow-up request contents:`, JSON.stringify(followUpRequest.contents, null, 2));
+        
+        try {
         const followUpStream = await req.app.get('ai').models.generateContentStream(followUpRequest);
         console.log(`[POST /chat/stream] Follow-up stream created successfully`);
         
@@ -402,7 +528,8 @@ router.post('/stream', async (req, res) => {
           const errorDataString = `event: error\ndata: ${JSON.stringify({ error: { message: 'Function call completed but response generation failed' } })}\n\n`;
           res.write(errorDataString);
         }
-      }
+        } // end else block for non-image tools
+      } // end if functionCallsToExecute.length > 0
     }
   } catch (e) {
     console.error('[STREAM ERROR]', e);

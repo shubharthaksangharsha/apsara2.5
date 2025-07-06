@@ -310,3 +310,20 @@ input, select, textarea {
     --sidebar-width: 16rem; /* 64px (locked expanded width) */
   }
 }
+
+/* Override any typography plugin code block styling */
+.prose pre {
+  background-color: transparent !important;
+  border: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+
+.prose code {
+  background-color: transparent !important;
+  border: none !important;
+  padding: 0 !important;
+  border-radius: 0 !important;
+}
