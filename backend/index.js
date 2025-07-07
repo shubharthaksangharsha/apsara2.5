@@ -7,6 +7,7 @@ import { WebSocketServer } from 'ws';
 
 // Import configuration
 import { PORT, GEMINI_API_KEY } from './config/env.js';
+import connectDB from './config/database.js';
 
 // Import middleware
 import { configureCors } from './middleware/cors.js';
@@ -105,6 +106,9 @@ app.use('/chat', chatRoutes);
 
 // Setup WebSocket server for live connections
 setupWebSocketServer(server, ai);
+
+// Connect to database
+connectDB();
 
 // Start server
 server.listen(PORT, () => {

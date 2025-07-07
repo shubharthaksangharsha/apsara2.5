@@ -101,6 +101,22 @@ export function useGoogleAuth() {
   };
 
   /**
+   * Function to sign in with Google
+   */
+  const signInWithGoogle = async () => {
+    try {
+      setIsAuthLoading(true);
+      const result = await signIn();
+      return result;
+    } catch (error) {
+      console.error('Google sign-in error:', error);
+      throw error;
+    } finally {
+      setIsAuthLoading(false);
+    }
+  };
+
+  /**
    * Function to sign out
    */
   const signOut = async () => {
@@ -128,8 +144,9 @@ export function useGoogleAuth() {
     userProfile,
     isAuthLoading,
     signIn,
+    signInWithGoogle,
     signOut,
     skipAuth,
     wasAuthSkipped
   };
-} 
+}

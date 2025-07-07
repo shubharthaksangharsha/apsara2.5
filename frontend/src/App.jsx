@@ -1,5 +1,13 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
 import { BellRing, FileUp, Menu, Mic, Moon, Send, Settings, Sun, User, X, MessageSquare, UploadCloud, AudioLines, Cog, Trash2, MicOff, BrainCircuit, Image as ImageIcon, BookOpen, Link as LinkIcon, UserIcon, Code, Sparkles, Plane, UtensilsCrossed, History, Film, PenTool, Globe, FileText, Lightbulb, Target, Search, LogOut } from 'lucide-react';
+
+// Import authentication components and context
+import { AuthProvider } from './contexts/AuthContext';
+import AuthScreen from './components/auth/AuthScreen';
+import ResetPasswordScreen from './components/auth/ResetPasswordScreen';
+import EmailVerificationScreen from './components/auth/EmailVerificationScreen';
+import ProtectedRoute from './components/auth/ProtectedRoute';
 
 // Import the new components
 import Sidebar from './components/Sidebar';
@@ -13,8 +21,7 @@ import EmptyChatContent from './components/EmptyChatContent'; // Import the refa
 import { FileManager } from './components/Files';
 import CacheManager from './components/CacheManager';
 import MapDisplay from './components/MapDisplay'; // <-- Import MapDisplay
-import VideoStreamDisplay from './components/VideoStreamDisplay';
-import ScreenShareDisplay from './components/ScreenShareDisplay';
+
 
 // Import common constants
 import { BACKEND_URL, MAX_LOCALSTORAGE_SIZE_MB, BYTES_PER_MB, MAX_STORAGE_BYTES } from './hooks/common-constants';
@@ -23,13 +30,15 @@ import { BACKEND_URL, MAX_LOCALSTORAGE_SIZE_MB, BYTES_PER_MB, MAX_STORAGE_BYTES 
 import { countTokensForFile } from './services/tokenCounter';
 import { isGeminiSupported, getFileTypeName } from './utils/fileTypes';
 
-// Import the custom hook
+// Import the custom hooks
 import { useTheme } from './hooks/useTheme/index';
 import { useAppSettings } from './hooks/useAppSettings/index';
 import { useConversations } from './hooks/useConversations/index';
 import { useChatApi } from './hooks/useChatApi/index';
 import { useFileUpload } from './hooks/useFileUpload/index';
 import { useLiveSession } from './hooks/useLiveSession/index';
+import { useAuth } from './hooks/useAuth/index'; // Keep for compatibility
+import { useAuthContext } from './contexts/AuthContext'; // New shared context
 import { useGoogleAuth } from './hooks/useGoogleAuth/index';
 import { getModelCapabilities } from './utils/modelCapabilities'; // Import capability checker
 
@@ -67,24 +76,96 @@ const suggestedPrompts = [
   { text: "What is the Current date and time", icon: Search, modelId: "gemini-2.0-flash", toolUsage: 'googleSearch' },
 ];
             
-// Main App component                                                                                                            
+// Main App component wrapper with routing
 export default function App() {
+  return (
+    <AuthProvider>
+      <Router>
+        <Routes>
+          <Route path="/auth/reset-password" element={<ResetPasswordScreen />} />
+          <Route path="/auth/verify-email" element={<EmailVerificationScreen />} />
+          <Route path="/*" element={<MainApp />} />
+        </Routes>
+      </Router>
+    </AuthProvider>
+  );
+}
+
+// Main App component with authentication
+function MainApp() {
   // Theme - Use the custom hook
   const [darkMode, setDarkMode] = useTheme();
 
-  // Google Auth state
+  // New comprehensive auth hook - use shared context
   const { 
     isAuthenticated, 
-    userProfile, 
-    isAuthLoading, 
-    signIn: googleSignIn, 
-    signOut: googleSignOut, 
-    skipAuth, 
-    wasAuthSkipped 
-  } = useGoogleAuth();
+    user, 
+    loading: authLoading, 
+    error: authError,
+    handleGoogleAuthSuccess,
+    logout
+  } = useAuthContext();
+
+  // Debug logging for auth state
+  console.log('🔍 App.jsx - Auth state:', { isAuthenticated, user: user?.name, authLoading });
+
+  // Legacy Google Auth hook for compatibility
+  const googleAuth = useGoogleAuth();
+
+  // Handle authentication success from any method
+  const handleAuthSuccess = useCallback((userData) => {
+    // The useAuth hook will handle the state updates
+    console.log('Authentication successful:', userData);
+  }, []);
+
+  // Render authentication screen if not authenticated
+  if (!authLoading && !isAuthenticated) {
+    return <AuthScreen onAuthSuccess={handleAuthSuccess} />;
+  }
+
+  // Show loading while checking authentication
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-gray-100 dark:bg-gray-900 flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-gray-600 dark:text-gray-400">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Render the main authenticated app
+  return (
+    <ProtectedRoute>
+      <AuthenticatedApp 
+        darkMode={darkMode} 
+        setDarkMode={setDarkMode}
+        user={user}
+        onLogout={logout}
+      />
+    </ProtectedRoute>
+  );
+}
+
+// Main authenticated app component
+function AuthenticatedApp({ darkMode, setDarkMode, user, onLogout }) {
+
+  // Authentication-related derived values
+  const isAuthenticated = true; // Since this is inside AuthenticatedApp, user is always authenticated
+  const userProfile = user; // Use the user prop passed from auth
   
-  // Track if auth was skipped to show appropriate UI
-  const [authSkipped, setAuthSkipped] = useState(wasAuthSkipped());
+  // Auth handlers (mostly for backward compatibility with existing components)
+  const handleSignOut = onLogout;
+  const handleGoogleSignIn = () => {
+    // This would typically redirect to Google OAuth flow
+    console.log('Google sign in clicked');
+  };
+  const handleSkipAuth = () => {
+    // This is no longer relevant since we're in the authenticated app
+    console.log('Skip auth clicked');
+  };
+  const authSkipped = false; // Always false in authenticated app
 
   // State for initial data loading (consider moving fetch logic into a hook too)
   const [models, setModels] = useState([]);
@@ -138,8 +219,6 @@ export default function App() {
     removeFile,
   } = useFileUpload(initialFiles); 
 
-
-
   const {
     isLoading: isChatLoading, 
     streamingModelMessageId, 
@@ -156,60 +235,140 @@ export default function App() {
       setPromptImageUploadStatus({}); // Clear status when chat API clears files
     },
   });
+
   
-  // Handle Google sign in
-  const handleGoogleSignIn = () => {
-    googleSignIn();
-  };
-
-  // Handle skip authentication
-  const handleSkipAuth = () => {
-    skipAuth();
-    setAuthSkipped(true);
-  };
-
-  // Handle sign out
-  const handleSignOut = () => {
-    googleSignOut();
-    // Don't automatically set authSkipped back to false
-    // The user might want to continue using the app without auth
-  };
-
-  // Check for auth callback from OAuth flow
-  useEffect(() => {
-    // Check if the URL contains the auth callback parameters
-    const urlParams = new URLSearchParams(window.location.search);
-    const authCode = urlParams.get('code');
-    const state = urlParams.get('state');
-    
-    if (authCode && state) {
-      // Clear the URL parameters without a page refresh
-      window.history.replaceState({}, document.title, window.location.pathname);
-      
-      // Send the auth code to backend for processing
-      const processAuthCode = async () => {
-        try {
-          const response = await fetch(`${BACKEND_URL}/api/auth/google/callback`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ code: authCode, state }),
-            credentials: 'include'
-          });
-          
-          if (response.ok) {
-            // Reload the page to get fresh auth state
-            window.location.reload();
-          }
-        } catch (error) {
-          console.error('Error processing auth code:', error);
-        }
-      };
-      
-      processAuthCode();
+  const [transcriptionEnabled, setTranscriptionEnabled] = useState(true); // default ON
+  const [slidingWindowEnabled, setSlidingWindowEnabled] = useState(true); // default ON
+  const [slidingWindowTokens, setSlidingWindowTokens] = useState(4000); // default 4000
+  // Native audio feature state (source of truth)
+  const [nativeAudioFeature, setNativeAudioFeature] = useState('none');
+  // Media resolution state (source of truth)
+  const [mediaResolution, setMediaResolution] = useState('MEDIA_RESOLUTION_MEDIUM'); // default medium
+  
+  // Handler for updating native audio feature with validation and logging
+  const handleNativeAudioFeatureChange = useCallback((newValue) => {
+    // Validate the value
+    if (!['none', 'affectiveDialog', 'proactiveAudio'].includes(newValue)) {
+      console.error('❌ [App] Invalid native audio feature value:', newValue);
+      return;
     }
+    
+    console.log('✅ [App] Setting nativeAudioFeature to:', newValue);
+    setNativeAudioFeature(newValue);
   }, []);
+  
+  // Handler for updating media resolution with validation and logging
+  const handleMediaResolutionChange = useCallback((newValue) => {
+    // Validate the value
+    const validResolutions = ['MEDIA_RESOLUTION_LOW', 'MEDIA_RESOLUTION_MEDIUM', 'MEDIA_RESOLUTION_HIGH'];
+    if (!validResolutions.includes(newValue)) {
+      console.error('❌ [App] Invalid media resolution value:', newValue);
+      return;
+    }
+    
+    console.log('✅ [App] Setting mediaResolution to:', newValue);
+    setMediaResolution(newValue);
+  }, []);
+
+  const {
+    // Live State
+    liveMessages,
+    liveConnectionStatus,
+    liveModality,
+    liveSystemInstruction: currentLiveSystemInstruction, // Rename for clarity
+    isModelSpeaking,
+    sessionTimeLeft, // Get the timer state
+    isRecording,
+    audioError,
+    isStreamingVideo,
+    mediaStream,
+    isStreamingScreen,
+    selectedModel, // Add selected model
+    screenStream,
+    videoDevices, // <-- Add new state from hook
+    selectedVideoDeviceId, // <-- Add new state from hook
+    mapDisplayData,
+    weatherUIData,
+    calendarEvents,
+    calendarEventsLastUpdated,
+    currentSessionHandle, // Get the session handle from the hook
+    // Live Handlers/Setters
+    setLiveModality,
+    setLiveSystemInstruction: setLivePrompt, // Rename for clarity
+    setSelectedVideoDeviceId, // <-- Add new setter from hook
+    setSelectedModel, // Add model selector setter
+    getVideoInputDevices, // <-- Add new handler from hook
+    startLiveSession,
+    endLiveSession,
+    sendLiveMessage,
+    startRecording,
+    stopRecording,
+    startVideoStream,
+    stopVideoStream,
+    startScreenShare,
+    stopScreenShare,
+    flipCamera,
+    handleAutoSessionResume,
+    setSessionResumeHandle, // NEW: Expose function to set the session resume handle directly
+    activeTab,
+    setActiveTab,
+  } = useLiveSession({
+    currentVoice,
+    transcriptionEnabled,
+    slidingWindowEnabled,
+    slidingWindowTokens,
+    nativeAudioFeature, // Use the state variable
+    mediaResolution, // Pass media resolution to useLiveSession
+  });
+
+  // Backward compatibility variables
+  const isConnected = liveConnectionStatus === 'connected';
+  const isLiveSessionActive = liveConnectionStatus !== 'disconnected';
+  const isLiveSessionLoading = liveConnectionStatus === 'connecting';
+  const currentLiveModel = selectedModel;
+  const setCurrentLiveModel = setSelectedModel;
+  const audioEnabled = liveModality?.includes('audio') || false;
+  const setAudioEnabled = (enabled) => {
+    setLiveModality(prev => {
+      if (enabled && !prev?.includes('audio')) {
+        return prev ? [...prev, 'audio'] : ['audio'];
+      } else if (!enabled && prev?.includes('audio')) {
+        return prev?.filter(m => m !== 'audio') || [];
+      }
+      return prev;
+    });
+  };
+  const videoEnabled = liveModality?.includes('video') || false;
+  const setVideoEnabled = (enabled) => {
+    setLiveModality(prev => {
+      if (enabled && !prev?.includes('video')) {
+        return prev ? [...prev, 'video'] : ['video'];
+      } else if (!enabled && prev?.includes('video')) {
+        return prev?.filter(m => m !== 'video') || [];
+      }
+      return prev;
+    });
+  };
+  const handleLiveTextSend = sendLiveMessage;
+  const liveSessionDuration = sessionTimeLeft;
+  const reconnectAttempts = 0;
+  const isReconnecting = liveConnectionStatus === 'connecting';
+
+  // Component state
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [fileManagerOpen, setFileManagerOpen] = useState(false);
+  const [cacheManagerOpen, setCacheManagerOpen] = useState(false);
+  const [livePopupOpen, setLivePopupOpen] = useState(false);
+  const [liveOpen, setLiveOpen] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [sidebarLocked, setSidebarLocked] = useState(false);
+  const [streamToggleState, setStreamToggleState] = useState(true);
+  const [mapLocation, setMapLocation] = useState(null);
+  const [videoStreamUrl, setVideoStreamUrl] = useState(null);
+  const [screenShareUrl, setScreenShareUrl] = useState(null);
+  const [currentView, setCurrentView] = useState('empty'); // 'empty' | 'chat' | 'files' | 'cache' | 'live' | 'settings'
+  const [welcomeScreenOpen, setWelcomeScreenOpen] = useState(true);
 
   // Clear file attachments on page load/reload
   useEffect(() => {
@@ -433,106 +592,6 @@ export default function App() {
     setPromptImageUploadStatus({});
   };
 
-  
-  const [transcriptionEnabled, setTranscriptionEnabled] = useState(true); // default ON
-  const [slidingWindowEnabled, setSlidingWindowEnabled] = useState(true); // default ON
-  const [slidingWindowTokens, setSlidingWindowTokens] = useState(4000); // default 4000
-  // Native audio feature state (source of truth)
-  const [nativeAudioFeature, setNativeAudioFeature] = useState('none');
-  // Media resolution state (source of truth)
-  const [mediaResolution, setMediaResolution] = useState('MEDIA_RESOLUTION_MEDIUM'); // default medium
-  
-  // Handler for updating native audio feature with validation and logging
-  const handleNativeAudioFeatureChange = useCallback((newValue) => {
-    // Validate the value
-    if (!['none', 'affectiveDialog', 'proactiveAudio'].includes(newValue)) {
-      console.error('❌ [App] Invalid native audio feature value:', newValue);
-      return;
-    }
-    
-    console.log('✅ [App] Setting nativeAudioFeature to:', newValue);
-    setNativeAudioFeature(newValue);
-  }, []);
-  
-  // Handler for updating media resolution with validation and logging
-  const handleMediaResolutionChange = useCallback((newValue) => {
-    // Validate the value
-    const validResolutions = ['MEDIA_RESOLUTION_LOW', 'MEDIA_RESOLUTION_MEDIUM', 'MEDIA_RESOLUTION_HIGH'];
-    if (!validResolutions.includes(newValue)) {
-      console.error('❌ [App] Invalid media resolution value:', newValue);
-      return;
-    }
-    
-    console.log('✅ [App] Setting mediaResolution to:', newValue);
-    setMediaResolution(newValue);
-  }, []);
-
-  
-  const {
-    // Live State
-    liveMessages,
-    liveConnectionStatus,
-    liveModality,
-    liveSystemInstruction: currentLiveSystemInstruction, // Rename for clarity
-    isModelSpeaking,
-    sessionTimeLeft, // Get the timer state
-    isRecording,
-    audioError,
-    isStreamingVideo,
-    mediaStream,
-    isStreamingScreen,
-    selectedModel, // Add selected model
-    screenStream,
-    videoDevices, // <-- Add new state from hook
-    selectedVideoDeviceId, // <-- Add new state from hook
-    mapDisplayData,
-    weatherUIData,
-    calendarEvents,
-    calendarEventsLastUpdated,
-    currentSessionHandle, // Get the session handle from the hook
-    // Live Handlers/Setters
-    setLiveModality,
-    setLiveSystemInstruction: setLivePrompt, // Rename for clarity
-    setSelectedVideoDeviceId, // <-- Add new setter from hook
-    setSelectedModel, // Add model selector setter
-    getVideoInputDevices, // <-- Add new handler from hook
-    startLiveSession,
-    endLiveSession,
-    sendLiveMessage,
-    startRecording,
-    stopRecording,
-    startVideoStream,
-    stopVideoStream,
-    startScreenShare,
-    stopScreenShare,
-    flipCamera,
-    handleAutoSessionResume,
-    setSessionResumeHandle, // NEW: Expose function to set the session resume handle directly
-    activeTab,
-    setActiveTab,
-  } = useLiveSession({
-    currentVoice,
-    transcriptionEnabled,
-    slidingWindowEnabled,
-    slidingWindowTokens,
-    nativeAudioFeature, // Use the state variable
-    mediaResolution, // Pass media resolution to useLiveSession
-  });
-
-  // Settings panel
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  // Live chat popup
-  const [liveOpen, setLiveOpen] = useState(false);
-  // File manager popup
-  const [fileManagerOpen, setFileManagerOpen] = useState(false);
-
-  const [cacheManagerOpen, setCacheManagerOpen] = useState(false);
-  // Live Settings Panel state
-  const [liveSettingsOpen, setLiveSettingsOpen] = useState(false); // REMOVED - No longer needed as separate panel
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [sidebarLocked, setSidebarLocked] = useState(false); // <-- Add this state
-  const [streamToggleState, setStreamToggleState] = useState(true); // <-- Add state for stream toggle (default true)
-
   // Add effect to default sidebar open state based on screen size initially
   useEffect(() => {
     const checkSize = () => {
@@ -670,7 +729,7 @@ export default function App() {
   // Function to load a saved live session
   const loadLiveSession = useCallback((resumeHandle, modality, voice, systemInstruction) => {
     if (!resumeHandle) {
-      console.error("Cannot load session: No resume handle provided");
+      console.warn('No resume handle provided for session loading');
       return;
     }
 
@@ -687,8 +746,6 @@ export default function App() {
     
     // Wait a short time for UI to update before starting the session
     setTimeout(() => {
-      console.log("Loading saved session with handle:", resumeHandle);
-      // Now startLiveSession will use the handle we just set
       startLiveSession();
     }, 300);
   }, [liveOpen, setLiveOpen, setLiveModality, setCurrentVoice, setLivePrompt, startLiveSession, setSessionResumeHandle]);
@@ -697,43 +754,39 @@ export default function App() {
   const startLiveWithMainContext = useCallback(() => {
     // Check if there's an active conversation with messages
     if (!activeConvoId) {
-      // No active conversation, just start a regular live chat
-      setLiveOpen(true);
+      console.warn('No active conversation to start live chat with');
       return;
     }
 
     const activeConvo = convos.find(c => c.id === activeConvoId);
     if (!activeConvo || !activeConvo.messages || activeConvo.messages.length === 0) {
-      // No messages in the active conversation, just start a regular live chat
-      setLiveOpen(true);
+      console.warn('No messages in active conversation to start live chat with');
       return;
     }
 
     // Prepare a chat summary to send to the live session
-    const userMessages = activeConvo.messages
-      .filter(m => m.role === 'user' || m.role === 'model')
-      .slice(-10) // Limit to the last 10 messages to avoid overwhelming the context
-      .map(m => `${m.role === 'user' ? 'User' : 'AI'}: ${m.text || (m.parts?.map(p => p.text || '').join(' ') || '')}`)
-      .join('\n');
-
-    // Construct a context message
-    const contextMessage = 
-      `This is a continuation of a previous text chat. Here's the relevant conversation history:\n\n${userMessages}\n\nPlease remember any information shared in this conversation context and continue appropriately.`;
-
-    // Open the live popup
+    const recentMessages = activeConvo.messages.slice(-5); // Get last 5 messages
+    const contextSummary = recentMessages.map(msg => 
+      `${msg.role}: ${msg.content.substring(0, 200)}${msg.content.length > 200 ? '...' : ''}`
+    ).join('\n');
+    
+    const contextPrompt = `Continue this conversation in live mode. Recent context:\n${contextSummary}\n\nPlease continue naturally from where we left off.`;
+    
+    // Set up live session with context
+    setLivePrompt(contextPrompt);
+    setLiveModality(['audio']); // Default to audio mode
+    
+    // Open live popup and start session
     setLiveOpen(true);
-
-    // Set appropriate modality for continuation (default to AUDIO)
-    setLiveModality('AUDIO');
-
-    // Make sure we're not using any resume handle - always start a fresh session
-    setSessionResumeHandle(null);
-
-    // Start a new live session with the main chat context directly
+    
+    // Mark that this session started with main context
+    setSessionResumeHandle(null); // Clear any previous resume handle
+    
+    // Start the session after a brief delay for UI to update
     setTimeout(() => {
-      startLiveSession(contextMessage);
+      startLiveSession();
     }, 300);
-  }, [activeConvoId, convos, setLiveOpen, setLiveModality, startLiveSession, setSessionResumeHandle]);
+  }, [activeConvoId, convos, setLiveOpen, setLiveModality, setLivePrompt, startLiveSession, setSessionResumeHandle]);
 
   // Show loading indicator while initial data is fetched?
   if (dataLoading) {
@@ -816,7 +869,7 @@ export default function App() {
                   convo={activeConvo}
                   streamingModelMessageId={streamingModelMessageId}
                   isLoading={isChatLoading} 
-                />; 
+                /> 
               } else {
                 // Active chat but NO messages yet: Show EmptyChatContent
                 // Pass the *same* props as WelcomeScreen gets for prompts

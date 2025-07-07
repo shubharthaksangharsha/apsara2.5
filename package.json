@@ -3,9 +3,9 @@
     "version": "1.0.0",
     "description": "Apsara Live Assistant",
     "scripts": {
-        "start": "concurrently \"cd backend && node server.js\" \"cd frontend && npm run dev\"",
+        "start": "concurrently \"cd backend && npm run dev\" \"cd frontend && npm run dev\"",
         "install-all": "npm install && cd backend && npm install && cd ../frontend && npm install",
-        "backend": "cd backend && node server.js",
+        "backend": "cd backend && npm run dev",
         "frontend": "cd frontend && npm run dev"
     },
     "author": "shubharthak",
