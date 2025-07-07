@@ -7,9 +7,9 @@ export const availableModels = ["gemini-2.0-flash","gemini-2.0-pro","gemini-1.5-
 
 // --- Chat Models (REST API) ---
 export const chatModels = [
-  // { id: "gemini-2.5-pro", name: "Apsara 2.5 Vidya" },
-  { id: "gemini-2.5-flash-preview-04-17", name: "Apsara 2.5 Tara" },
-  { id: "gemini-2.0-flash", name: "Apsara 2.0 Swara" },
+  // { id: "gemini-2.5-pro", name: "Gemini 2.5 Pro" },
+  { id: "gemini-2.5-flash-preview-04-17", name: "Gemini 2.5 Flash" },
+  { id: "gemini-2.0-flash", name: "Gemini 2.0 Flash" },
   // { id: "gemini-2.0-flash-preview-image-generation", name: "Gemini 2.0 Flash (Image Gen)" },
   // { id: "imagen-3.0-generate-002", name: "Imagen 3" },
   // { id: "gemini-1.5-pro", name: "Gemini 1.5 Pro" },
