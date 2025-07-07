@@ -1,44 +1,54 @@
 // components/auth/AuthScreen.jsx
-import React, { useState } from 'react';
-import { Eye, EyeOff, User, Mail, Lock, ArrowLeft, LogIn, UserPlus } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Eye, EyeOff, User, Mail, Lock, ArrowLeft, LogIn, UserPlus, X, AlertCircle } from 'lucide-react';
 import GoogleSignInButton from './GoogleSignInButton';
 import { useAuthContext } from '../../contexts/AuthContext';
 
 const AuthScreen = ({ onAuthSuccess }) => {
   const [isLogin, setIsLogin] = useState(true);
   const [showPassword, setShowPassword] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
   const [showForgotPassword, setShowForgotPassword] = useState(false);
   const [successMessage, setSuccessMessage] = useState(''); // Add success message state
   const [showVerificationMessage, setShowVerificationMessage] = useState(false); // New state for verification
   const [userEmail, setUserEmail] = useState(''); // Store email for verification message
+  const [forgotPasswordLoading, setForgotPasswordLoading] = useState(false); // Separate loading for forgot password
+  const [forgotPasswordError, setForgotPasswordError] = useState(''); // Separate error for forgot password
+  const [verificationError, setVerificationError] = useState(''); // Separate error for verification
+  const [verificationSuccess, setVerificationSuccess] = useState(''); // Separate success for verification
   const [formData, setFormData] = useState({
     name: '',
     email: '',
     password: ''
   });
 
-  // Use the auth context directly
-  const { login, register } = useAuthContext();
+  // Use the auth context directly - including error and loading state
+  const { login, register, loading, error, clearError } = useAuthContext();
 
-  // Debug: Log current error state
-  console.log('🐛 AuthScreen render - Current error state:', error);
+  // Auto-dismiss error after 3 seconds
+  useEffect(() => {
+    if (error && error.trim() !== '') {
+      const timer = setTimeout(() => {
+        clearError();
+      }, 3000); // 3 seconds
+
+      return () => clearTimeout(timer);
+    }
+  }, [error, clearError]);
 
   const handleInputChange = (e) => {
     setFormData({
       ...formData,
       [e.target.name]: e.target.value
     });
-    // Clear error and success messages when user starts typing
-    if (error) setError('');
+    // Clear error when user starts typing
+    if (error) clearError();
     if (successMessage) setSuccessMessage('');
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setLoading(true);
-    setError('');
+    
+    console.log('🔄 Form submitted, error state before:', error);
 
     try {
       let result;
@@ -74,28 +84,23 @@ const AuthScreen = ({ onAuthSuccess }) => {
         // Special handling for unverified email
         if (result.requiresVerification) {
           setUserEmail(formData.email);
-          setError('');
           setShowVerificationMessage(true);
           return;
         }
         
-        const errorMessage = result.error || 'Authentication failed';
-        console.log('🚨 Setting error message:', errorMessage);
-        setError(errorMessage);
-        console.log('🚨 Error state should now be:', errorMessage);
+        // The error is already set in the useAuth hook, so we don't need to manage it here
+        console.log('🚨 Error already handled by useAuth hook:', result.error);
       }
     } catch (err) {
-      console.error('🚨 Network/Auth error:', err);
-      setError('Network error. Please try again.');
-    } finally {
-      setLoading(false);
+      console.error('🚨 Network/Auth error in component:', err);
+      // The error is handled by the useAuth hook
     }
   };
 
   const handleForgotPassword = async (e) => {
     e.preventDefault();
-    setLoading(true);
-    setError('');
+    setForgotPasswordLoading(true);
+    setForgotPasswordError('');
     setSuccessMessage('');
 
     try {
@@ -114,12 +119,12 @@ const AuthScreen = ({ onAuthSuccess }) => {
         // Clear the email field after successful request
         setFormData({ ...formData, email: '' });
       } else {
-        setError(data.message || 'Failed to send reset email');
+        setForgotPasswordError(data.message || 'Failed to send reset email');
       }
     } catch (err) {
-      setError('Network error. Please try again.');
+      setForgotPasswordError('Network error. Please try again.');
     } finally {
-      setLoading(false);
+      setForgotPasswordLoading(false);
     }
   };
 
@@ -157,12 +162,15 @@ const AuthScreen = ({ onAuthSuccess }) => {
                       });
                       const data = await response.json();
                       if (data.success) {
-                        setSuccessMessage('Verification email resent! Check your inbox.');
+                        setVerificationSuccess('Verification email resent! Check your inbox.');
+                        setVerificationError('');
                       } else {
-                        setError(data.message);
+                        setVerificationError(data.message);
+                        setVerificationSuccess('');
                       }
                     } catch (err) {
-                      setError('Failed to resend email. Please try again.');
+                      setVerificationError('Failed to resend email. Please try again.');
+                      setVerificationSuccess('');
                     }
                   }}
                   className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-4 rounded-lg transition duration-200"
@@ -175,8 +183,8 @@ const AuthScreen = ({ onAuthSuccess }) => {
                     setShowVerificationMessage(false);
                     setUserEmail('');
                     setFormData({ name: '', email: '', password: '' });
-                    setError('');
-                    setSuccessMessage('');
+                    setVerificationError('');
+                    setVerificationSuccess('');
                   }}
                   className="w-full bg-gray-600 hover:bg-gray-700 text-white font-semibold py-3 px-4 rounded-lg transition duration-200"
                 >
@@ -184,15 +192,15 @@ const AuthScreen = ({ onAuthSuccess }) => {
                 </button>
               </div>
               
-              {error && (
+              {verificationError && (
                 <div className="mt-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded text-sm">
-                  {error}
+                  {verificationError}
                 </div>
               )}
               
-              {successMessage && (
+              {verificationSuccess && (
                 <div className="mt-4 p-3 bg-green-100 border border-green-400 text-green-700 rounded text-sm">
-                  {successMessage}
+                  {verificationSuccess}
                 </div>
               )}
             </div>
@@ -227,9 +235,9 @@ const AuthScreen = ({ onAuthSuccess }) => {
             </div>
 
             <form className="mt-8" onSubmit={handleForgotPassword}>
-              {error && (
+              {forgotPasswordError && (
                 <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded">
-                  {error}
+                  {forgotPasswordError}
                 </div>
               )}
               
@@ -261,10 +269,10 @@ const AuthScreen = ({ onAuthSuccess }) => {
 
               <button
                 type="submit"
-                disabled={loading || successMessage}
+                disabled={forgotPasswordLoading || successMessage}
                 className="w-full mt-6 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white font-semibold py-3 px-4 rounded-lg transition duration-200"
               >
-                {loading ? 'Sending...' : successMessage ? 'Email Sent!' : 'Send Reset Link'}
+                {forgotPasswordLoading ? 'Sending...' : successMessage ? 'Email Sent!' : 'Send Reset Link'}
               </button>
 
               {successMessage && (
@@ -316,9 +324,30 @@ const AuthScreen = ({ onAuthSuccess }) => {
 
           {/* Form */}
           <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
-            {error && (
-              <div className="p-3 bg-red-100 border border-red-400 text-red-700 rounded">
-                {error}
+            {/* Error Display - Always visible when error exists */}
+            {error && error.trim() !== '' && (
+              <div className="p-4 bg-red-50 dark:bg-red-900/20 border-l-4 border-red-400 dark:border-red-600 rounded-r-lg shadow-sm">
+                <div className="flex items-start">
+                  <div className="flex-shrink-0">
+                    <AlertCircle className="h-5 w-5 text-red-400 mt-0.5" />
+                  </div>
+                  <div className="ml-3 flex-1">
+                    <p className="text-sm font-medium text-red-800 dark:text-red-200">
+                      {error}
+                    </p>
+                  </div>
+                  <div className="ml-auto pl-3">
+                    <div className="-mx-1.5 -my-1.5">
+                      <button
+                        type="button"
+                        onClick={() => clearError()}
+                        className="inline-flex rounded-md p-1.5 text-red-500 hover:bg-red-100 dark:hover:bg-red-800 focus:outline-none"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
 
@@ -426,7 +455,7 @@ const AuthScreen = ({ onAuthSuccess }) => {
                 type="button"
                 onClick={() => {
                   setIsLogin(!isLogin);
-                  setError('');
+                  clearError();
                   setFormData({ name: '', email: '', password: '' });
                 }}
                 className="text-sm text-blue-600 hover:text-blue-700 dark:text-blue-400 font-semibold"

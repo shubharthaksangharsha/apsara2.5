@@ -299,6 +299,11 @@ export function useAuth() {
     setError(null);
   }, []);
 
+  // Clear error function
+  const clearError = useCallback(() => {
+    setError(null);
+  }, []);
+
   // Check auth status on mount and when localStorage changes
   useEffect(() => {
     checkAuthStatus();
@@ -338,6 +343,7 @@ export function useAuth() {
     checkAuthStatus,
     refreshToken,
     handleGoogleAuthSuccess,
+    clearError,
     
     // Utilities
     hasValidTokens,
