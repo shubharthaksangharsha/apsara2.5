@@ -143,3 +143,9 @@ pnpm-debug.log*
 # Ignore coverage or testing files
 coverage/
 
+# Sensitive files
+backend/credentials.json
+backend/credentials2.json
+backend/.env
+frontend/.env
+frontend/.env.local
