@@ -3,6 +3,8 @@ import React, { useState, useEffect } from 'react';
 import { Eye, EyeOff, User, Mail, Lock, ArrowLeft, LogIn, UserPlus, X, AlertCircle } from 'lucide-react';
 import GoogleSignInButton from './GoogleSignInButton';
 import { useAuthContext } from '../../contexts/AuthContext';
+import apsaraLogo from '../../../assets/image.png';
+
 
 const AuthScreen = ({ onAuthSuccess }) => {
   const [isLogin, setIsLogin] = useState(true);
@@ -301,9 +303,14 @@ const AuthScreen = ({ onAuthSuccess }) => {
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl p-8">
           {/* Header */}
           <div className="text-center">
-            <div className="mx-auto h-16 w-16 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
-              <span className="text-2xl font-bold text-white">🤖</span>
+            <div className="mx-auto h-16 w-16 rounded-full flex items-center justify-center shadow-lg ring-2 ring-purple-200 dark:ring-purple-800 overflow-hidden bg-white">
+              <img 
+                src={apsaraLogo} 
+                alt="Apsara Logo" 
+                className="h-14 w-14 object-contain"
+              />
             </div>
+          
             <h2 className="mt-6 text-3xl font-bold text-gray-900 dark:text-white">
               {isLogin ? 'Welcome back!' : 'Join Apsara'}
             </h2>

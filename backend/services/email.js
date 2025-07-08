@@ -82,7 +82,7 @@ class EmailService {
         <body>
           <div class="container">
             <div class="header">
-              <h1>🤖 Welcome to Apsara!</h1>
+              <h1>✨ Welcome to Apsara!</h1>
               <p>Verify Your Email Address</p>
             </div>
             <div class="content">
@@ -160,7 +160,7 @@ class EmailService {
         <body>
           <div class="container">
             <div class="header">
-              <h1>🤖 Apsara Assistant</h1>
+              <h1>✨ Apsara Assistant</h1>
               <p>Password Reset Request</p>
             </div>
             <div class="content">
@@ -213,7 +213,7 @@ class EmailService {
     const mailOptions = {
       from: process.env.EMAIL_FROM || 'Apsara Assistant <noreply@apsara.ai>',
       to: email,
-      subject: 'Welcome to Apsara Assistant! 🤖',
+      subject: 'Welcome to Apsara Assistant! ✨',
       html: `
         <!DOCTYPE html>
         <html>
@@ -233,7 +233,7 @@ class EmailService {
         <body>
           <div class="container">
             <div class="header">
-              <h1>🤖 Welcome to Apsara!</h1>
+              <h1>✨ Welcome to Apsara!</h1>
               <p>Your AI Assistant is Ready</p>
             </div>
             <div class="content">
