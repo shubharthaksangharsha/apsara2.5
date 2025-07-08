@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import ModelSelector from './components/ModelSelector';
 import HeaderButtons from './components/HeaderButtons';
 import MobileMenuButton from './components/MobileMenuButton';
+import MobileActionsButton from './components/MobileActionsButton';
 import { MOBILE_BREAKPOINT } from './constants';
 
 /**
@@ -50,33 +51,53 @@ export default function Header({
   }, []);
 
   return (
-    <header className="flex items-center justify-between h-14 px-3 sm:px-4 md:px-6 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 shadow-sm z-20">
+    <header className="flex items-center justify-between h-14 px-2 sm:px-4 md:px-6 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 shadow-sm z-20">
       {/* Left side - Mobile menu button */}
-      <div className="w-10">
-        <MobileMenuButton onClick={onToggleSidebar} />
+      <div className="flex-shrink-0 w-10">
+        <MobileMenuButton 
+          onClick={onToggleSidebar}
+        />
       </div>
 
-      {/* Center: Model selector */}
-      <div className="flex-grow flex justify-center">
+      {/* Center: Model selector - More compact on mobile */}
+      <div className="flex-1 flex justify-center px-2 min-w-0">
         <ModelSelector
           models={models}
           currentModel={currentModel}
           setCurrentModel={setCurrentModel}
+          isMobile={isMobile}
         />
       </div>
 
-      {/* Right side: Action buttons */}
-      <HeaderButtons
-        darkMode={darkMode}
-        setDarkMode={setDarkMode}
-        setLiveOpen={setLiveOpen}
-        setSettingsOpen={setSettingsOpen}
-        setCacheManagerOpen={setCacheManagerOpen}
-        isAuthenticated={isAuthenticated}
-        userProfile={userProfile}
-        onSignOut={onSignOut}
-        isMobile={isMobile}
-      />
+      {/* Right side: Action buttons - Hidden on mobile, visible on desktop */}
+      <div className="flex-shrink-0">
+        <div className="hidden lg:block">
+          <HeaderButtons
+            darkMode={darkMode}
+            setDarkMode={setDarkMode}
+            setLiveOpen={setLiveOpen}
+            setSettingsOpen={setSettingsOpen}
+            setCacheManagerOpen={setCacheManagerOpen}
+            isAuthenticated={isAuthenticated}
+            userProfile={userProfile}
+            onSignOut={onSignOut}
+            isMobile={isMobile}
+          />
+        </div>
+        {/* Mobile actions button - Only visible on mobile */}
+        <div className="lg:hidden w-10">
+          <MobileActionsButton
+            darkMode={darkMode}
+            setDarkMode={setDarkMode}
+            setLiveOpen={setLiveOpen}
+            setSettingsOpen={setSettingsOpen}
+            setCacheManagerOpen={setCacheManagerOpen}
+            isAuthenticated={isAuthenticated}
+            userProfile={userProfile}
+            onSignOut={onSignOut}
+          />
+        </div>
+      </div>
     </header>
   );
 } 

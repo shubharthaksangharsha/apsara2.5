@@ -9,22 +9,37 @@ import { Listbox, Transition } from '@headlessui/react';
  * @param {Array} props.models - List of available models
  * @param {string} props.currentModel - Currently selected model ID
  * @param {Function} props.setCurrentModel - Function to update the selected model
+ * @param {boolean} props.isMobile - Whether viewport is mobile size
  * @returns {JSX.Element} Model selector dropdown
  */
-const ModelSelector = ({ models, currentModel, setCurrentModel }) => {
+const ModelSelector = ({ models, currentModel, setCurrentModel, isMobile }) => {
   const selectedModelObject = models.find(m => m.id === currentModel);
 
   return (
-    <div className="flex items-center flex-shrink min-w-0 lg:ml-0 ml-2">
+    <div className="flex items-center flex-shrink min-w-0">
       <Listbox value={currentModel} onChange={setCurrentModel}>
-        <div className="relative w-auto min-w-[180px] max-w-[220px] sm:min-w-[240px] sm:max-w-[280px]">
-          <Listbox.Button className="relative w-full cursor-pointer rounded-lg bg-gray-100 dark:bg-gray-700/50 py-1.5 sm:py-2 pl-2 sm:pl-3 pr-8 sm:pr-10 text-left shadow-md hover:bg-gray-200 dark:hover:bg-gray-600/60 focus:outline-none focus-visible:border-indigo-500 focus-visible:ring-2 focus-visible:ring-white/75 focus-visible:ring-offset-2 focus-visible:ring-offset-orange-300 text-xs sm:text-sm transition-colors">
-            <span className="block truncate text-xs sm:text-sm font-medium text-gray-900 dark:text-gray-100">
+        <div className={`relative w-auto ${
+          isMobile 
+            ? 'min-w-[140px] max-w-[180px]' 
+            : 'min-w-[180px] max-w-[220px] sm:min-w-[240px] sm:max-w-[280px]'
+        }`}>
+          <Listbox.Button className={`relative w-full cursor-pointer rounded-lg bg-gray-100 dark:bg-gray-700/50 pl-2 text-left shadow-md hover:bg-gray-200 dark:hover:bg-gray-600/60 focus:outline-none focus-visible:border-indigo-500 focus-visible:ring-2 focus-visible:ring-white/75 focus-visible:ring-offset-2 focus-visible:ring-offset-orange-300 transition-colors ${
+            isMobile 
+              ? 'py-1 pr-6 text-xs' 
+              : 'py-1.5 sm:py-2 sm:pl-3 pr-8 sm:pr-10 text-xs sm:text-sm'
+          }`}>
+            <span className={`block truncate font-medium text-gray-900 dark:text-gray-100 ${
+              isMobile ? 'text-xs' : 'text-xs sm:text-sm'
+            }`}>
               {selectedModelObject?.name || 'Select Model'}
             </span>
-            <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-1 sm:pr-2">
+            <span className={`pointer-events-none absolute inset-y-0 right-0 flex items-center ${
+              isMobile ? 'pr-1' : 'pr-1 sm:pr-2'
+            }`}>
               <ChevronsUpDown
-                className="h-4 w-4 sm:h-5 sm:w-5 text-gray-400 dark:text-gray-500"
+                className={`text-gray-400 dark:text-gray-500 ${
+                  isMobile ? 'h-3 w-3' : 'h-4 w-4 sm:h-5 sm:w-5'
+                }`}
                 aria-hidden="true"
               />
             </span>

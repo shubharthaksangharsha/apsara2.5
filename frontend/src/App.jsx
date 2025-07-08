@@ -44,36 +44,43 @@ import { getModelCapabilities } from './utils/modelCapabilities'; // Import capa
 
 // Define suggested prompts with optional target models and tool usage
 const suggestedPrompts = [
-  // Technical & Coding (Using Pro for complexity/accuracy & Code Execution)
+  // Technical & Coding (Using Gemini 2.5 Flash Preview for complexity & Code Execution)
   { text: "Explain the concept of closures in JavaScript", icon: BrainCircuit, modelId: "gemini-2.5-flash-preview-04-17"},
   { text: "Generate and execute Python code to print a random number (1-10)", icon: Code, modelId: "gemini-2.0-flash", toolUsage: 'codeExecution' },
   { text: "Debug this SQL query:\nSELECT user, COUNT(*) FROM orders GROUP BY product;", icon: Code, modelId: "gemini-2.0-flash", toolUsage: 'codeExecution' },
-  { text: "What are the main differences between React and Vue?", icon: BrainCircuit },
+  { text: "What are the main differences between React and Vue?", icon: BrainCircuit, modelId: "gemini-2.5-flash-preview-04-17" },
+  { text: "Create a Python script to calculate fibonacci numbers and execute it", icon: Code, modelId: "gemini-2.0-flash", toolUsage: 'codeExecution' },
 
-  // Creative & Writing (Using Flash for speed/versatility)
-  { text: "Write a short poem about a rainy day", icon: PenTool, modelId: "gemini-1.5-flash" },
-  { text: "Generate a marketing slogan for a new coffee shop", icon: Sparkles, modelId: "gemini-1.5-flash" },
-  { text: "Write a short story about a space explorer finding a new planet", icon: BookOpen, modelId: "gemini-1.5-flash" },
+  // Creative & Writing (Using Gemini 2.0 Flash for speed/versatility)
+  { text: "Write a short poem about a rainy day", icon: PenTool, modelId: "gemini-2.0-flash" },
+  { text: "Generate a marketing slogan for a new coffee shop", icon: Sparkles, modelId: "gemini-2.0-flash" },
+  { text: "Write a short story about a space explorer finding a new planet", icon: BookOpen, modelId: "gemini-2.0-flash" },
+  { text: "Create a creative product description for a smart watch", icon: PenTool, modelId: "gemini-2.0-flash" },
 
-  // Image Generation (Using 2.0 Flash Image variant)
-  { text: "Generate an image of a futuristic cityscape at sunset", icon: ImageIcon, modelId: "gemini-2.0-flash-preview-image-generation" },
-  { text: "Generate an image of a cat wearing sunglasses", icon: ImageIcon, modelId: "gemini-2.0-flash-preview-image-generation" },
+  // Image Generation & Editing (Using function calling tools)
+  { text: "Generate an image of a futuristic cityscape at sunset", icon: ImageIcon, modelId: "gemini-2.0-flash", toolUsage: 'imageGeneration' },
+  { text: "Generate an image of a cat wearing sunglasses", icon: ImageIcon, modelId: "gemini-2.0-flash", toolUsage: 'imageGeneration' },
+  { text: "Create an image of a serene mountain lake at dawn", icon: ImageIcon, modelId: "gemini-2.0-flash", toolUsage: 'imageGeneration' },
+  { text: "Generate an image of a modern minimalist kitchen design", icon: ImageIcon, modelId: "gemini-2.0-flash", toolUsage: 'imageGeneration' },
 
-  // Planning & Practical (Using Flash)
-  { text: "Create a recipe for vegan lasagna", icon: UtensilsCrossed, modelId: "gemini-1.5-flash" },
-  { text: "Plan a 3-day weekend trip to London", icon: Plane, modelId: "gemini-1.5-flash" },
-  { text: "Suggest some fun team-building activities for a remote team", icon: Sparkles, modelId: "gemini-1.5-flash" },
-  { text: "Draft an email asking for a project extension", icon: FileText, modelId: "gemini-1.5-flash" },
+  // Planning & Practical (Using appropriate models)
+  { text: "Create a recipe for vegan lasagna", icon: UtensilsCrossed, modelId: "gemini-2.0-flash" },
+  { text: "Plan a 3-day weekend trip to London", icon: Plane, modelId: "gemini-2.0-flash" },
+  { text: "Suggest some fun team-building activities for a remote team", icon: Sparkles, modelId: "gemini-2.0-flash" },
+  { text: "Draft an email asking for a project extension", icon: FileText, modelId: "gemini-2.0-flash" },
 
-  // Knowledge & Explanation (Mix based on potential complexity)
-
-  { text: "Provide tips for improving public speaking skills", icon: BookOpen, modelId: "gemini-1.5-flash" },
-  { text: "Explain the concept of blockchain technology simply", icon: Globe, modelId: "gemini-1.5-flash" },
-  { text: "Summarize the main events of World War II", icon: History, modelId: "gemini-2.5-flash-preview-04-17" },
-  { text: "What is the plot of the movie 'Inception'?", icon: Film, modelId: "gemini-1.5-flash" },
-  { text: "Give me ideas for a challenging programming project", icon: Lightbulb, modelId: "gemini-1.5-flash"},
+  // Knowledge & Explanation with Google Search
   { text: "Search for recent news about AI developments", icon: Search, modelId: "gemini-2.0-flash", toolUsage: 'googleSearch' },
-  { text: "What is the Current date and time", icon: Search, modelId: "gemini-2.0-flash", toolUsage: 'googleSearch' },
+  { text: "What is the current date and time?", icon: Search, modelId: "gemini-2.0-flash", toolUsage: 'googleSearch' },
+  { text: "Find the latest stock price of Tesla", icon: Search, modelId: "gemini-2.0-flash", toolUsage: 'googleSearch' },
+  { text: "Search for today's weather forecast", icon: Search, modelId: "gemini-2.0-flash", toolUsage: 'googleSearch' },
+
+  // Complex Knowledge & Explanation (Using Gemini 2.5 Flash Preview for complexity)
+  { text: "Provide tips for improving public speaking skills", icon: BookOpen, modelId: "gemini-2.5-flash-preview-04-17" },
+  { text: "Explain the concept of blockchain technology simply", icon: Globe, modelId: "gemini-2.5-flash-preview-04-17" },
+  { text: "Summarize the main events of World War II", icon: History, modelId: "gemini-2.5-flash-preview-04-17" },
+  { text: "What is the plot of the movie 'Inception'?", icon: Film, modelId: "gemini-2.0-flash" },
+  { text: "Give me ideas for a challenging programming project", icon: Lightbulb, modelId: "gemini-2.5-flash-preview-04-17"},
 ];
             
 // Main App component wrapper with routing
@@ -508,25 +515,30 @@ function AuthenticatedApp({ darkMode, setDarkMode, user, onLogout }) {
     setIsAppLoading(false); 
   };
 
-  const startStreamChat = async (text, targetConvoId = null, initialConvoData = null, targetModelId = null) => {
+  const startStreamChat = async (text, targetConvoId = null, initialConvoData = null, targetModelId = null, overrideEnableSearch = null, overrideEnableCodeExec = null, explicitFiles = null, overrideEnableFunctionCalling = null, overrideSelectedTools = null) => {
     setIsAppLoading(true);
 
     const successfullyUploadedImages = selectedImagesForPrompt.filter(
       img => img.id && promptImageUploadStatus[img.name] === 'success'
     );
 
-    // Include both successfully uploaded images AND all files from FileManager
-    const imageFiles = files.filter(f => 
-        successfullyUploadedImages.some(sImg => sImg.id === f.id)
-    );
+    // Use explicit files if provided, otherwise use the default file handling
+    let filesForMessage = explicitFiles || [];
     
-    // Add all other files from FileManager (PDFs, documents, etc.)
-    const otherFiles = files.filter(f => 
-        !successfullyUploadedImages.some(sImg => sImg.id === f.id)
-    );
-    
-    // Combine all files to send to backend
-    const filesForMessage = [...imageFiles, ...otherFiles];
+    if (!explicitFiles) {
+      // Include both successfully uploaded images AND all files from FileManager
+      const imageFiles = files.filter(f => 
+          successfullyUploadedImages.some(sImg => sImg.id === f.id)
+      );
+      
+      // Add all other files from FileManager (PDFs, documents, etc.)
+      const otherFiles = files.filter(f => 
+          !successfullyUploadedImages.some(sImg => sImg.id === f.id)
+      );
+      
+      // Combine all files to send to backend
+      filesForMessage = [...imageFiles, ...otherFiles];
+    }
 
     // Ensure all files have token counts before sending
     for (const file of filesForMessage) {
@@ -543,25 +555,28 @@ function AuthenticatedApp({ darkMode, setDarkMode, user, onLogout }) {
 
     console.log('[App.jsx] Streaming with files:', filesForMessage);
 
-    // Clear UI immediately when message is sent
-    clearAndRevokeImages(successfullyUploadedImages);
-    setSelectedImagesForPrompt(prevImages => prevImages.filter(img => 
-        !successfullyUploadedImages.some(sImg => sImg.name === img.name)
-    ));
-    setPromptImageUploadStatus(prevStatus => {
-        const newStatus = { ...prevStatus };
-        successfullyUploadedImages.forEach(img => {
-            if (newStatus[img.name] === 'success' || newStatus[img.name] === 'uploading') {
-                delete newStatus[img.name];
-            }
-        });
-        return newStatus;
-    });
-    // Clear ALL files from attachment area immediately (including PDFs)
-    setFiles([]);
+    // Only clear UI if not using explicit files (i.e., normal user input)
+    if (!explicitFiles) {
+      // Clear UI immediately when message is sent
+      clearAndRevokeImages(successfullyUploadedImages);
+      setSelectedImagesForPrompt(prevImages => prevImages.filter(img => 
+          !successfullyUploadedImages.some(sImg => sImg.name === img.name)
+      ));
+      setPromptImageUploadStatus(prevStatus => {
+          const newStatus = { ...prevStatus };
+          successfullyUploadedImages.forEach(img => {
+              if (newStatus[img.name] === 'success' || newStatus[img.name] === 'uploading') {
+                  delete newStatus[img.name];
+              }
+          });
+          return newStatus;
+      });
+      // Clear ALL files from attachment area immediately (including PDFs)
+      setFiles([]);
+    }
 
-    // Pass null for tool override parameters, then the files
-    await originalStartStreamChat(text, targetConvoId, initialConvoData, targetModelId, null, null, filesForMessage);
+    // Pass tool override parameters to the backend
+    await originalStartStreamChat(text, targetConvoId, initialConvoData, targetModelId, overrideEnableSearch, overrideEnableCodeExec, filesForMessage, overrideEnableFunctionCalling, overrideSelectedTools);
 
     setIsAppLoading(false);
   };
@@ -692,39 +707,79 @@ function AuthenticatedApp({ darkMode, setDarkMode, user, onLogout }) {
 
     // Handle Tool Activation based on prompt config and model capabilities
     const capabilities = getModelCapabilities(modelToUse);
-    let shouldEnableSearch = false; // Determine overrides locally
+    let shouldEnableSearch = false;
     let shouldEnableCodeExec = false;
-    // console.log(`Prompt clicked. Tool usage: ${toolUsage}, Model: ${modelToUse}, Capabilities:`, capabilities); // Debug log
+    let shouldEnableFunctionCalling = false;
+    
+    console.log(`Prompt clicked. Tool usage: ${toolUsage}, Model: ${modelToUse}, Capabilities:`, capabilities);
 
     if (toolUsage === 'googleSearch') {
       if (capabilities.supportsSearch) {
         console.log("Activating Google Search for this prompt.");
         shouldEnableSearch = true;
-        shouldEnableCodeExec = false; // Ensure mutual exclusivity
-                    } else {
+        shouldEnableCodeExec = false;
+        shouldEnableFunctionCalling = false;
+      } else {
         console.warn(`Prompt requested Google Search, but model ${modelToUse} does not support it. Tool not enabled.`);
       }
     } else if (toolUsage === 'codeExecution') {
       if (capabilities.supportsCodeExecution) {
         console.log("Activating Code Execution for this prompt.");
         shouldEnableCodeExec = true;
-        shouldEnableSearch = false; // Ensure mutual exclusivity
-     } else {
+        shouldEnableSearch = false;
+        shouldEnableFunctionCalling = false;
+      } else {
         console.warn(`Prompt requested Code Execution, but model ${modelToUse} does not support it. Tool not enabled.`);
       }
-    } // If toolUsage is null, we don't change the existing toggle states.
+    } else if (toolUsage === 'imageGeneration') {
+      console.log("Activating Function Calling (Image Generation) for this prompt.");
+      shouldEnableFunctionCalling = true;
+      shouldEnableSearch = false;
+      shouldEnableCodeExec = false;
+      // Ensure image generation tools are selected
+      setSelectedTools(['generateImage', 'editImage']); // Use correct tool names
+    } else {
+      // If no specific tool usage, keep current settings but don't override
+      console.log("No specific tool usage - keeping current settings.");
+    }
 
-    // Update the global state for Settings Panel UI consistency
+    // Update the global state for Settings Panel UI consistency FIRST
     setEnableGoogleSearch(shouldEnableSearch);
     setEnableCodeExecution(shouldEnableCodeExec);
+    setEnableFunctionCalling(shouldEnableFunctionCalling);
+    
+    // For image generation, ensure the right tools are selected
+    if (shouldEnableFunctionCalling) {
+      setSelectedTools(['generateImage', 'editImage']);
+    } else if (shouldEnableSearch || shouldEnableCodeExec) {
+      setSelectedTools([]); // Clear function calling tools when using other tools
+    }
+    
     setStreamToggleState(true); // Force stream toggle ON for suggested prompts
 
     if (window.innerWidth < 1024) closeSidebar();
 
-    console.log(`Starting STREAM chat with prompt: "${promptText}" (Model: ${modelToUse})`);
-    // ALWAYS use streaming for suggested prompts, regardless of manual toggle
-    await startStreamChat(promptText, id, initialConvoData, modelToUse, shouldEnableSearch, shouldEnableCodeExec); // Pass overrides
-  }, [models, currentModel, setCurrentModel, setEnableGoogleSearch, setEnableCodeExecution, setStreamToggleState, closeSidebar, startStreamChat]); // Added setters to dependencies, removed sendToBackend as it's not used here
+    console.log(`Tool settings updated immediately. Starting chat with proper state...`);
+    console.log(`Tool states - Search: ${shouldEnableSearch}, CodeExec: ${shouldEnableCodeExec}, FunctionCalling: ${shouldEnableFunctionCalling}`);
+    
+    // Use setImmediate or minimal timeout to ensure state updates are processed
+    setTimeout(async () => {
+      console.log(`🚀 Starting STREAM chat with prompt: "${promptText}" (Model: ${modelToUse})`);
+      
+      // ALWAYS use streaming for suggested prompts with explicit tool overrides
+      await startStreamChat(
+        promptText, 
+        id, 
+        initialConvoData, 
+        modelToUse, 
+        shouldEnableSearch,  // override search explicitly
+        shouldEnableCodeExec, // override code execution explicitly
+        null, // explicitFiles
+        shouldEnableFunctionCalling, // override function calling explicitly
+        shouldEnableFunctionCalling ? ['generateImage', 'editImage'] : [] // override selected tools explicitly
+      );
+    }, 50); // Very short delay just for React state batching 
+  }, [models, currentModel, setCurrentModel, setEnableGoogleSearch, setEnableCodeExecution, setEnableFunctionCalling, setSelectedTools, setStreamToggleState, closeSidebar, startStreamChat]);
 
   // Function to load a saved live session
   const loadLiveSession = useCallback((resumeHandle, modality, voice, systemInstruction) => {

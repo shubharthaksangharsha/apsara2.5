@@ -32,10 +32,10 @@ export const CODE_BLOCK_HEADER_CLASSES = "mt-4 px-3 py-2 bg-gray-100 dark:bg-gra
 export const CODE_BLOCK_CONTENT_CLASSES = "p-4 overflow-x-auto custom-scrollbar text-sm bg-gray-50 dark:bg-gray-800 rounded-b-lg mb-4";
 export const CODE_BLOCK_BUTTON_CLASSES = "flex items-center justify-center w-8 h-8 bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500 text-gray-600 dark:text-gray-200 rounded transition-colors duration-200";
 
-// Code execution result classes
+// Code execution result classes - Updated to match regular code block styling
 export const EXECUTION_RESULT_CONTAINER_CLASSES = "my-2 text-sm";
-export const EXECUTION_RESULT_HEADER_CLASSES = "flex justify-between items-center px-3 py-1.5 bg-green-50 dark:bg-green-900/20 border-l-4 border-green-500 dark:border-green-400 rounded-r-md";
-export const EXECUTION_RESULT_CONTENT_CLASSES = "whitespace-pre-wrap font-mono text-xs mt-1 p-3 bg-green-50 dark:bg-green-900/10 border-l-4 border-green-500 dark:border-green-400 rounded-r-md";
+export const EXECUTION_RESULT_HEADER_CLASSES = "mt-4 px-3 py-2 bg-gray-100 dark:bg-gray-700 flex justify-between items-center rounded-t-lg";
+export const EXECUTION_RESULT_CONTENT_CLASSES = "whitespace-pre-wrap font-mono text-sm p-4 overflow-x-auto custom-scrollbar bg-gray-50 dark:bg-gray-800 rounded-b-lg mb-4";
 
 // Thought summary classes
 export const THOUGHT_CONTAINER_CLASSES = "my-2 text-sm";

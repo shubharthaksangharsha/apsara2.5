@@ -43,6 +43,8 @@ const cleanMessagesForApi = (messages) => {
  * @param {boolean|null} overrideEnableSearch - Override for search tool enablement
  * @param {boolean|null} overrideEnableCodeExec - Override for code execution tool enablement
  * @param {Array|null} explicitFiles - Explicit files to use instead of uploadedFiles
+ * @param {boolean|null} overrideEnableFunctionCalling - Override for function calling enablement
+ * @param {Array|null} overrideSelectedTools - Override for selected tools
  * @param {Function} setIsLoading - State setter for loading indicator
  * @param {Function} setStreamingModelMessageId - State setter for streaming message ID
  * @param {string|null} activeConvoId - Active conversation ID
@@ -73,6 +75,8 @@ export const startStreamChat = async (
   overrideEnableSearch = null, 
   overrideEnableCodeExec = null, 
   explicitFiles = null,
+  overrideEnableFunctionCalling = null,
+  overrideSelectedTools = null,
   setIsLoading,
   setStreamingModelMessageId,
   activeConvoId,
@@ -204,8 +208,8 @@ export const startStreamChat = async (
        isSystemInstructionApplicable,
        enableThinking,
        thinkingBudget,
-       enableFunctionCalling,
-       selectedTools,
+       overrideEnableFunctionCalling !== null ? overrideEnableFunctionCalling : enableFunctionCalling,
+       overrideSelectedTools !== null ? overrideSelectedTools : selectedTools,
        functionCallingMode
      );
      

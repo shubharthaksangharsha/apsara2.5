@@ -74,7 +74,9 @@ export function useChatApi({
     targetModelId = null, 
     overrideEnableSearch = null, 
     overrideEnableCodeExec = null, 
-    explicitFiles = null
+    explicitFiles = null,
+    overrideEnableFunctionCalling = null,
+    overrideSelectedTools = null
   ) => {
     return startStreamChat(
       text, 
@@ -84,6 +86,8 @@ export function useChatApi({
       overrideEnableSearch, 
       overrideEnableCodeExec, 
       explicitFiles,
+      overrideEnableFunctionCalling,
+      overrideSelectedTools,
       setIsLoading,
       setStreamingModelMessageId,
       activeConvoId,
