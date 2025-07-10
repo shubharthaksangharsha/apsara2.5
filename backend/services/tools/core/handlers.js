@@ -57,7 +57,7 @@ export function handleGetCurrentTime({ timezone }) {
       });
     });
   }
-  
+
   export const coreToolHandlers = {
     getCurrentTime: handleGetCurrentTime,
     echo: handleEcho,

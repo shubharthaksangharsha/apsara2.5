@@ -111,38 +111,91 @@ export async function handleEditImage({ prompt, imageId }, context = {}) {
   });
   
   try {
+    // More detailed logging of the context
+    console.log(`[Tool: editImage] Context structure:`, {
+      hasUploadedFiles: !!context.uploadedFiles,
+      uploadedFilesCount: context.uploadedFiles ? context.uploadedFiles.length : 0,
+      uploadedFilesType: context.uploadedFiles ? typeof context.uploadedFiles : 'undefined'
+    });
+
+    if (context.uploadedFiles) {
+      console.log(`[Tool: editImage] First uploaded file structure:`, 
+        context.uploadedFiles[0] ? Object.keys(context.uploadedFiles[0]) : 'No files');
+    }
+    
     // Check if we have user-uploaded images from the context
-    const userUploadedImages = context.uploadedFiles?.filter(file => 
-      file.mimetype && file.mimetype.startsWith('image/')
-    ) || [];
+    const userUploadedImages = context.uploadedFiles?.filter(file => {
+      // More thorough check for image files
+      const isImage = file.mimetype?.startsWith('image/') || 
+                     file.mimeType?.startsWith('image/') ||
+                     (file.fileData?.mimeType && file.fileData.mimeType.startsWith('image/'));
+      
+      if (isImage) {
+        console.log(`[Tool: editImage] Found image file:`, {
+          fileName: file.fileName || file.name,
+          mimeType: file.mimetype || file.mimeType || (file.fileData && file.fileData.mimeType),
+          hasFileData: !!file.fileData,
+          hasDirectData: !!file.data,
+          fileUri: file.fileData?.fileUri || null
+        });
+      }
+      
+      return isImage;
+    }) || [];
     
     console.log(`[Tool: editImage] Found ${userUploadedImages.length} user-uploaded images in context`);
     
     // Process user uploaded images if available
     let processedUserImages = [];
     if (userUploadedImages.length > 0) {
-      processedUserImages = userUploadedImages.map(file => {
-        // Check for fileData structure (from function call format)
-        if (file.fileData) {
-          console.log('[Tool: editImage] Found fileData structure in uploaded image');
-          return {
-            data: file.fileData.fileUri || null,
-            mimeType: file.fileData.mimeType || 'image/jpeg'
-          };
+      processedUserImages = await Promise.all(userUploadedImages.map(async (file) => {
+        try {
+          // Handle Google Gemini fileData structure
+          if (file.fileData && file.fileData.fileUri) {
+            console.log(`[Tool: editImage] Processing file with Google fileUri: ${file.fileData.fileUri}`);
+            
+            // If we have a fileUri, fetch the actual image content
+            try {
+              const response = await fetch(file.fileData.fileUri);
+              if (!response.ok) {
+                throw new Error(`Failed to fetch image: ${response.statusText}`);
+              }
+              
+              // Convert the response to base64
+              const arrayBuffer = await response.arrayBuffer();
+              const base64 = Buffer.from(arrayBuffer).toString('base64');
+              
+              console.log(`[Tool: editImage] Successfully fetched image from URI, size: ${base64.length}`);
+              
+              return {
+                data: base64,
+                mimeType: file.fileData.mimeType || 'image/jpeg'
+              };
+            } catch (fetchError) {
+              console.error(`[Tool: editImage] Error fetching image from URI:`, fetchError);
+              return null;
+            }
+          }
+          
+          // Handle direct data (base64 string)
+          if (file.data) {
+            console.log(`[Tool: editImage] Found direct data in uploaded image`);
+            return {
+              data: file.data,
+              mimeType: file.mimetype || file.mimeType || 'image/jpeg'
+            };
+          }
+          
+          console.log(`[Tool: editImage] Could not extract image data from file`);
+          return null;
+        } catch (error) {
+          console.error(`[Tool: editImage] Error processing file:`, error);
+          return null;
         }
-        
-        // Check for direct data
-        if (file.data) {
-          console.log('[Tool: editImage] Found direct data in uploaded image');
-          return {
-            data: file.data,
-            mimeType: file.mimetype || file.mimeType || 'image/jpeg'
-          };
-        }
-        
-        return null;
-      }).filter(Boolean); // Remove any null entries
+      }));
       
+      // Filter out any failed processing
+      processedUserImages = processedUserImages.filter(Boolean);
       console.log(`[Tool: editImage] Processed ${processedUserImages.length} user images for editing`);
     }
     

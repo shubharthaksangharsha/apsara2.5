@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, FolderOpen, UploadCloud, Square, Zap, Sparkles, AudioLines } from 'lucide-react';
+import { Send, FolderOpen, UploadCloud, Square, Zap, Sparkles, AudioLines, Plus, Image as ImageIcon, Upload } from 'lucide-react';
 
 // Import the components for image handling
 import ImageUploadButton from '../ImageUpload';
@@ -69,6 +69,7 @@ export default function MessageInput({
   const inputRef = useRef();
   const [inputRows, setInputRows] = useState(1);
   const [isDragging, setIsDragging] = useState(false);
+  const [showAttachmentOptions, setShowAttachmentOptions] = useState(false);
   
   // Determine thinking mode based on enableThinking and thinkingBudget
   const thinkingMode = !enableThinking ? 'off' : (thinkingBudget === -1 ? 'auto' : 'on');
@@ -164,6 +165,20 @@ export default function MessageInput({
     }
   };
 
+  // Handler for file selection
+  const handleFilesSelected = (files) => {
+    if (onSelectImagesForPrompt && files.length > 0) {
+      onSelectImagesForPrompt(files);
+      setShowAttachmentOptions(false); // Hide options after selection
+    }
+  };
+
+  // Toggle the attachment options menu
+  const toggleAttachmentOptions = (e) => {
+    e.preventDefault();
+    setShowAttachmentOptions(!showAttachmentOptions);
+  };
+
   // Determine if the send button should be disabled
   const isSendDisabled = isLoading || 
                         disabled || 
@@ -239,15 +254,56 @@ export default function MessageInput({
         <div className={`${INPUT_WRAPPER_CLASS} ${isDragging ? 'pointer-events-none' : ''} py-3 px-3`}>
           {/* Left-side tools */}
           <div className="flex items-center pl-1 gap-2">
-            {/* Plus button */}
-            {onFileManagerClick && (
-              <button
-                className="p-1.5 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700"
-                onClick={onFileManagerClick}
-                title="Upload & Manage Files"
-              >
-                <FolderOpen className="h-5 w-5" />
-              </button>
+            {/* Plus button to replace file manager icon */}
+            <button
+              className="p-1.5 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700"
+              onClick={toggleAttachmentOptions}
+              title="Add attachments"
+            >
+              <Plus className="h-5 w-5" />
+            </button>
+            
+            {/* Floating menu for attachment options */}
+            {showAttachmentOptions && (
+              <div className="absolute top-12 left-3 bg-white dark:bg-gray-700 p-2 rounded-lg shadow-lg border border-gray-200 dark:border-gray-600 flex flex-col gap-2 min-w-[150px] z-10">
+                {/* File Manager Option */}
+                <button 
+                  type="button"
+                  className="flex items-center gap-2 p-2 hover:bg-gray-100 dark:hover:bg-gray-600 rounded w-full text-left"
+                  onClick={(e) => {
+                    // Call the original file manager click handler
+                    if (onFileManagerClick) {
+                      onFileManagerClick(e);
+                    }
+                    setShowAttachmentOptions(false);
+                  }}
+                >
+                  <FolderOpen size={16} />
+                  <span>File Manager</span>
+                </button>
+                
+                {/* Image Upload Option */}
+                <button 
+                  type="button"
+                  className="flex items-center gap-2 p-2 hover:bg-gray-100 dark:hover:bg-gray-600 rounded w-full text-left"
+                  onClick={() => {
+                    const imageUploadInput = document.createElement('input');
+                    imageUploadInput.type = 'file';
+                    imageUploadInput.accept = 'image/*';
+                    imageUploadInput.multiple = true;
+                    imageUploadInput.onchange = (e) => {
+                      if (e.target.files && e.target.files.length > 0) {
+                        handleFilesSelected(Array.from(e.target.files));
+                      }
+                    };
+                    imageUploadInput.click();
+                    setShowAttachmentOptions(false);
+                  }}
+                >
+                  <ImageIcon size={16} />
+                  <span>Gallery</span>
+                </button>
+              </div>
             )}
           </div>
 
@@ -331,6 +387,20 @@ export default function MessageInput({
           </div>
         </div>
       )}
+
+      {/* Hidden file input for direct file selection (used by file manager option) */}
+      <input 
+        type="file" 
+        id="fileInput"
+        className="hidden"
+        multiple
+        accept="image/*"
+        onChange={(e) => {
+          if (e.target.files && e.target.files.length > 0) {
+            handleFilesSelected(Array.from(e.target.files));
+          }
+        }}
+      />
     </div>
   );
 } 

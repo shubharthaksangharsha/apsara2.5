@@ -7,6 +7,11 @@ import { weatherToolSchemas, weatherToolHandlers } from './weather/index.js';
 import { uiToolSchemas, uiToolHandlers } from './ui/index.js';
 import { notesToolSchemas, notesToolHandlers } from './notes/index.js';
 
+// Import standalone plugin modules
+import { searchToolSchemas, searchToolHandlers } from './search/index.js';
+import { urlcontextToolSchemas, urlcontextToolHandlers } from './urlcontext/index.js';
+import { codeexecutionToolSchemas, codeexecutionToolHandlers } from './codeexecution/index.js';
+
 // Import Google service tool modules
 import { gmailToolSchemas, gmailToolHandlers } from '../google/gmail/index.js';
 import { calendarToolSchemas, calendarToolHandlers } from '../google/calendar/index.js';
@@ -18,6 +23,9 @@ const baseToolDeclarations = [
   ...weatherToolSchemas,
   ...uiToolSchemas,
   ...notesToolSchemas,
+  ...searchToolSchemas,
+  ...urlcontextToolSchemas,
+  ...codeexecutionToolSchemas
 ];
 
 // Google-specific tool declarations (require authentication)
@@ -46,6 +54,11 @@ export const toolHandlers = {
   
   // Notes tools
   ...notesToolHandlers,
+  
+  // Standalone plugins
+  ...searchToolHandlers,
+  ...urlcontextToolHandlers,
+  ...codeexecutionToolHandlers,
   
   // Google tools
   ...gmailToolHandlers,

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Mail, Calendar, Map, CloudLightning, Battery, Camera, FileText, BookOpen, ChevronDown, Clock, Search, Globe, LayoutDashboard, Loader2, Check, ImageIcon } from 'lucide-react';
+import { X, Mail, Calendar, Map, CloudLightning, Battery, Camera, FileText, BookOpen, ChevronDown, Clock, Search, Globe, LayoutDashboard, Loader2, Check, ImageIcon, Code, ExternalLink } from 'lucide-react';
 import { BACKEND_URL } from '../../hooks/common-constants';
 
 /**
@@ -183,6 +183,21 @@ export default function PluginManager({
         icon: <FileText className="h-5 w-5" />, 
         tools: [] 
       },
+      search: {
+        name: 'Google Search',
+        icon: <Search className="h-5 w-5" />,
+        tools: []
+      },
+      urlContext: {
+        name: 'URL Context Tool',
+        icon: <ExternalLink className="h-5 w-5" />,
+        tools: []
+      },
+      codeExecution: {
+        name: 'Code Execution',
+        icon: <Code className="h-5 w-5" />,
+        tools: []
+      },
       ui: { 
         name: 'UI Functions', 
         icon: <LayoutDashboard className="h-5 w-5" />, 
@@ -212,7 +227,7 @@ export default function PluginManager({
         categories.weather.tools.push(tool);
       } 
       // Core tools
-      else if (toolName.includes('time') || toolName.includes('search') || toolName === 'echo' || toolName === 'getbatterystatus') {
+      else if (toolName.includes('time') || toolName === 'echo' || toolName === 'getbatterystatus') {
         categories.core.tools.push(tool);
       } 
       // Image generation tools
@@ -223,6 +238,18 @@ export default function PluginManager({
       else if (toolName.includes('note')) {
         categories.notes.tools.push(tool);
       } 
+      // Google Search tool
+      else if (toolName === 'googlesearch') {
+        categories.search.tools.push(tool);
+      }
+      // URL Context tool
+      else if (toolName === 'urlcontext') {
+        categories.urlContext.tools.push(tool);
+      }
+      // Code Execution tool
+      else if (toolName === 'codeexecution') {
+        categories.codeExecution.tools.push(tool);
+      }
       // UI tools
       else if (toolName.includes('screenshot') || toolName.includes('switchtab')) {
         categories.ui.tools.push(tool);
@@ -368,6 +395,9 @@ export default function PluginManager({
                         {category.name === 'Weather' && 'Get current weather information for any location.'}
                         {category.name === 'Core Functions' && 'Basic utilities for time, search, and system information.'}
                         {category.name === 'UI Functions' && 'Interact with the user interface.'}
+                        {category.name === 'Google Search' && 'Find real-time information from the web to answer questions.'}
+                        {category.name === 'URL Context Tool' && 'Analyze and extract information from web pages.'}
+                        {category.name === 'Code Execution' && 'Generate and run Python code to solve problems.'}
                       </p>
                       
                       <div className="space-y-3">
