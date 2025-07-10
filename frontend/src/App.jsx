@@ -21,6 +21,7 @@ import EmptyChatContent from './components/EmptyChatContent'; // Import the refa
 import { FileManager } from './components/Files';
 import CacheManager from './components/CacheManager';
 import MapDisplay from './components/MapDisplay'; // <-- Import MapDisplay
+import PluginManager from './components/PluginManager'; // <-- Import PluginManager
 
 
 // Import common constants
@@ -390,6 +391,9 @@ function AuthenticatedApp({ darkMode, setDarkMode, user, onLogout }) {
   // Add a general loading state for App component operations like image uploading
   const [isAppLoading, setIsAppLoading] = useState(false);
 
+  // Create an AbortController ref for managing API request cancellation
+  const abortControllerRef = useRef(null);
+
   const handleSelectImagesForPrompt = async (newImageFiles) => {
     const imageFiles = Array.from(newImageFiles).filter(file => file.type.startsWith('image/'));
     if (imageFiles.length === 0) return;
@@ -457,66 +461,49 @@ function AuthenticatedApp({ darkMode, setDarkMode, user, onLogout }) {
     // Clear from selectedImagesForPrompt and promptImageUploadStatus as before
   };
 
-  const sendToBackend = async (text, targetConvoId = null, initialConvoData = null, targetModelId = null) => {
-    setIsAppLoading(true);
+  // Function to handle stopping ongoing API requests
+  const handleStopRequest = () => {
+    if (abortControllerRef.current) {
+      console.log('[App.jsx] Aborting current API request');
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+      setIsAppLoading(false);
+    }
+  };
 
-    const successfullyUploadedImages = selectedImagesForPrompt.filter(
-      img => img.id && promptImageUploadStatus[img.name] === 'success'
-    );
-
-    // Include both successfully uploaded images AND all files from FileManager
-    const imageFiles = files.filter(f => 
-        successfullyUploadedImages.some(sImg => sImg.id === f.id)
-    );
-    
-    // Add all other files from FileManager (PDFs, documents, etc.)
-    const otherFiles = files.filter(f => 
-        !successfullyUploadedImages.some(sImg => sImg.id === f.id)
-    );
-    
-    // Combine all files to send to backend
-    const filesForMessage = [...imageFiles, ...otherFiles];
-    
-    // Ensure all files have token counts before sending
-    for (const file of filesForMessage) {
-      if (!file.tokenCount || file.tokenCount === 0) {
-        try {
-          const tokenCount = await countTokensForFile(file);
-          file.tokenCount = tokenCount;
-          console.log(`[App.jsx] Counted tokens for ${file.originalname}: ${tokenCount}`);
-        } catch (error) {
-          console.warn(`[App.jsx] Failed to count tokens for ${file.originalname}:`, error);
-        }
-      }
+  // Toggle thinking mode
+  const handleToggleThinking = (enabled, budget = null) => {
+    // If just toggling without specifying a budget, toggle the enabled state
+    if (budget === null) {
+      setEnableThinking(prev => !prev);
+      return;
     }
     
-    console.log('[App.jsx] Sending with files:', filesForMessage);
+    // Otherwise, set both the enabled state and budget
+    setEnableThinking(enabled);
+    setThinkingBudget(budget);
+  };
 
-    // Clear UI immediately when message is sent
-    clearAndRevokeImages(successfullyUploadedImages);
-    setSelectedImagesForPrompt(prevImages => prevImages.filter(img => 
-        !successfullyUploadedImages.some(sImg => sImg.name === img.name)
-    ));
-    setPromptImageUploadStatus(prevStatus => {
-        const newStatus = { ...prevStatus };
-        successfullyUploadedImages.forEach(img => {
-            if (newStatus[img.name] === 'success' || newStatus[img.name] === 'uploading') {
-                delete newStatus[img.name];
-            }
-        });
-        return newStatus;
-    });
-    // Clear ALL files from attachment area immediately (including PDFs)
-    setFiles([]);
+  // State for plugin manager
+  const [pluginManagerOpen, setPluginManagerOpen] = useState(false);
 
-    // Pass filesForMessage to the backend
-    await originalSendToBackend(text, targetConvoId, initialConvoData, targetModelId, filesForMessage, activeConvoId);
-
-    setIsAppLoading(false); 
+  // Toggle tools/function calling - now opens the plugin manager
+  const handleToggleTools = () => {
+    setPluginManagerOpen(true);
+  };
+  
+  // We're now only using streaming for all requests
+  const sendToBackend = async (text, targetConvoId = null, initialConvoData = null, targetModelId = null) => {
+    // Simply redirect to streaming function
+    return startStreamChat(text, targetConvoId, initialConvoData, targetModelId);
   };
 
   const startStreamChat = async (text, targetConvoId = null, initialConvoData = null, targetModelId = null, overrideEnableSearch = null, overrideEnableCodeExec = null, explicitFiles = null, overrideEnableFunctionCalling = null, overrideSelectedTools = null) => {
     setIsAppLoading(true);
+
+    // Create a new AbortController for this request
+    abortControllerRef.current = new AbortController();
+    const signal = abortControllerRef.current.signal;
 
     const successfullyUploadedImages = selectedImagesForPrompt.filter(
       img => img.id && promptImageUploadStatus[img.name] === 'success'
@@ -555,30 +542,43 @@ function AuthenticatedApp({ darkMode, setDarkMode, user, onLogout }) {
 
     console.log('[App.jsx] Streaming with files:', filesForMessage);
 
-    // Only clear UI if not using explicit files (i.e., normal user input)
-    if (!explicitFiles) {
-      // Clear UI immediately when message is sent
-      clearAndRevokeImages(successfullyUploadedImages);
-      setSelectedImagesForPrompt(prevImages => prevImages.filter(img => 
-          !successfullyUploadedImages.some(sImg => sImg.name === img.name)
-      ));
-      setPromptImageUploadStatus(prevStatus => {
-          const newStatus = { ...prevStatus };
-          successfullyUploadedImages.forEach(img => {
-              if (newStatus[img.name] === 'success' || newStatus[img.name] === 'uploading') {
-                  delete newStatus[img.name];
-              }
-          });
-          return newStatus;
-      });
-      // Clear ALL files from attachment area immediately (including PDFs)
-      setFiles([]);
+    // Clear selected prompt images after sending (success or fail)
+    if (selectedImagesForPrompt.length > 0) {
+      console.log('[App.jsx] Clearing selected prompt images after sending');
+      // Clear each image from the prompt image state
+      setSelectedImagesForPrompt([]);
+      // Clear image upload status
+      setPromptImageUploadStatus({});
     }
 
-    // Pass tool override parameters to the backend
-    await originalStartStreamChat(text, targetConvoId, initialConvoData, targetModelId, overrideEnableSearch, overrideEnableCodeExec, filesForMessage, overrideEnableFunctionCalling, overrideSelectedTools);
+    // Clear ALL files from attachment area immediately (including PDFs)
+    setFiles([]);
 
-    setIsAppLoading(false);
+    // Pass tool override parameters to the backend
+    try {
+      await originalStartStreamChat(
+        text,
+        targetConvoId,
+        initialConvoData,
+        targetModelId,
+        overrideEnableSearch,
+        overrideEnableCodeExec,
+        filesForMessage,
+        overrideEnableFunctionCalling,
+        overrideSelectedTools,
+        signal // Pass the abort signal
+      );
+    } catch (error) {
+      if (error.name === 'AbortError') {
+        console.log('[App.jsx] Request was aborted');
+      } else {
+        console.error('[App.jsx] Error in startStreamChat:', error);
+      }
+    } finally {
+      setIsAppLoading(false);
+      // Clear the AbortController after request completes or fails
+      abortControllerRef.current = null;
+    }
   };
 
   // Also, when removing an image manually:
@@ -941,22 +941,6 @@ function AuthenticatedApp({ darkMode, setDarkMode, user, onLogout }) {
         {/* Bottom Flex Container for File & Input */}
         <div className="w-full p-2 sm:p-3 border-t border-gray-200 dark:border-gray-700 flex flex-col gap-2 relative flex-shrink-0 bg-white dark:bg-gray-800">
           
-          {/* Action Buttons Row - NEW */}
-          <div className="flex justify-between items-center mb-1">
-            {/* Live Chat Button - Left side - Only show when there's an active conversation */}
-            {activeConvoId && (
-              <button 
-                onClick={startLiveWithMainContext} 
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-indigo-500 to-purple-500 text-white text-xs font-medium rounded-lg shadow-sm hover:from-indigo-600 hover:to-purple-600 transition-colors"
-              >
-                <AudioLines className="w-3.5 h-3.5" /> Start Live Chat
-              </button>
-            )}
-            
-            {/* Right side - future actions could go here */}
-            <div></div>
-          </div>
-
           {/* Chat Input Area */}
           <MessageInput
           onSend={sendToBackend}
@@ -964,8 +948,6 @@ function AuthenticatedApp({ darkMode, setDarkMode, user, onLogout }) {
           isLoading={isChatLoading}
           disabled={!activeConvoId}
           onFileManagerClick={() => setFileManagerOpen(true)} // For file management
-          streamEnabled={streamToggleState}
-          onStreamToggleChange={setStreamToggleState}
           // --> ADD THESE PROPS FOR IMAGE SELECTION <--
           selectedImagesForPrompt={selectedImagesForPrompt}
           onSelectImagesForPrompt={handleSelectImagesForPrompt}
@@ -974,6 +956,13 @@ function AuthenticatedApp({ darkMode, setDarkMode, user, onLogout }) {
           // --> ADD THESE PROPS FOR FILE ATTACHMENTS <--
           attachedFiles={files}
           onRemoveAttachedFile={handleRemoveAttachedFile}
+          onStopRequest={handleStopRequest}
+          enableThinking={enableThinking}
+          onToggleThinking={handleToggleThinking}
+          enableTools={enableFunctionCalling}
+          onToggleTools={handleToggleTools}
+          thinkingBudget={thinkingBudget}
+          isThinkingSupported={isThinkingSupportedByModel}
         />
         </div>
       </main>
@@ -1008,6 +997,21 @@ function AuthenticatedApp({ darkMode, setDarkMode, user, onLogout }) {
           onThinkingBudgetChange={setThinkingBudget}
           isThinkingBudgetSupported={isThinkingBudgetSupportedByModel}
           // Props for Function Calling / Tool Selection
+          enableFunctionCalling={enableFunctionCalling}
+          onEnableFunctionCallingChange={setEnableFunctionCalling}
+          selectedTools={selectedTools}
+          onSelectedToolsChange={setSelectedTools}
+          functionCallingMode={functionCallingMode}
+          onFunctionCallingModeChange={setFunctionCallingMode}
+          isAuthenticated={isAuthenticated}
+        />
+      )}
+
+      {/* Plugin Manager */}
+      {pluginManagerOpen && (
+        <PluginManager
+          isOpen={pluginManagerOpen}
+          onClose={() => setPluginManagerOpen(false)}
           enableFunctionCalling={enableFunctionCalling}
           onEnableFunctionCallingChange={setEnableFunctionCalling}
           selectedTools={selectedTools}

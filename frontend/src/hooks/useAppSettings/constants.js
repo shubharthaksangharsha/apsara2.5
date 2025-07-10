@@ -9,9 +9,9 @@ export { BACKEND_URL };
 
 // Default values
 export const DEFAULT_TEMPERATURE = 0.7;
-export const DEFAULT_MAX_OUTPUT_TOKENS = 8192; // Default to 8k often safer
+export const DEFAULT_MAX_OUTPUT_TOKENS = 65536; // Updated to match Gemini 2.5 models
 export const DEFAULT_THINKING_ENABLED = false;
-export const DEFAULT_THINKING_BUDGET = 0;
+export const DEFAULT_THINKING_BUDGET = -1; // Changed to -1 for dynamic thinking by default
 export const DEFAULT_FUNCTION_CALLING_MODE = 'AUTO';
 
 // Function calling modes

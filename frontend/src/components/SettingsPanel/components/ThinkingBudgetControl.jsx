@@ -10,24 +10,31 @@ import { THINKING_BUDGET_MIN, THINKING_BUDGET_MAX, THINKING_BUDGET_STEP } from '
  * @returns {JSX.Element} Thinking budget control component
  */
 const ThinkingBudgetControl = ({ value, onChange }) => {
+  // Special handling for dynamic thinking mode (-1)
+  const displayValue = value === -1 ? 0 : value;
+  
+  const handleChange = (e) => {
+    const newValue = parseInt(e.target.value, 10);
+    // If slider is at minimum, set to -1 for dynamic thinking
+    if (newValue === 0) {
+      onChange(-1);
+    } else {
+      onChange(newValue);
+    }
+  };
+  
   return (
     <div>
-      <label htmlFor="thinkingBudget" className="block text-xs sm:text-sm font-medium mb-1">
-        Thinking Budget: <span className="font-normal text-gray-500 dark:text-gray-400">({value})</span>
-      </label>
       <input
         id="thinkingBudget"
         type="range"
-        min={THINKING_BUDGET_MIN}
+        min={0} // Use 0 as visual minimum, but map to -1 internally
         max={THINKING_BUDGET_MAX}
         step={THINKING_BUDGET_STEP}
-        value={value}
-        onChange={(e) => onChange(parseInt(e.target.value, 10))}
-        className="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer accent-indigo-500"
+        value={displayValue}
+        onChange={handleChange}
+        className="w-full h-2 bg-gray-700 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer accent-indigo-500"
       />
-      <p className="text-[10px] sm:text-xs text-gray-500 dark:text-gray-400 mt-1">
-        Set a budget for the thinking process (e.g., 100-1000). Only for compatible models. Set to 0 to disable if not automatically handled by the toggle.
-      </p>
     </div>
   );
 };

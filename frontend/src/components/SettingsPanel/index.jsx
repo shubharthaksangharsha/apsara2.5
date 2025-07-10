@@ -1,12 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Settings, X, Search, Code } from 'lucide-react';
+import { Settings, X, ChevronDown, ChevronUp } from 'lucide-react';
 import SystemInstructionField from './components/SystemInstructionField';
 import TemperatureControl from './components/TemperatureControl';
 import MaxOutputTokensControl from './components/MaxOutputTokensControl';
-import FeatureToggle from './components/FeatureToggle';
 import ThinkingBudgetControl from './components/ThinkingBudgetControl';
-import ToolSelector from './components/ToolSelector';
-import FunctionCallingModeSelector from './components/FunctionCallingModeSelector';
 import { ANIMATION_DURATION } from './constants';
 
 /**
@@ -83,6 +80,7 @@ export default function SettingsPanel({
   // Local state for editing within the panel
   const [tempInstruction, setTempInstruction] = useState(systemInstruction);
   const [isVisible, setIsVisible] = useState(false);
+  const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
 
   // Sync local temp state if the prop changes
   useEffect(() => {
@@ -128,16 +126,6 @@ export default function SettingsPanel({
     }
   };
 
-  const handleFunctionCallingToggle = (newValue) => {
-    onEnableFunctionCallingChange(newValue);
-    
-    // If turning function calling ON, turn search and code execution OFF
-    if (newValue) {
-      onEnableGoogleSearchChange(false);
-      onEnableCodeExecutionChange(false);
-    }
-  };
-
   const handleThinkingToggle = (newValue) => {
     onEnableThinkingChange(newValue);
     if (!newValue) {
@@ -157,7 +145,7 @@ export default function SettingsPanel({
       onClick={handleOverlayClick}
     >
       <div
-        className={`w-full sm:max-w-md h-full bg-white dark:bg-gray-800 p-4 sm:p-6 shadow-xl flex flex-col text-gray-800 dark:text-gray-200
+        className={`w-full sm:max-w-md h-full bg-gray-900 dark:bg-gray-900 p-4 sm:p-6 shadow-xl flex flex-col text-gray-100 dark:text-gray-100
                   transform transition-transform duration-300 ease-in-out
                   ${isOpen && isVisible ? 'translate-x-0' : 'translate-x-full'}`}
         onClick={e => e.stopPropagation()}
@@ -170,7 +158,7 @@ export default function SettingsPanel({
           </h2>
           <button
             onClick={onClose}
-            className="p-1.5 sm:p-2 rounded-full text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700"
+            className="p-1.5 sm:p-2 rounded-full text-gray-400 hover:bg-gray-800 hover:text-gray-200 transition-colors"
             aria-label="Close settings"
           >
             <X className="h-4 w-4 sm:h-5 sm:w-5" />
@@ -178,109 +166,126 @@ export default function SettingsPanel({
         </div>
 
         {/* Settings Form Area */}
-        <div className="flex-1 space-y-4 sm:space-y-6 overflow-y-auto pr-1 custom-scrollbar">
+        <div className="flex-1 space-y-6 overflow-y-auto pr-1 custom-scrollbar">
           {/* System Instruction */}
-          <SystemInstructionField
-            value={tempInstruction}
-            onChange={setTempInstruction}
-            isApplicable={isSystemInstructionApplicable}
-          />
-
-          {/* Temperature */}
-          <TemperatureControl
-            value={temperature}
-            onChange={onTemperatureChange}
-          />
-
-          {/* Max Output Tokens */}
-          <MaxOutputTokensControl
-            value={maxOutputTokens}
-            onChange={onMaxOutputTokensChange}
-          />
-
-          {/* Google Search Toggle */}
-          <FeatureToggle
-            label="Enable Google Search"
-            description={isSearchSupported
-              ? "Allows the model to search the web for current info."
-              : "Search not supported by this model."
-            }
-            checked={enableGoogleSearch && isSearchSupported}
-            onChange={handleSearchToggle}
-            disabled={!isSearchSupported || (enableCodeExecution && isCodeExecutionSupported)}
-            icon={
-              <span className="absolute inset-0 h-full w-full flex items-center justify-center transition-opacity">
-                <Search className={`h-2.5 w-2.5 sm:h-3 sm:w-3 text-indigo-600 ${enableGoogleSearch && isSearchSupported ? 'opacity-100 duration-200 ease-in' : 'opacity-0 duration-100 ease-out'}`} />
-                <X className={`h-2.5 w-2.5 sm:h-3 sm:w-3 text-gray-400 dark:text-gray-500 ${enableGoogleSearch && isSearchSupported ? 'opacity-0 duration-100 ease-out' : 'opacity-100 duration-200 ease-in'}`} />
-              </span>
-            }
-          />
-
-          {/* Code Execution Toggle */}
-          <FeatureToggle
-            label="Enable Code Execution"
-            description={isCodeExecutionSupported
-              ? "Allows the model to execute code (e.g., Python)."
-              : "Code execution not supported by this model."
-            }
-            checked={enableCodeExecution && isCodeExecutionSupported}
-            onChange={handleCodeExecToggle}
-            disabled={!isCodeExecutionSupported || (enableGoogleSearch && isSearchSupported)}
-            icon={
-              <Code className={`h-2.5 w-2.5 sm:h-3 sm:w-3 text-indigo-600 ${enableCodeExecution && isCodeExecutionSupported ? 'opacity-100' : 'opacity-0'}`} />
-            }
-          />
-
-          {/* Enable Thinking Process Toggle */}
-          <FeatureToggle
-            label="Enable Thinking Process"
-            description={isThinkingSupported
-              ? "Enables the model's thinking process for complex tasks."
-              : "Thinking process not supported by this model."
-            }
-            checked={enableThinking && isThinkingSupported}
-            onChange={handleThinkingToggle}
-            disabled={!isThinkingSupported}
-          />
-
-          {/* Thinking Budget Slider (conditionally rendered) */}
-          {enableThinking && isThinkingSupported && isThinkingBudgetSupported && (
-            <ThinkingBudgetControl
-              value={thinkingBudget}
-              onChange={onThinkingBudgetChange}
+          <div className="bg-gray-800 rounded-xl p-4 shadow-md">
+            <h3 className="text-sm font-medium mb-2 text-gray-300">System Instruction</h3>
+            <SystemInstructionField
+              value={tempInstruction}
+              onChange={setTempInstruction}
+              isApplicable={isSystemInstructionApplicable}
             />
-          )}
+            <p className="text-xs text-gray-500 mt-2">
+              Sets context for the AI (not used in Live mode or for image generation).
+            </p>
+          </div>
 
-          {/* Function Calling / Tool Selection */}
-          <div className="pt-2 border-t border-gray-200 dark:border-gray-700 space-y-3">
-            <ToolSelector
-              enableFunctionCalling={enableFunctionCalling}
-              onEnableFunctionCallingChange={handleFunctionCallingToggle}
-              selectedTools={selectedTools}
-              onSelectedToolsChange={onSelectedToolsChange}
-              isAuthenticated={isAuthenticated}
-            />
-            
-            {/* Function Calling Mode Selector */}
-            <FunctionCallingModeSelector
-              functionCallingMode={functionCallingMode}
-              onFunctionCallingModeChange={onFunctionCallingModeChange}
-              enabled={enableFunctionCalling}
-            />
+          {/* Advanced Model Settings (collapsible) */}
+          <div className="bg-gray-800 rounded-xl p-4 shadow-md">
+            <button 
+              onClick={() => setShowAdvancedSettings(!showAdvancedSettings)}
+              className="flex items-center justify-between w-full text-left"
+            >
+              <h3 className="text-sm font-medium text-gray-300">Advanced Model Settings</h3>
+              {showAdvancedSettings ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+            </button>
+
+            {showAdvancedSettings && (
+              <div className="mt-4 space-y-5">
+                {/* Temperature */}
+                <div>
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="text-xs text-gray-400">Temperature: {temperature.toFixed(1)}</label>
+                    <span className="text-xs text-gray-400">
+                      {temperature < 0.3 ? 'Deterministic' : 
+                       temperature > 0.9 ? 'Random' : 
+                       temperature === 0.7 ? 'Balanced' : ''}
+                    </span>
+                  </div>
+                  <TemperatureControl
+                    value={temperature}
+                    onChange={onTemperatureChange}
+                  />
+                </div>
+              
+                {/* Max Output Tokens */}
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">Max Output Tokens</label>
+                  <MaxOutputTokensControl
+                    value={maxOutputTokens}
+                    onChange={onMaxOutputTokensChange}
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Maximum length of the generated response.
+                  </p>
+                </div>
+
+                {/* Show Thoughts Toggle (only for Gemini 2.5 models) */}
+                {isThinkingSupported && (
+                  <div className="pt-4 border-t border-gray-700">
+                    <div className="flex items-center justify-between mb-2">
+                      <h3 className="text-xs font-medium text-gray-400">Show Thoughts</h3>
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input 
+                          type="checkbox" 
+                          className="sr-only peer" 
+                          checked={enableThinking}
+                          onChange={(e) => handleThinkingToggle(e.target.checked)}
+                          disabled={!isThinkingSupported}
+                        />
+                        <div className={`w-9 h-5 bg-gray-600 rounded-full peer peer-checked:bg-indigo-600 peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all ${!isThinkingSupported ? 'opacity-50' : ''}`}></div>
+                      </label>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1 mb-3">
+                      {isThinkingSupported 
+                        ? "Shows the model's reasoning process for complex tasks." 
+                        : "Thinking process not supported by this model."}
+                    </p>
+                  </div>
+                )}
+
+                {/* Thinking Budget (only show if thinking is enabled) */}
+                {enableThinking && isThinkingSupported && isThinkingBudgetSupported && (
+                  <div className="pt-2">
+                    <h3 className="text-xs font-medium text-gray-400 mb-2">Thinking Budget</h3>
+                    <div className="flex justify-between items-center mb-1">
+                      <span className="text-xs text-gray-400">
+                        {thinkingBudget === -1 ? "Dynamic (Auto)" : thinkingBudget === 0 ? "Disabled" : `${thinkingBudget} tokens`}
+                      </span>
+                    </div>
+                    <ThinkingBudgetControl
+                      value={thinkingBudget}
+                      onChange={onThinkingBudgetChange}
+                    />
+                    <div className="flex justify-between text-xs text-gray-500 mt-1">
+                      <span>Dynamic</span>
+                      <span>Max</span>
+                    </div>
+                    <p className="text-xs text-gray-500 mt-2">
+                      {thinkingBudget === -1 
+                        ? "Model automatically adjusts thinking based on complexity." 
+                        : thinkingBudget === 0
+                        ? "Thinking process is disabled."
+                        : "Higher values allow more detailed reasoning for complex tasks."}
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
         {/* Footer with Save/Cancel Buttons */}
-        <div className="mt-auto pt-4 sm:pt-6 flex flex-col sm:flex-row justify-end space-y-2 sm:space-y-0 sm:space-x-3 flex-shrink-0 border-t border-gray-200 dark:border-gray-700">
+        <div className="mt-auto pt-4 sm:pt-6 flex flex-col sm:flex-row justify-end space-y-2 sm:space-y-0 sm:space-x-3 flex-shrink-0 border-t border-gray-700">
           <button
             onClick={onClose}
-            className="w-full sm:w-auto px-3 py-2 sm:px-4 border border-gray-300 dark:border-gray-600 rounded-md text-xs sm:text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+            className="w-full sm:w-auto px-3 py-2 sm:px-4 border border-gray-600 rounded-md text-xs sm:text-sm text-gray-300 hover:bg-gray-800 transition-colors"
           >
             Cancel
           </button>
           <button
             onClick={handleSave}
-            className="w-full sm:w-auto px-3 py-2 sm:px-4 bg-indigo-500 text-white rounded-md hover:bg-indigo-600 transition-colors text-xs sm:text-sm"
+            className="w-full sm:w-auto px-3 py-2 sm:px-4 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors text-xs sm:text-sm"
           >
             Apply Changes
           </button>

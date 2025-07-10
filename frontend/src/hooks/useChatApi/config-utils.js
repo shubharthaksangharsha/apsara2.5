@@ -101,13 +101,23 @@ export const applyConfigSettings = (
   if (typeof enableThinking === 'boolean') { // Check if enableThinking is explicitly set
     if (enableThinking) {
       config.thinkingConfig = { includeThoughts: true };
-      // Add thinkingBudget if it's a non-negative number (including 0)
-      if (typeof thinkingBudget === 'number' && thinkingBudget >= 0) {
-        config.thinkingConfig.thinkingBudget = thinkingBudget;
+      
+      // Handle thinkingBudget - explicitly check for -1 for dynamic thinking
+      if (typeof thinkingBudget === 'number') {
+        if (thinkingBudget === -1) {
+          // Dynamic thinking mode
+          config.thinkingConfig.thinkingBudget = -1;
+          console.log("[applyConfigSettings] Using dynamic thinking mode (thinkingBudget: -1)");
+        } else if (thinkingBudget >= 0) {
+          // Fixed budget
+          config.thinkingConfig.thinkingBudget = thinkingBudget;
+          console.log("[applyConfigSettings] Using fixed thinking budget:", thinkingBudget);
+        }
       }
     } else {
       // If thinking is explicitly disabled, send includeThoughts: false
       config.thinkingConfig = { includeThoughts: false };
+      console.log("[applyConfigSettings] Thinking disabled");
     }
   }
 

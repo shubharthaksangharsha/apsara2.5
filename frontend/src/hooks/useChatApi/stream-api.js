@@ -45,6 +45,7 @@ const cleanMessagesForApi = (messages) => {
  * @param {Array|null} explicitFiles - Explicit files to use instead of uploadedFiles
  * @param {boolean|null} overrideEnableFunctionCalling - Override for function calling enablement
  * @param {Array|null} overrideSelectedTools - Override for selected tools
+ * @param {AbortSignal|null} abortSignal - Signal to abort the fetch request
  * @param {Function} setIsLoading - State setter for loading indicator
  * @param {Function} setStreamingModelMessageId - State setter for streaming message ID
  * @param {string|null} activeConvoId - Active conversation ID
@@ -77,6 +78,7 @@ export const startStreamChat = async (
   explicitFiles = null,
   overrideEnableFunctionCalling = null,
   overrideSelectedTools = null,
+  abortSignal = null,
   setIsLoading,
   setStreamingModelMessageId,
   activeConvoId,
@@ -234,6 +236,7 @@ export const startStreamChat = async (
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(baseRequestBody),
+      signal: abortSignal, // Add the abort signal
     });
 
     // Clear uploaded files after the request is made (success or fail)
@@ -252,297 +255,336 @@ export const startStreamChat = async (
     let lineBuffer = '';
     let finalMetadata = {}; // Keep track of final metadata separately
 
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
+    // Process the stream response
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
 
-      lineBuffer += decoder.decode(value, { stream: true });
-      let lines = lineBuffer.split('\n\n');
-      lineBuffer = lines.pop() || '';
+        lineBuffer += decoder.decode(value, { stream: true });
+        let lines = lineBuffer.split('\n\n');
+        lineBuffer = lines.pop() || '';
 
-      for (const line of lines) {
-        if (!line.trim()) continue;
+        for (const line of lines) {
+          if (!line.trim()) continue;
 
-        if (line.startsWith('data: ')) {
-          const jsonData = line.slice(6);
-          try {
-            const data = JSON.parse(jsonData);
-            console.log('[useChatApi Stream] Received data chunk:', data); // <-- ADD THIS LINE
+          if (line.startsWith('data: ')) {
+            const jsonData = line.slice(6);
+            try {
+              const data = JSON.parse(jsonData);
+              console.log('[useChatApi Stream] Received data chunk:', data); // <-- ADD THIS LINE
 
-            // --- Handle Different Part Types ---
-            if (data.text || data.inlineData || data.executableCode || data.codeExecutionResult || data.thought) { // Added data.thought here
-                 setConvos(prevConvos => prevConvos.map(c => {
-                    if (c.id !== finalConvoId) return c;
-                    const updatedMessages = c.messages.map(m => {
-                        if (m.id === tempModelMessageId) {
-                            let currentParts = m.parts ? [...m.parts] : [];
-                            let newPart = {}; // Create a new part object
+              // --- Handle Different Part Types ---
+              if (data.text || data.inlineData || data.executableCode || data.codeExecutionResult || data.thought) { // Added data.thought here
+                   setConvos(prevConvos => prevConvos.map(c => {
+                      if (c.id !== finalConvoId) return c;
+                      const updatedMessages = c.messages.map(m => {
+                          if (m.id === tempModelMessageId) {
+                              let currentParts = m.parts ? [...m.parts] : [];
+                              let newPart = {}; // Create a new part object
 
-                            // Handle text - append or add new
-                            if (data.text) {
-                                const lastPartIndex = currentParts.length - 1;
-                                if (lastPartIndex >= 0 && 
-                                    typeof currentParts[lastPartIndex] === 'object' && 
-                                    'text' in currentParts[lastPartIndex] &&
-                                    // Ensure thought status matches for appending
-                                    (currentParts[lastPartIndex].thought === true) === (data.thought === true)) { 
-                                    currentParts[lastPartIndex] = { 
-                                        ...currentParts[lastPartIndex], 
-                                        text: currentParts[lastPartIndex].text + data.text 
-                                        // 'thought' status is preserved from currentParts[lastPartIndex]
-                                    };
-                                    newPart = null; // Indicate no new part needs to be pushed
-                                } else {
-                                    newPart.text = data.text;
-                                }
-                            }
-                            // Handle images (inlineData) - add new
-                            if (data.inlineData) { 
-                                if (newPart === null) newPart = {}; // Reinitialize if it was nulled by text append
-                                newPart.inlineData = data.inlineData;
-                            }
-                            // Handle executable code - add new
-                            if (data.executableCode) { 
-                                if (newPart === null) newPart = {}; // Reinitialize
-                                newPart.executableCode = data.executableCode;
-                            }
-                            // Handle code result - add new
-                            if (data.codeExecutionResult) { 
-                                if (newPart === null) newPart = {}; // Reinitialize
-                                newPart.codeExecutionResult = data.codeExecutionResult;
-                            }
-                            
-                            // Preserve the thought property ONLY if newPart is being created
-                            // AND it's not an executableCode or codeExecutionResult part.
-                            if (newPart && data.thought && !newPart.executableCode && !newPart.codeExecutionResult) {
-                                newPart.thought = true; 
-                            }
+                              // Handle text - append or add new
+                              if (data.text) {
+                                  const lastPartIndex = currentParts.length - 1;
+                                  if (lastPartIndex >= 0 && 
+                                      typeof currentParts[lastPartIndex] === 'object' && 
+                                      'text' in currentParts[lastPartIndex] &&
+                                      // Ensure thought status matches for appending
+                                      (currentParts[lastPartIndex].thought === true) === (data.thought === true)) { 
+                                      currentParts[lastPartIndex] = { 
+                                          ...currentParts[lastPartIndex], 
+                                          text: currentParts[lastPartIndex].text + data.text 
+                                          // 'thought' status is preserved from currentParts[lastPartIndex]
+                                      };
+                                      newPart = null; // Indicate no new part needs to be pushed
+                                  } else {
+                                      newPart.text = data.text;
+                                  }
+                              }
+                              // Handle images (inlineData) - add new
+                              if (data.inlineData) { 
+                                  if (newPart === null) newPart = {}; // Reinitialize if it was nulled by text append
+                                  newPart.inlineData = data.inlineData;
+                              }
+                              // Handle executable code - add new
+                              if (data.executableCode) { 
+                                  if (newPart === null) newPart = {}; // Reinitialize
+                                  newPart.executableCode = data.executableCode;
+                              }
+                              // Handle code result - add new
+                              if (data.codeExecutionResult) { 
+                                  if (newPart === null) newPart = {}; // Reinitialize
+                                  newPart.codeExecutionResult = data.codeExecutionResult;
+                              }
+                              
+                              // Preserve the thought property ONLY if newPart is being created
+                              // AND it's not an executableCode or codeExecutionResult part.
+                              if (newPart && data.thought && !newPart.executableCode && !newPart.codeExecutionResult) {
+                                  newPart.thought = true; 
+                              }
 
-                            if (newPart && Object.keys(newPart).length > 0) {
-                                currentParts.push(newPart);
-                            }
-                            
-                            return { ...m, parts: currentParts };
-                        }
-                        return m;
-                    });
-                    return { ...c, messages: updatedMessages };
-                 }));
+                              if (newPart && Object.keys(newPart).length > 0) {
+                                  currentParts.push(newPart);
+                              }
+                              
+                              return { ...m, parts: currentParts };
+                          }
+                          return m;
+                      });
+                      return { ...c, messages: updatedMessages };
+                   }));
+              }
+
+              // --- Store Metadata Separately ---
+              // We don't update the message metadata until the stream finishes
+              if (data.finishReason) {
+                 finalMetadata.finishReason = data.finishReason;
+              }
+              if (data.usageMetadata) {
+                 finalMetadata.usageMetadata = data.usageMetadata;
+              }
+
+            } catch (e) {
+              console.error('Error parsing stream data chunk:', e, "Problematic JSON:", jsonData);
             }
-
-            // --- Store Metadata Separately ---
-            // We don't update the message metadata until the stream finishes
-            if (data.finishReason) {
-               finalMetadata.finishReason = data.finishReason;
-            }
-            if (data.usageMetadata) {
-               finalMetadata.usageMetadata = data.usageMetadata;
-            }
-
-          } catch (e) {
-            console.error('Error parsing stream data chunk:', e, "Problematic JSON:", jsonData);
+          } else if (line.startsWith('event: error')) {
+               const errorPayload = line.slice(line.indexOf(':') + 1);
+               const errorData = JSON.parse(errorPayload);
+               throw new Error(errorData.error || 'Unknown stream error event');
+          } else if (line.startsWith('event: function_call')) {
+               try {
+                   const functionCallPayload = line.slice(line.indexOf('data:') + 5).trim();
+                   const functionCallData = JSON.parse(functionCallPayload);
+                   console.log('Function call event:', functionCallData);
+                   // Handle function call display in the UI
+                   if (functionCallData.functionCall) {
+                       const isImageFunction = functionCallData.functionCall.name === 'generateImage' || 
+                                             functionCallData.functionCall.name === 'editImage';
+                       
+                       console.log('🔧 Function call detected:', functionCallData.functionCall.name, 'isImageFunction:', isImageFunction);
+                       
+                       setConvos(prevConvos => prevConvos.map(c => {
+                           if (c.id !== finalConvoId) return c;
+                           const updatedMessages = c.messages.map(m => {
+                               if (m.id === tempModelMessageId) {
+                                   const currentParts = [...(m.parts || [])];
+                                   
+                                   if (isImageFunction) {
+                                       // Add image loading spinner for image generation functions
+                                       console.log('🖼️ Adding image loading spinner');
+                                       currentParts.push({
+                                           imageLoading: true,
+                                           functionName: functionCallData.functionCall.name,
+                                           loadingId: `${tempModelMessageId}-${functionCallData.functionCall.name}-loading`
+                                       });
+                                   } else {
+                                       // Add function call display part for other functions
+                                       currentParts.push({
+                                           text: `🔧 Calling function: ${functionCallData.functionCall.name}`
+                                       });
+                                   }
+                                   return { ...m, parts: currentParts };
+                               }
+                               return m;
+                           });
+                           return { ...c, messages: updatedMessages };
+                       }));
+                   }
+               } catch (e) {
+                   console.error('Error parsing function call event:', e);
+               }
+          } else if (line.startsWith('event: function_result')) {
+               try {
+                   const functionResultPayload = line.slice(line.indexOf('data:') + 5).trim();
+                   const functionResultData = JSON.parse(functionResultPayload);
+                   console.log('Function result event:', functionResultData);
+                   // Handle function result display in the UI
+                   if (functionResultData.functionCall && functionResultData.result) {
+                       const isImageFunction = functionResultData.functionCall.name === 'generateImage' || 
+                                             functionResultData.functionCall.name === 'editImage';
+                       
+                       setConvos(prevConvos => prevConvos.map(c => {
+                           if (c.id !== finalConvoId) return c;
+                           const updatedMessages = c.messages.map(m => {
+                               if (m.id === tempModelMessageId) {
+                                   const currentParts = [...(m.parts || [])];
+                                   
+                                   if (isImageFunction) {
+                                       // Update loading spinner to show processing for image functions
+                                       const loadingPartIndex = currentParts.findIndex(p => 
+                                           p.imageLoading && p.functionName === functionResultData.functionCall.name
+                                       );
+                                       if (loadingPartIndex !== -1) {
+                                           currentParts[loadingPartIndex] = {
+                                               ...currentParts[loadingPartIndex],
+                                               loadingText: 'Processing image...'
+                                           };
+                                       }
+                                   } else {
+                                       // Add function result display part for other functions
+                                       currentParts.push({
+                                           text: `✅ ${functionResultData.functionCall.name} completed\n`
+                                       });
+                                   }
+                                   return { ...m, parts: currentParts };
+                               }
+                               return m;
+                           });
+                           return { ...c, messages: updatedMessages };
+                       }));
+                   }
+               } catch (e) {
+                   console.error('Error parsing function result event:', e);
+               }
+          } else if (line.startsWith('event: image_result')) {
+               try {
+                   const imageResultPayload = line.slice(line.indexOf('data:') + 5).trim();
+                   const imageResultData = JSON.parse(imageResultPayload);
+                   console.log('🖼️ Image result event received:', imageResultData);
+                   
+                   // Handle image result - replace loading spinner with actual image
+                   if (imageResultData.inlineData) {
+                       setConvos(prevConvos => prevConvos.map(c => {
+                           if (c.id !== finalConvoId) return c;
+                           const updatedMessages = c.messages.map(m => {
+                               if (m.id === tempModelMessageId) {
+                                   const currentParts = [...(m.parts || [])];
+                                   
+                                   // Find and replace the loading spinner with the actual image
+                                   const loadingPartIndex = currentParts.findIndex(p => 
+                                       p.imageLoading && (p.functionName === 'generateImage' || p.functionName === 'editImage')
+                                   );
+                                   
+                                   console.log('🖼️ Looking for loading spinner, found at index:', loadingPartIndex);
+                                   console.log('🖼️ Current parts:', currentParts.map(p => ({ 
+                                       hasText: !!p.text, 
+                                       hasImage: !!p.inlineData, 
+                                       isLoading: !!p.imageLoading,
+                                       functionName: p.functionName 
+                                   })));
+                                   
+                                   if (loadingPartIndex !== -1) {
+                                       // Replace loading spinner with image
+                                       console.log('🖼️ Replacing loading spinner with image');
+                                       currentParts[loadingPartIndex] = {
+                                           inlineData: imageResultData.inlineData
+                                       };
+                                   } else {
+                                       // Fallback: add image as new part if no loading spinner found
+                                       console.log('🖼️ Loading spinner not found, adding image as new part');
+                                       currentParts.push({
+                                           inlineData: imageResultData.inlineData
+                                       });
+                                   }
+                                   
+                                   return { ...m, parts: currentParts };
+                               }
+                               return m;
+                           });
+                           return { ...c, messages: updatedMessages };
+                       }));
+                   }
+               } catch (e) {
+                   console.error('Error parsing image result event:', e);
+               }
           }
-        } else if (line.startsWith('event: error')) {
-             const errorPayload = line.slice(line.indexOf(':') + 1);
-             const errorData = JSON.parse(errorPayload);
-             throw new Error(errorData.error || 'Unknown stream error event');
-        } else if (line.startsWith('event: function_call')) {
-             try {
-                 const functionCallPayload = line.slice(line.indexOf('data:') + 5).trim();
-                 const functionCallData = JSON.parse(functionCallPayload);
-                 console.log('Function call event:', functionCallData);
-                 // Handle function call display in the UI
-                 if (functionCallData.functionCall) {
-                     const isImageFunction = functionCallData.functionCall.name === 'generateImage' || 
-                                           functionCallData.functionCall.name === 'editImage';
-                     
-                     console.log('🔧 Function call detected:', functionCallData.functionCall.name, 'isImageFunction:', isImageFunction);
-                     
-                     setConvos(prevConvos => prevConvos.map(c => {
-                         if (c.id !== finalConvoId) return c;
-                         const updatedMessages = c.messages.map(m => {
-                             if (m.id === tempModelMessageId) {
-                                 const currentParts = [...(m.parts || [])];
-                                 
-                                 if (isImageFunction) {
-                                     // Add image loading spinner for image generation functions
-                                     console.log('🖼️ Adding image loading spinner');
-                                     currentParts.push({
-                                         imageLoading: true,
-                                         functionName: functionCallData.functionCall.name,
-                                         loadingId: `${tempModelMessageId}-${functionCallData.functionCall.name}-loading`
-                                     });
-                                 } else {
-                                     // Add function call display part for other functions
-                                     currentParts.push({
-                                         text: `🔧 Calling function: ${functionCallData.functionCall.name}`
-                                     });
-                                 }
-                                 return { ...m, parts: currentParts };
-                             }
-                             return m;
-                         });
-                         return { ...c, messages: updatedMessages };
-                     }));
-                 }
-             } catch (e) {
-                 console.error('Error parsing function call event:', e);
-             }
-        } else if (line.startsWith('event: function_result')) {
-             try {
-                 const functionResultPayload = line.slice(line.indexOf('data:') + 5).trim();
-                 const functionResultData = JSON.parse(functionResultPayload);
-                 console.log('Function result event:', functionResultData);
-                 // Handle function result display in the UI
-                 if (functionResultData.functionCall && functionResultData.result) {
-                     const isImageFunction = functionResultData.functionCall.name === 'generateImage' || 
-                                           functionResultData.functionCall.name === 'editImage';
-                     
-                     setConvos(prevConvos => prevConvos.map(c => {
-                         if (c.id !== finalConvoId) return c;
-                         const updatedMessages = c.messages.map(m => {
-                             if (m.id === tempModelMessageId) {
-                                 const currentParts = [...(m.parts || [])];
-                                 
-                                 if (isImageFunction) {
-                                     // Update loading spinner to show processing for image functions
-                                     const loadingPartIndex = currentParts.findIndex(p => 
-                                         p.imageLoading && p.functionName === functionResultData.functionCall.name
-                                     );
-                                     if (loadingPartIndex !== -1) {
-                                         currentParts[loadingPartIndex] = {
-                                             ...currentParts[loadingPartIndex],
-                                             loadingText: 'Processing image...'
-                                         };
-                                     }
-                                 } else {
-                                     // Add function result display part for other functions
-                                     currentParts.push({
-                                         text: `✅ ${functionResultData.functionCall.name} completed\n`
-                                     });
-                                 }
-                                 return { ...m, parts: currentParts };
-                             }
-                             return m;
-                         });
-                         return { ...c, messages: updatedMessages };
-                     }));
-                 }
-             } catch (e) {
-                 console.error('Error parsing function result event:', e);
-             }
-        } else if (line.startsWith('event: image_result')) {
-             try {
-                 const imageResultPayload = line.slice(line.indexOf('data:') + 5).trim();
-                 const imageResultData = JSON.parse(imageResultPayload);
-                 console.log('🖼️ Image result event received:', imageResultData);
-                 
-                 // Handle image result - replace loading spinner with actual image
-                 if (imageResultData.inlineData) {
-                     setConvos(prevConvos => prevConvos.map(c => {
-                         if (c.id !== finalConvoId) return c;
-                         const updatedMessages = c.messages.map(m => {
-                             if (m.id === tempModelMessageId) {
-                                 const currentParts = [...(m.parts || [])];
-                                 
-                                 // Find and replace the loading spinner with the actual image
-                                 const loadingPartIndex = currentParts.findIndex(p => 
-                                     p.imageLoading && (p.functionName === 'generateImage' || p.functionName === 'editImage')
-                                 );
-                                 
-                                 console.log('🖼️ Looking for loading spinner, found at index:', loadingPartIndex);
-                                 console.log('🖼️ Current parts:', currentParts.map(p => ({ 
-                                     hasText: !!p.text, 
-                                     hasImage: !!p.inlineData, 
-                                     isLoading: !!p.imageLoading,
-                                     functionName: p.functionName 
-                                 })));
-                                 
-                                 if (loadingPartIndex !== -1) {
-                                     // Replace loading spinner with image
-                                     console.log('🖼️ Replacing loading spinner with image');
-                                     currentParts[loadingPartIndex] = {
-                                         inlineData: imageResultData.inlineData
-                                     };
-                                 } else {
-                                     // Fallback: add image as new part if no loading spinner found
-                                     console.log('🖼️ Loading spinner not found, adding image as new part');
-                                     currentParts.push({
-                                         inlineData: imageResultData.inlineData
-                                     });
-                                 }
-                                 
-                                 return { ...m, parts: currentParts };
-                             }
-                             return m;
-                         });
-                         return { ...c, messages: updatedMessages };
-                     }));
-                 }
-             } catch (e) {
-                 console.error('Error parsing image result event:', e);
-             }
-        }
-        // Note: The original logic didn't explicitly handle event: done,
-        // it relied on the reader finishing (done = true).
-        // We also don't need the 'finishReason' block inside the loop anymore.
-      } // end for...of lines
-    } // end while(true)
+          // Note: The original logic didn't explicitly handle event: done,
+          // it relied on the reader finishing (done = true).
+          // We also don't need the 'finishReason' block inside the loop anymore.
+        } // end for...of lines
+      } // end while(true)
 
-    // --- Finalize Message After Stream ---
-    setConvos(prevConvos => prevConvos.map(c => {
-       if (c.id !== finalConvoId) return c;
-        let finalTitle = c.title;
-        // Set title if it was a new chat
-        const userPrompt = turns.find(turn => turn.role === 'user');
-        const userPromptText = userPrompt?.parts?.[0]?.text;
-        if (c.title === 'New Chat' && userPromptText) {
-            finalTitle = userPromptText.length > 30 ? userPromptText.substring(0, 30) + '...' : userPromptText;
-        }
-        return {
-           ...c,
-           title: finalTitle,
-           messages: c.messages.map(m => {
-             if (m.id === tempModelMessageId) {
-               // Ensure message isn't empty, add metadata
-               const finalParts = (m.parts && m.parts.length > 0) ? m.parts : [{ text: '(Empty Response)' }];
-               // Ensure first part has text if parts exist but none do (edge case)
-                if (finalParts.length > 0 && finalParts.every(p => !p.text)) {
-                   finalParts.unshift({ text: '(No text response)' });
-                }
-               return {
-                 ...m,
-                 parts: finalParts,
-                 metadata: finalMetadata // Add collected metadata
-               };
-             }
-             return m;
-           })
-        };
-     }));
+      // --- Finalize Message After Stream ---
+      setConvos(prevConvos => prevConvos.map(c => {
+         if (c.id !== finalConvoId) return c;
+          let finalTitle = c.title;
+          // Set title if it was a new chat
+          const userPrompt = turns.find(turn => turn.role === 'user');
+          const userPromptText = userPrompt?.parts?.[0]?.text;
+          if (c.title === 'New Chat' && userPromptText) {
+              finalTitle = userPromptText.length > 30 ? userPromptText.substring(0, 30) + '...' : userPromptText;
+          }
+          return {
+             ...c,
+             title: finalTitle,
+             messages: c.messages.map(m => {
+               if (m.id === tempModelMessageId) {
+                 // Ensure message isn't empty, add metadata
+                 const finalParts = (m.parts && m.parts.length > 0) ? m.parts : [{ text: '(Empty Response)' }];
+                 // Ensure first part has text if parts exist but none do (edge case)
+                  if (finalParts.length > 0 && finalParts.every(p => !p.text)) {
+                     finalParts.unshift({ text: '(No text response)' });
+                  }
+                 return {
+                   ...m,
+                   parts: finalParts,
+                   metadata: finalMetadata // Add collected metadata
+                 };
+               }
+               return m;
+             })
+          };
+       }));
 
-   } catch (err) {
-     console.error('Stream chat error:', err);
-     setConvos(prevConvos => prevConvos.map(c => {
-       if (c.id !== finalConvoId) return c;
-       let messageUpdated = false;
-       const messagesWithError = c.messages.map(m => {
-         if (m.id === tempModelMessageId) {
-           messageUpdated = true;
-           return { role: 'error', parts: [{ text: `Stream Error: ${err.message}` }], id: tempModelMessageId + '_error' };
-         }
-         return m;
-       });
-       if (!messageUpdated) { messagesWithError.push({ role: 'error', parts: [{ text: `Stream Error: ${err.message}` }], id: Date.now() + Math.random() + '_error' }); }
-       return { ...c, messages: messagesWithError };
-     }));
+  } catch (err) {
+    if (err.name === 'AbortError') {
+      console.log('[useChatApi] Stream request was aborted');
+      
+      // When aborting, we need to clear any pending state like image loading spinners
+      setConvos(prevConvos => prevConvos.map(c => {
+        if (c.id !== finalConvoId) return c;
+        const updatedMessages = c.messages.map(m => {
+          if (m.id === tempModelMessageId) {
+            // Remove loading spinners and add abort message
+            const finalParts = m.parts?.filter(p => !p.imageLoading) || [];
+            // Add an abort message if there's content already
+            if (finalParts.length > 0) {
+              finalParts.push({ text: "\n\n[Request stopped by user]" });
+            } else {
+              finalParts.push({ text: "[Request stopped by user]" });
+            }
+            return {
+              ...m,
+              parts: finalParts
+            };
+          }
+          return m;
+        });
+        return { ...c, messages: updatedMessages };
+      }));
+      
+      // Re-throw the abort error to be handled by the caller
+      throw err;
+    } else {
+      console.error('Stream chat error:', err);
+      setConvos(prevConvos => prevConvos.map(c => {
+        if (c.id !== finalConvoId) return c;
+        let messageUpdated = false;
+        const messagesWithError = c.messages.map(m => {
+          if (m.id === tempModelMessageId) {
+            messageUpdated = true;
+            return { role: 'error', parts: [{ text: `Stream Error: ${err.message}` }], id: tempModelMessageId + '_error' };
+          }
+          return m;
+        });
+        if (!messageUpdated) { messagesWithError.push({ role: 'error', parts: [{ text: `Stream Error: ${err.message}` }], id: Date.now() + Math.random() + '_error' }); }
+        return { ...c, messages: messagesWithError };
+      }));
       // Also clear files on error if they haven't been cleared yet
       if (uploadedFiles && uploadedFiles.length > 0 && clearUploadedFiles) {
           console.log("[useChatApi Stream] Clearing uploaded files after startStreamChat error.");
           clearUploadedFiles();
       }
-   } finally {
-     setIsLoading(false);
-     setStreamingModelMessageId(null); // Clear tracking ID
-   }
+    }
+  } finally {
+    setIsLoading(false);
+    setStreamingModelMessageId(null); // Clear tracking ID
+  }
+} catch (outerErr) {
+  // Handle any errors from the outer try block
+  console.error('[useChatApi] Outer error:', outerErr);
+  setIsLoading(false);
+  setStreamingModelMessageId(null);
+  throw outerErr;
+}
 };

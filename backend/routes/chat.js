@@ -5,194 +5,7 @@ import { toolHandlers } from '../services/tools/index.js';
 
 const router = express.Router();
 
-// Standard chat endpoint
-router.post('/', async (req, res) => {
-  const modelId = req.body.modelId || 'gemini-2.0-flash';
-  try {
-    // Imagen 3
-    if (modelId === 'imagen-3.0-generate-002') {
-      const prompt = req.body.contents.find(c => c.role === 'user').parts.find(p => p.text).text;
-      const cfg = {}, gc = req.body.config?.generationConfig;
-      if (gc?.numberOfImages) cfg.numberOfImages = gc.numberOfImages;
-      if (gc?.aspectRatio) cfg.aspectRatio = gc.aspectRatio;
-      if (gc?.personGeneration) cfg.personGeneration = gc.personGeneration;
-      const result = await req.app.get('ai').models.generateImages({ model: modelId, prompt, config: cfg });
-      const parts = result.generatedImages.map(img => ({ inlineData: { mimeType: 'image/png', data: img.image.imageBytes }}));
-      return res.json({ response: parts });
-    }
-    // Gemini image‐gen
-    if (modelId === 'gemini-2.0-flash-preview-image-generation') {
-      const reqA = buildApiRequest(req.body);
-      const result = await req.app.get('ai').models.generateContent(reqA);
-      const c = result.candidates[0];
-      if (['SAFETY', 'RECITATION'].includes(c.finishReason)) return res.status(400).json({});
-      return res.json({
-        response: c.content.parts,
-        usageMetadata: result.usageMetadata,
-        finishReason: c.finishReason,
-        safetyRatings: c.safetyRatings,
-        groundingMetadata: c.groundingMetadata
-      });
-    }
-    // Default Gemini
-    const cacheService = req.app.get('cacheService');
-    const apiRequest = await buildApiRequestWithCaching(req.body, cacheService);
-    console.log(`[POST /chat] Request to Google API (Model: ${modelId}):`, JSON.stringify(apiRequest, null, 2));
-    let result = await req.app.get('ai').models.generateContent(apiRequest);
-    console.log(`[POST /chat] Response from Google API:`, JSON.stringify(result, null, 2));
-    
-    // Handle function calls if present (supports both parallel and compositional)
-    const functionCalls = result.candidates[0].content.parts.filter(part => part.functionCall);
-    let imagePartsFromFunctions = [];
-    let finalResponseParts = [];
-    
-    if (functionCalls && functionCalls.length > 0) {
-      console.log(`[POST /chat] Processing ${functionCalls.length} function calls${functionCalls.length > 1 ? ' (parallel)' : ''}`);
-      
-      // Create a new conversation with function results
-      const updatedContents = [...apiRequest.contents];
-      
-      // Add the assistant's response with function calls
-      updatedContents.push({
-        role: 'model',
-        parts: result.candidates[0].content.parts
-      });
-      
-      // Execute function calls in parallel for better performance
-      const functionResults = await Promise.allSettled(
-        functionCalls.map(async (part) => {
-          const functionCall = part.functionCall;
-          console.log(`[POST /chat] Executing function: ${functionCall.name}`);
-          
-          try {
-            const handler = toolHandlers[functionCall.name];
-            if (!handler) {
-              console.error(`[POST /chat] No handler found for function: ${functionCall.name}`);
-              return { functionCall, result: { error: `Function '${functionCall.name}' not found` } };
-            } else {
-              const result = await handler(functionCall.args || {});
-              return { functionCall, result };
-            }
-          } catch (error) {
-            console.error(`[POST /chat] Error executing function ${functionCall.name}:`, error);
-            return { functionCall, result: { error: `Function execution failed: ${error.message}` } };
-          }
-        })
-      );
-      
-      // Add all function responses to conversation and collect image data
-      // Special handling for image generation tools - don't send image data back to model
-      let hasImageGeneration = false;
-      functionResults.forEach(({ status, value }) => {
-        if (status === 'fulfilled') {
-          const { functionCall, result } = value;
-          
-          // Check if this is an image generation or editing tool
-          const isImageTool = functionCall.name === 'generateImage' || functionCall.name === 'editImage';
-          
-          if (isImageTool && result && result.imageData && result.mimeType) {
-            console.log(`[POST /chat] Found image data from function: ${functionCall.name}, not sending back to model`);
-            hasImageGeneration = true;
-            
-            // Add image data for display
-            imagePartsFromFunctions.push({
-              inlineData: {
-                mimeType: result.mimeType,
-                data: result.imageData
-              }
-            });
-            
-            // Add a simple text response instead of the full image data
-            updatedContents.push({
-              role: 'user',
-              parts: [{
-                functionResponse: {
-                  name: functionCall.name,
-                  response: { 
-                    result: {
-                      status: result.status,
-                      message: result.message,
-                      description: result.description || 'Image generated successfully'
-                    }
-                  }
-                }
-              }]
-            });
-          } else {
-            // For non-image tools, send full result
-            updatedContents.push({
-              role: 'user',
-              parts: [{
-                functionResponse: {
-                  name: functionCall.name,
-                  response: { result }
-                }
-              }]
-            });
-          }
-        } else {
-          console.error(`[POST /chat] Function execution failed:`, status);
-        }
-      });
-      
-      // For image generation tools, skip the follow-up request to avoid token limits
-      if (hasImageGeneration) {
-        console.log(`[POST /chat] Skipping follow-up request for image generation tool`);
-        // Use the description from the image generation result as the response
-        const imageResult = functionResults.find(({ status, value }) => 
-          status === 'fulfilled' && 
-          (value.functionCall.name === 'generateImage' || value.functionCall.name === 'editImage')
-        );
-        
-        if (imageResult && imageResult.value.result.description) {
-          finalResponseParts = [{ text: imageResult.value.result.description }];
-        } else {
-          finalResponseParts = [{ text: 'Image generated successfully.' }];
-        }
-      } else {
-        // Make another request with function results for non-image tools
-        const followUpRequest = {
-          ...apiRequest,
-          contents: updatedContents
-        };
-        
-        console.log(`[POST /chat] Making follow-up request with function results`);
-        result = await req.app.get('ai').models.generateContent(followUpRequest);
-        console.log(`[POST /chat] Follow-up response:`, JSON.stringify(result, null, 2));
-      }
-    } else {
-      // No function calls - extract response parts normally
-      const c = result.candidates[0];
-      if (['SAFETY', 'RECITATION'].includes(c.finishReason)) return res.status(400).json({});
-      
-      // Check if the primary response is within parts (most common case)
-      if (c.content?.parts && Array.isArray(c.content.parts)) {
-          finalResponseParts = c.content.parts;
-      } else if (result.text) { // Fallback for simple text responses
-          finalResponseParts.push({ text: result.text });
-      }
-    }
-
-    // Add any image parts from function results to the final response
-    if (imagePartsFromFunctions && imagePartsFromFunctions.length > 0) {
-      console.log(`[POST /chat] Adding ${imagePartsFromFunctions.length} image parts to final response`);
-      finalResponseParts = [...finalResponseParts, ...imagePartsFromFunctions];
-    }
-
-    // Return the full parts array structure
-    return res.json({
-      response: finalResponseParts, // Send the array of parts (including images)
-      usageMetadata: result.usageMetadata,
-      finishReason: c.finishReason,
-      safetyRatings: c.safetyRatings,
-    });
-  } catch (e) {
-    console.error(e);
-    res.status(500).json({ error: e.message });
-  }
-});
-
-// Streaming chat endpoint
+// Streaming chat endpoint - This is now the only endpoint
 router.post('/stream', async (req, res) => {
   const modelId = req.body.modelId || 'gemini-2.0-flash';
   try {
@@ -202,10 +15,96 @@ router.post('/stream', async (req, res) => {
       'Connection': 'keep-alive',
     });
 
+    // Special handling for image generation models
+    if (modelId === 'imagen-3.0-generate-002') {
+      const prompt = req.body.contents.find(c => c.role === 'user').parts.find(p => p.text).text;
+      const cfg = {}, gc = req.body.config?.generationConfig;
+      if (gc?.numberOfImages) cfg.numberOfImages = gc.numberOfImages;
+      if (gc?.aspectRatio) cfg.aspectRatio = gc.aspectRatio;
+      if (gc?.personGeneration) cfg.personGeneration = gc.personGeneration;
+      
+      try {
+        const result = await req.app.get('ai').models.generateImages({ model: modelId, prompt, config: cfg });
+        // Send each image as a separate event
+        for (const img of result.generatedImages) {
+          const imageDataString = `data: ${JSON.stringify({
+            inlineData: {
+              mimeType: 'image/png',
+              data: img.image.imageBytes
+            }
+          })}\n\n`;
+          res.write(imageDataString);
+        }
+        
+        // Send done event
+        const finalDataString = `event: done\ndata: ${JSON.stringify({
+          finishReason: "STOP",
+          usageMetadata: { totalTokenCount: 0 }
+        })}\n\n`;
+        res.write(finalDataString);
+        res.end();
+        return;
+      } catch (error) {
+        console.error('[POST /chat/stream] Image generation error:', error);
+        const errorDataString = `event: error\ndata: ${JSON.stringify({
+          error: `Image generation failed: ${error.message}`
+        })}\n\n`;
+        res.write(errorDataString);
+        res.end();
+        return;
+      }
+    }
+    
+    // Special handling for Gemini image generation models
+    if (modelId === 'gemini-2.0-flash-preview-image-generation') {
+      const reqA = buildApiRequest(req.body);
+      
+      try {
+        const result = await req.app.get('ai').models.generateContentStream(reqA);
+        
+        for await (const chunk of result) {
+          const candidate = chunk.candidates?.[0];
+          if (!candidate || !candidate.content?.parts) continue;
+          
+          for (const part of candidate.content.parts) {
+            if (part.text) {
+              const dataString = `data: ${JSON.stringify({ text: part.text })}\n\n`;
+              res.write(dataString);
+            } else if (part.inlineData) {
+              const dataString = `data: ${JSON.stringify({ inlineData: part.inlineData })}\n\n`;
+              res.write(dataString);
+            }
+          }
+          
+          if (candidate.finishReason && candidate.finishReason !== 'FINISH_REASON_UNSPECIFIED') {
+            const finalDataString = `event: done\ndata: ${JSON.stringify({
+              finishReason: candidate.finishReason,
+              usageMetadata: chunk.usageMetadata,
+              safetyRatings: candidate.safetyRatings
+            })}\n\n`;
+            res.write(finalDataString);
+            break;
+          }
+        }
+        
+        res.end();
+        return;
+      } catch (error) {
+        console.error('[POST /chat/stream] Image generation error:', error);
+        const errorDataString = `event: error\ndata: ${JSON.stringify({
+          error: `Image generation failed: ${error.message}`
+        })}\n\n`;
+        res.write(errorDataString);
+        res.end();
+        return;
+      }
+    }
+
     const cacheService = req.app.get('cacheService');
     const apiRequest = await buildApiRequestWithCaching(req.body, cacheService);
     console.log(`[POST /chat/stream] Request to Google API (Model: ${modelId}):`, JSON.stringify(apiRequest, null, 2));
     
+    // Rest of the streaming implementation remains unchanged
     // Start with streaming the initial request
     const initialStream = await req.app.get('ai').models.generateContentStream(apiRequest);
     let functionCallsToExecute = [];
@@ -586,7 +485,7 @@ router.post('/stream', async (req, res) => {
   }
 });
 
-// Function result handling endpoint
+// Handle function results from frontend
 router.post('/function-result', async (req, res) => {
   try {
     const { modelId, originalContents, functionResponse, config } = req.body;

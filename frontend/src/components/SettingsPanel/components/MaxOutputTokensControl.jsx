@@ -1,8 +1,8 @@
 import React from 'react';
-import { MAX_OUTPUT_TOKENS_MIN, MAX_OUTPUT_TOKENS_MAX } from '../constants';
+import { MAX_OUTPUT_TOKENS_MIN, MAX_OUTPUT_TOKENS_MAX, MAX_OUTPUT_TOKENS_STEP } from '../constants';
 
 /**
- * Max Output Tokens input control component
+ * Max Output Tokens slider control component
  * 
  * @param {Object} props - Component props
  * @param {number} props.value - Current max output tokens value
@@ -12,22 +12,16 @@ import { MAX_OUTPUT_TOKENS_MIN, MAX_OUTPUT_TOKENS_MAX } from '../constants';
 const MaxOutputTokensControl = ({ value, onChange }) => {
   return (
     <div>
-      <label htmlFor="maxOutputTokens" className="block text-xs sm:text-sm font-medium mb-1">
-        Max Output Tokens
-      </label>
       <input
         id="maxOutputTokens"
-        type="number"
+        type="range"
         min={MAX_OUTPUT_TOKENS_MIN}
         max={MAX_OUTPUT_TOKENS_MAX}
-        step="1"
+        step={MAX_OUTPUT_TOKENS_STEP}
         value={value}
-        onChange={(e) => onChange(parseInt(e.target.value, 10) || MAX_OUTPUT_TOKENS_MIN)}
-        className="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 text-xs sm:text-sm"
+        onChange={(e) => onChange(parseInt(e.target.value, 10))}
+        className="w-full h-2 bg-gray-700 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer accent-indigo-500"
       />
-      <p className="text-[10px] sm:text-xs text-gray-500 dark:text-gray-400 mt-1">
-        Max length of the generated response.
-      </p>
     </div>
   );
 };
