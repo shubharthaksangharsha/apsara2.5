@@ -102,7 +102,7 @@ export async function handleGenerateImage({ prompt }) {
 /**
  * Edits an image using AI
  */
-export async function handleEditImage({ prompt, imageId }) {
+export async function handleEditImage({ prompt, imageId }, context = {}) {
   console.log(`[Tool: editImage] Editing image with prompt: "${prompt.substring(0, 100)}${prompt.length > 100 ? '...' : ''}"`);  
   console.log(`[Tool: editImage] Image store status:`, {
     hasImage: !!imageStore.lastGeneratedImage,
@@ -111,19 +111,31 @@ export async function handleEditImage({ prompt, imageId }) {
   });
   
   try {
+    // Check if we have user-uploaded images from the context
+    const userUploadedImages = context.uploadedFiles?.filter(file => 
+      file.mimetype && file.mimetype.startsWith('image/')
+    ) || [];
+    
+    console.log(`[Tool: editImage] Found ${userUploadedImages.length} user-uploaded images in context`);
+    
     // Check if we have a stored image to edit
-    if (!imageStore.lastGeneratedImage) {
-      console.log(`[Tool: editImage] No previous image found to edit. Generating a new image instead.`);
+    if (!imageStore.lastGeneratedImage && userUploadedImages.length === 0) {
+      console.log(`[Tool: editImage] No previous image or user-uploaded images found. Generating a new image instead.`);
       return handleGenerateImage({ prompt });
     }
     
-    console.log(`[Tool: editImage] Found previous image to edit. Using stored image with edit prompt.`);
+    if (userUploadedImages.length > 0) {
+      console.log(`[Tool: editImage] Using user-uploaded images for editing`);
+    } else {
+      console.log(`[Tool: editImage] Found previous image to edit. Using stored image with edit prompt.`);
+    }
     
     // Call the image editing function with the stored image
     const result = await editImage(
       prompt, 
       imageStore.lastGeneratedImage, 
-      imageStore.lastMimeType || 'image/png'
+      imageStore.lastMimeType || 'image/png',
+      userUploadedImages
     );
     
     if (!result.success) {

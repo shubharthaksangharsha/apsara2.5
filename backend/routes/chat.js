@@ -207,7 +207,11 @@ router.post('/stream', async (req, res) => {
               console.error(`[POST /chat/stream] No handler found for function: ${functionCall.name}`);
               return { functionCall, result: { error: `Function '${functionCall.name}' not found` } };
             } else {
-              const result = await handler(functionCall.args || {});
+              // Pass context with uploaded files to the handler
+              const context = {
+                uploadedFiles: req.body.files || []
+              };
+              const result = await handler(functionCall.args || {}, context);
               return { functionCall, result };
             }
           } catch (error) {

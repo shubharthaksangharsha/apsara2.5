@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { MAX_OUTPUT_TOKENS_STEP } from '../constants';
 
 /**
@@ -35,6 +35,14 @@ const MaxOutputTokensControl = ({ value, onChange, currentModel }) => {
     
     return config;
   }, [currentModel]);
+  
+  // Effect to automatically adjust the value when model changes
+  useEffect(() => {
+    // If current value exceeds the max for the current model, adjust it
+    if (value > modelConfig.max) {
+      onChange(modelConfig.max);
+    }
+  }, [currentModel, modelConfig.max, value, onChange]);
   
   // Calculate tooltip position with boundary protection
   const getTooltipPosition = () => {

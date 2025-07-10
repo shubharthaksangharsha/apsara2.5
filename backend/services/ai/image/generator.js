@@ -63,21 +63,41 @@ export async function generateImage(prompt) {
  * @param {string} prompt - Text prompt describing the desired edits
  * @param {string} baseImageData - Base64 encoded image data to be edited
  * @param {string} mimeType - MIME type of the image (e.g., "image/png")
+ * @param {Array} userUploadedImages - Array of user uploaded images that might be used for editing
  * @returns {Promise<Object>} - Object containing the edited image data and descriptive text
  */
-export async function editImage(prompt, baseImageData, mimeType = "image/png") {
+export async function editImage(prompt, baseImageData, mimeType = "image/png", userUploadedImages = []) {
   try {
     console.log(`[Image Editing] Editing image with prompt: "${prompt.substring(0, 100)}${prompt.length > 100 ? '...' : ''}"`);
     
     const ai = await getGeminiClient();
+    
+    // Determine which image to use for editing
+    let imageToEdit = baseImageData;
+    let imageToEditMimeType = mimeType;
+    
+    // If user uploaded images are available and the prompt indicates editing those images
+    // Check for edit-related keywords in the prompt
+    const editKeywords = ['edit', 'modify', 'change', 'transform', 'alter', 'update'];
+    const isEditRequest = editKeywords.some(keyword => prompt.toLowerCase().includes(keyword));
+    
+    if (userUploadedImages && userUploadedImages.length > 0 && isEditRequest) {
+      console.log(`[Image Editing] Using user-uploaded image for editing instead of last generated image`);
+      // Use the first user-uploaded image
+      const userImage = userUploadedImages[0];
+      if (userImage.data) {
+        imageToEdit = userImage.data;
+        imageToEditMimeType = userImage.mimeType || "image/png";
+      }
+    }
     
     // Prepare the content parts
     const contents = [
       { text: prompt },
       {
         inlineData: {
-          mimeType,
-          data: baseImageData,
+          mimeType: imageToEditMimeType,
+          data: imageToEdit,
         },
       },
     ];

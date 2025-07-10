@@ -3,6 +3,7 @@ import ImageModal from '../ImageModal';
 import UserMessage from './components/UserMessage';
 import ModelMessage from './components/ModelMessage';
 import { MESSAGE_TYPES } from './constants';
+import { ArrowUp, ArrowDown } from 'lucide-react';
 
 /**
  * Main chat window component that displays conversation messages
@@ -15,16 +16,58 @@ import { MESSAGE_TYPES } from './constants';
  */
 export default function ChatWindow({ convo, streamingModelMessageId, isLoading }) {
   const messagesEndRef = useRef(null);
+  const chatContainerRef = useRef(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedImageData, setSelectedImageData] = useState(null);
   const [copiedStates, setCopiedStates] = useState({});
   const [collapsedSections, setCollapsedSections] = useState({});
   const [copiedMsgId, setCopiedMsgId] = useState(null);
+  const [showScrollButton, setShowScrollButton] = useState(false);
+  const [scrollDirection, setScrollDirection] = useState('down'); // 'up' or 'down'
   
   // Scroll to bottom when messages change
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [convo?.messages]);
+
+  // Handle scroll events to show/hide scroll button
+  useEffect(() => {
+    const container = chatContainerRef.current?.closest('.overflow-y-auto');
+    
+    if (!container) return;
+    
+    const handleScroll = () => {
+      const { scrollTop, scrollHeight, clientHeight } = container;
+      const isNearBottom = scrollHeight - scrollTop - clientHeight < 100;
+      const isNearTop = scrollTop < 100;
+      
+      // Show scroll button if not at the bottom
+      setShowScrollButton(!isNearBottom || !isNearTop);
+      
+      // Determine scroll direction based on position
+      if (scrollHeight - scrollTop - clientHeight > 200) {
+        setScrollDirection('down');
+      } else {
+        setScrollDirection('up');
+      }
+    };
+    
+    container.addEventListener('scroll', handleScroll);
+    return () => container.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  const handleScroll = () => {
+    const container = chatContainerRef.current?.closest('.overflow-y-auto');
+    if (!container) return;
+    
+    if (scrollDirection === 'down') {
+      // Scroll to bottom
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    } else {
+      // Scroll to top
+      container.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
 
   const handleImageClick = (imageData) => {
     // Ensure we have a valid imageData object before opening modal
@@ -89,7 +132,7 @@ export default function ChatWindow({ convo, streamingModelMessageId, isLoading }
   const isThinking = streamingModelMessageId !== null || isLoading;
 
   return (
-    <div className="max-w-3xl mx-auto w-full space-y-6 pb-4">
+    <div ref={chatContainerRef} className="max-w-3xl mx-auto w-full space-y-6 pb-4 relative">
       {(convo.messages || []).map((msg, idx, arr) => {
         const uniqueId = msg.id || `msg-${idx}`;
         const isUser = msg.role === MESSAGE_TYPES.USER;
@@ -137,6 +180,21 @@ export default function ChatWindow({ convo, streamingModelMessageId, isLoading }
       
       <div ref={messagesEndRef} />
       <ImageModal isOpen={modalOpen} onClose={closeModal} imageData={selectedImageData} />
+      
+      {/* Scroll button */}
+      {showScrollButton && (
+        <button
+          onClick={handleScroll}
+          className="fixed bottom-20 right-4 sm:right-8 z-10 p-2 rounded-full bg-indigo-600 text-white shadow-lg hover:bg-indigo-700 transition-all duration-200"
+          aria-label={scrollDirection === 'down' ? 'Scroll to bottom' : 'Scroll to top'}
+        >
+          {scrollDirection === 'down' ? (
+            <ArrowDown className="h-5 w-5" />
+          ) : (
+            <ArrowUp className="h-5 w-5" />
+          )}
+        </button>
+      )}
     </div>
   );
 }

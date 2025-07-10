@@ -256,7 +256,7 @@ export default function MessageInput({
             ref={inputRef}
             className={TEXTAREA_CLASS}
             placeholder={
-              disabled ? "Select a conversation..." :
+              disabled ? "Start New Chat" :
               isLoading ? "Apsara is thinking..." : 
               "Ask Apsara anything..."
             }
