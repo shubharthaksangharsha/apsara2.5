@@ -24,6 +24,7 @@ export default function ChatWindow({ convo, streamingModelMessageId, isLoading }
   const [copiedMsgId, setCopiedMsgId] = useState(null);
   const [showScrollButton, setShowScrollButton] = useState(false);
   const [scrollDirection, setScrollDirection] = useState('down'); // 'up' or 'down'
+  const [isScrolling, setIsScrolling] = useState(false);
   
   // Scroll to bottom when messages change
   useEffect(() => {
@@ -41,7 +42,7 @@ export default function ChatWindow({ convo, streamingModelMessageId, isLoading }
       const isNearBottom = scrollHeight - scrollTop - clientHeight < 100;
       const isNearTop = scrollTop < 100;
       
-      // Show scroll button if not at the bottom
+      // Show scroll button if not at the bottom or top
       setShowScrollButton(!isNearBottom || !isNearTop);
       
       // Determine scroll direction based on position
@@ -50,10 +51,28 @@ export default function ChatWindow({ convo, streamingModelMessageId, isLoading }
       } else {
         setScrollDirection('up');
       }
+
+      // Set scrolling state to true
+      setIsScrolling(true);
+      
+      // Clear any existing timeout
+      if (window.scrollTimeout) {
+        clearTimeout(window.scrollTimeout);
+      }
+      
+      // Set a timeout to hide the button after scrolling stops
+      window.scrollTimeout = setTimeout(() => {
+        setIsScrolling(false);
+      }, 1500);
     };
     
     container.addEventListener('scroll', handleScroll);
-    return () => container.removeEventListener('scroll', handleScroll);
+    return () => {
+      container.removeEventListener('scroll', handleScroll);
+      if (window.scrollTimeout) {
+        clearTimeout(window.scrollTimeout);
+      }
+    };
   }, []);
 
   const handleScroll = () => {
@@ -131,6 +150,14 @@ export default function ChatWindow({ convo, streamingModelMessageId, isLoading }
   // Show animation either during streaming or during regular loading
   const isThinking = streamingModelMessageId !== null || isLoading;
 
+  // Determine button visibility class based on scroll state
+  const buttonVisibilityClass = isScrolling ? 'opacity-90' : 'opacity-0';
+  // Determine button style based on theme (assuming a dark theme check)
+  const isDarkTheme = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+  const buttonThemeClass = isDarkTheme ? 
+    'bg-gray-800 text-gray-200 hover:bg-gray-700' : 
+    'bg-gray-200 text-gray-800 hover:bg-gray-300';
+
   return (
     <div ref={chatContainerRef} className="max-w-3xl mx-auto w-full space-y-6 pb-4 relative">
       {(convo.messages || []).map((msg, idx, arr) => {
@@ -181,11 +208,11 @@ export default function ChatWindow({ convo, streamingModelMessageId, isLoading }
       <div ref={messagesEndRef} />
       <ImageModal isOpen={modalOpen} onClose={closeModal} imageData={selectedImageData} />
       
-      {/* Scroll button */}
+      {/* Scroll button - positioned on middle-right side of screen with fade effect */}
       {showScrollButton && (
         <button
           onClick={handleScroll}
-          className="fixed bottom-20 right-4 sm:right-8 z-10 p-2 rounded-full bg-indigo-600 text-white shadow-lg hover:bg-indigo-700 transition-all duration-200"
+          className={`fixed right-4 sm:right-8 top-2/3 transform -translate-y-1/2 z-10 p-2 rounded-full shadow-md transition-all duration-300 ${buttonVisibilityClass} ${buttonThemeClass}`}
           aria-label={scrollDirection === 'down' ? 'Scroll to bottom' : 'Scroll to top'}
         >
           {scrollDirection === 'down' ? (

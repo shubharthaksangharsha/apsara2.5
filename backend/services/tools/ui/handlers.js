@@ -118,24 +118,46 @@ export async function handleEditImage({ prompt, imageId }, context = {}) {
     
     console.log(`[Tool: editImage] Found ${userUploadedImages.length} user-uploaded images in context`);
     
+    // Process user uploaded images if available
+    let processedUserImages = [];
+    if (userUploadedImages.length > 0) {
+      processedUserImages = userUploadedImages.map(file => {
+        // Check for fileData structure (from function call format)
+        if (file.fileData) {
+          console.log('[Tool: editImage] Found fileData structure in uploaded image');
+          return {
+            data: file.fileData.fileUri || null,
+            mimeType: file.fileData.mimeType || 'image/jpeg'
+          };
+        }
+        
+        // Check for direct data
+        if (file.data) {
+          console.log('[Tool: editImage] Found direct data in uploaded image');
+          return {
+            data: file.data,
+            mimeType: file.mimetype || file.mimeType || 'image/jpeg'
+          };
+        }
+        
+        return null;
+      }).filter(Boolean); // Remove any null entries
+      
+      console.log(`[Tool: editImage] Processed ${processedUserImages.length} user images for editing`);
+    }
+    
     // Check if we have a stored image to edit
-    if (!imageStore.lastGeneratedImage && userUploadedImages.length === 0) {
+    if (!imageStore.lastGeneratedImage && processedUserImages.length === 0) {
       console.log(`[Tool: editImage] No previous image or user-uploaded images found. Generating a new image instead.`);
       return handleGenerateImage({ prompt });
     }
     
-    if (userUploadedImages.length > 0) {
-      console.log(`[Tool: editImage] Using user-uploaded images for editing`);
-    } else {
-      console.log(`[Tool: editImage] Found previous image to edit. Using stored image with edit prompt.`);
-    }
-    
-    // Call the image editing function with the stored image
+    // Call the image editing function with the appropriate image
     const result = await editImage(
       prompt, 
       imageStore.lastGeneratedImage, 
       imageStore.lastMimeType || 'image/png',
-      userUploadedImages
+      processedUserImages
     );
     
     if (!result.success) {

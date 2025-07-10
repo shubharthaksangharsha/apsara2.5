@@ -76,19 +76,36 @@ export async function editImage(prompt, baseImageData, mimeType = "image/png", u
     let imageToEdit = baseImageData;
     let imageToEditMimeType = mimeType;
     
-    // If user uploaded images are available and the prompt indicates editing those images
-    // Check for edit-related keywords in the prompt
-    const editKeywords = ['edit', 'modify', 'change', 'transform', 'alter', 'update'];
-    const isEditRequest = editKeywords.some(keyword => prompt.toLowerCase().includes(keyword));
-    
-    if (userUploadedImages && userUploadedImages.length > 0 && isEditRequest) {
-      console.log(`[Image Editing] Using user-uploaded image for editing instead of last generated image`);
+    // Always prioritize user-uploaded images if available
+    if (userUploadedImages && userUploadedImages.length > 0) {
+      console.log(`[Image Editing] User uploaded images found (${userUploadedImages.length}), using first uploaded image for editing`);
       // Use the first user-uploaded image
       const userImage = userUploadedImages[0];
       if (userImage.data) {
-        imageToEdit = userImage.data;
+        // Check if the data is a string (likely a URI or base64 data)
+        if (typeof userImage.data === 'string') {
+          console.log(`[Image Editing] User uploaded image data is a string, using as-is`);
+          imageToEdit = userImage.data;
+        } else {
+          console.log(`[Image Editing] User uploaded image data is not a string, attempting to convert`);
+          // Handle potential object or buffer data
+          try {
+            imageToEdit = JSON.stringify(userImage.data);
+            console.log(`[Image Editing] Converted user uploaded image data to string`);
+          } catch (e) {
+            console.error(`[Image Editing] Failed to convert user image data:`, e);
+            // Fall back to using the stored image
+            console.log(`[Image Editing] Falling back to previously stored image`);
+            imageToEdit = baseImageData;
+          }
+        }
         imageToEditMimeType = userImage.mimeType || "image/png";
+        console.log(`[Image Editing] Selected user uploaded image with mime type: ${imageToEditMimeType}`);
+      } else {
+        console.log(`[Image Editing] User uploaded image has no data, falling back to previously stored image`);
       }
+    } else {
+      console.log(`[Image Editing] No user uploaded images found, using previously stored image`);
     }
     
     // Prepare the content parts
@@ -101,6 +118,14 @@ export async function editImage(prompt, baseImageData, mimeType = "image/png", u
         },
       },
     ];
+    
+    // Log the content parts for debugging
+    console.log(`[Image Editing] Content parts structure:`, {
+      textPartLength: prompt.length,
+      imagePartPresent: !!imageToEdit,
+      imageDataLength: imageToEdit ? imageToEdit.length : 0,
+      mimeType: imageToEditMimeType
+    });
     
     // Set up the request to Gemini
     const response = await ai.models.generateContent({
