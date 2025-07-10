@@ -1,5 +1,5 @@
 import React from 'react';
-import { Sun, Moon, MessageSquare, Settings, LogOut, Database } from 'lucide-react';
+import { Sun, Moon, AudioLines, Settings, LogOut, Database } from 'lucide-react';
 import ProfileImage from './ProfileImage';
 
 /**
@@ -88,7 +88,7 @@ const HeaderButtons = ({
         }`}
         title="Start Live Session"
       >
-        <MessageSquare className={`transition-transform duration-150 ease-in-out group-hover:scale-110 ${isMobile ? 'h-4 w-4' : 'h-4 w-4 sm:h-5 sm:w-5'}`} />
+        <AudioLines className={`transition-transform duration-150 ease-in-out group-hover:scale-110 ${isMobile ? 'h-4 w-4' : 'h-4 w-4 sm:h-5 sm:w-5'}`} />
       </button>
 
       {/* Settings Button - Smaller on mobile */}

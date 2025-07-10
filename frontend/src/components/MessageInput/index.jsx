@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, FolderOpen, UploadCloud, Square, Zap, Sparkles } from 'lucide-react';
+import { Send, FolderOpen, UploadCloud, Square, Zap, Sparkles, AudioLines } from 'lucide-react';
 
 // Import the components for image handling
 import ImageUploadButton from '../ImageUpload';
@@ -19,20 +19,6 @@ import {
   SEND_BUTTON_CLASS,
   DROP_OVERLAY_CLASS
 } from './constants';
-
-/**
- * Live chat icon component
- */
-const LiveChatIcon = ({ className }) => (
-  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className={className}>
-    <path d="M8 5.5a1 1 0 00-1 1v.5h10V6.5a1 1 0 00-1-1H8z" />
-    <path fillRule="evenodd" d="M7 9.5v5a1 1 0 001 1h8a1 1 0 001-1v-5H7zm-1-4a2 2 0 012-2h8a2 2 0 012 2v10a2 2 0 01-2 2H8a2 2 0 01-2-2v-10z" clipRule="evenodd" />
-    <path d="M9 14.5a.5.5 0 01.5-.5h5a.5.5 0 010 1h-5a.5.5 0 01-.5-.5z" />
-    <path d="M9.5 12a.5.5 0 000 1h5a.5.5 0 000-1h-5z" />
-    <path d="M9.5 9a.5.5 0 000 1h5a.5.5 0 000-1h-5z" />
-    <path d="M9.5 6a.5.5 0 000 1h5a.5.5 0 000-1h-5z" />
-  </svg>
-);
 
 /**
  * Message input component with file upload and drag-and-drop support
@@ -56,6 +42,7 @@ const LiveChatIcon = ({ className }) => (
  * @param {Function} props.onToggleTools - Handler for toggling tools
  * @param {number} props.thinkingBudget - Current thinking budget value (-1 for auto, 0 for disabled, >0 for specific budget)
  * @param {boolean} props.isThinkingSupported - Whether thinking is supported by the current model
+ * @param {Function} props.onStartLiveChat - Handler for starting a live chat session
  */
 export default function MessageInput({
   onSend,
@@ -75,7 +62,8 @@ export default function MessageInput({
   enableTools = false,
   onToggleTools,
   thinkingBudget = 0,
-  isThinkingSupported = false
+  isThinkingSupported = false,
+  onStartLiveChat
 }) {
   const [text, setText] = useState('');
   const inputRef = useRef();
@@ -208,12 +196,12 @@ export default function MessageInput({
     } else {
       return (
         <button
-          onClick={handleSend}
-          disabled={isSendDisabled}
+          onClick={onStartLiveChat}
+          disabled={disabled}
           className="p-2 rounded-lg bg-indigo-100 hover:bg-indigo-200 dark:bg-indigo-800 dark:hover:bg-indigo-700 text-indigo-600 dark:text-indigo-400"
           title="Start Live Chat"
         >
-          <LiveChatIcon className="h-5 w-5 sm:h-6 sm:w-6" />
+          <AudioLines className="h-5 w-5 sm:h-6 sm:w-6" />
         </button>
       );
     }

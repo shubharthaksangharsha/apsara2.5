@@ -963,6 +963,7 @@ function AuthenticatedApp({ darkMode, setDarkMode, user, onLogout }) {
           onToggleTools={handleToggleTools}
           thinkingBudget={thinkingBudget}
           isThinkingSupported={isThinkingSupportedByModel}
+          onStartLiveChat={() => setLiveOpen(true)} // Add handler for live chat button
         />
         </div>
       </main>

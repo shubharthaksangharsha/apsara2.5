@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { MoreVertical, Sun, Moon, MessageSquare, Settings, Database, LogOut, X } from 'lucide-react';
+import { MoreVertical, Sun, Moon, AudioLines, Settings, Database, LogOut, X } from 'lucide-react';
 import ProfileImage from './ProfileImage';
 
 /**
@@ -127,7 +127,7 @@ const MobileActionsButton = ({
                   onClick={() => handleActionClick(() => setLiveOpen(true))}
                   className="w-full flex items-center p-3 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-all duration-150 text-left"
                 >
-                  <MessageSquare className="h-5 w-5 mr-3 text-green-500" />
+                  <AudioLines className="h-5 w-5 mr-3 text-green-500" />
                   <span className="font-medium">Start Live Session</span>
                 </button>
 
