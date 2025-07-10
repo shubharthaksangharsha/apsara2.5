@@ -26,7 +26,8 @@ export default function PluginManager({
   onSelectedToolsChange,
   functionCallingMode,
   onFunctionCallingModeChange,
-  isAuthenticated
+  isAuthenticated,
+  user
 }) {
   const [isVisible, setIsVisible] = useState(false);
   const [availableTools, setAvailableTools] = useState([]);
@@ -136,6 +137,19 @@ export default function PluginManager({
     return tools.filter(tool => !testToolNames.includes(tool.name));
   };
 
+  // Check if user is authenticated with Google
+  const isGoogleAuthenticated = () => {
+    if (!user) return false;
+    
+    // Check multiple possible indicators of Google authentication
+    return (
+      user.googleId || // Direct Google ID
+      user.auth_provider === 'google' || // Auth provider field
+      user.provider === 'google' || // Alternative provider field
+      (user.email && user.email.endsWith('@gmail.com')) // Email domain as fallback
+    );
+  };
+
   // Group tools by category and bundle related tools
   const groupToolsByCategory = (tools) => {
     // Filter out test tools first
@@ -219,15 +233,27 @@ export default function PluginManager({
       }
     });
 
+    // Log the authentication status for debugging
+    console.log('Plugin manager: Google auth status check', {
+      isAuthenticated,
+      user: user ? { 
+        name: user.name,
+        googleId: !!user.googleId,
+        auth_provider: user.auth_provider,
+        provider: user.provider,
+        email: user.email
+      } : null,
+      isGoogleAuth: isGoogleAuthenticated()
+    });
+
     // Filter out empty categories and those that require authentication when not authenticated
     return Object.values(categories).filter(category => {
       // Skip categories with no tools
       if (category.tools.length === 0) return false;
       
-      // Always show Google Workspace if function calling is enabled
-      // This fixes the issue where Google Workspace doesn't show up even when signed in
+      // Show Google Workspace only if user is authenticated via Google OAuth
       if (category.name === 'Google Workspace') {
-        return enableFunctionCalling;
+        return isGoogleAuthenticated() && enableFunctionCalling;
       }
       
       // For other categories, just check if they have tools

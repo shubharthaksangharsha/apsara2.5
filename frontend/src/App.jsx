@@ -1019,6 +1019,7 @@ function AuthenticatedApp({ darkMode, setDarkMode, user, onLogout }) {
           functionCallingMode={functionCallingMode}
           onFunctionCallingModeChange={setFunctionCallingMode}
           isAuthenticated={isAuthenticated}
+          user={userProfile}
         />
       )}
 

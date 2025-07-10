@@ -32,6 +32,15 @@ export function useGoogleAuth() {
           // Store profile data in localStorage to avoid repeated fetching
           if (data.profile || data.user) {
             const profileData = data.profile || data.user;
+            
+            // Ensure Google authentication properties are set
+            if (!profileData.auth_provider) {
+              profileData.auth_provider = 'google';
+            }
+            if (!profileData.googleId && profileData.id) {
+              profileData.googleId = profileData.id;
+            }
+            
             saveProfileToStorage(profileData);
             setUserProfile(profileData);
           }

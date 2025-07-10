@@ -40,6 +40,7 @@ import { ANIMATION_DURATION } from './constants';
  * @param {boolean} props.isOpen - Whether the panel is open
  * @param {Function} props.onClose - Close handler
  * @returns {JSX.Element} Settings panel component
+ * 
  */
 export default function SettingsPanel({
   // Model Info
@@ -81,6 +82,28 @@ export default function SettingsPanel({
   const [tempInstruction, setTempInstruction] = useState(systemInstruction);
   const [isVisible, setIsVisible] = useState(false);
   const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
+  
+  // Get dark mode state from document class
+  const [isDarkMode, setIsDarkMode] = useState(() => {
+    return document.documentElement.classList.contains('dark');
+  });
+  
+  // Update dark mode detection when document class changes
+  useEffect(() => {
+    const observer = new MutationObserver((mutations) => {
+      mutations.forEach((mutation) => {
+        if (mutation.attributeName === 'class') {
+          setIsDarkMode(document.documentElement.classList.contains('dark'));
+        }
+      });
+    });
+    
+    observer.observe(document.documentElement, { attributes: true });
+    
+    return () => {
+      observer.disconnect();
+    };
+  }, []);
 
   // Sync local temp state if the prop changes
   useEffect(() => {
@@ -145,7 +168,7 @@ export default function SettingsPanel({
       onClick={handleOverlayClick}
     >
       <div
-        className={`w-full sm:max-w-md h-full bg-gray-900 dark:bg-gray-900 p-4 sm:p-6 shadow-xl flex flex-col text-gray-100 dark:text-gray-100
+        className={`w-full sm:max-w-md h-full ${isDarkMode ? 'bg-gray-900 text-gray-100' : 'bg-white text-gray-800'} p-4 sm:p-6 shadow-xl flex flex-col
                   transform transition-transform duration-300 ease-in-out
                   ${isOpen && isVisible ? 'translate-x-0' : 'translate-x-full'}`}
         onClick={e => e.stopPropagation()}
@@ -158,7 +181,11 @@ export default function SettingsPanel({
           </h2>
           <button
             onClick={onClose}
-            className="p-1.5 sm:p-2 rounded-full text-gray-400 hover:bg-gray-800 hover:text-gray-200 transition-colors"
+            className={`p-1.5 sm:p-2 rounded-full ${
+              isDarkMode 
+                ? 'text-gray-400 hover:bg-gray-800 hover:text-gray-200' 
+                : 'text-gray-500 hover:bg-gray-100 hover:text-gray-700'
+            } transition-colors`}
             aria-label="Close settings"
           >
             <X className="h-4 w-4 sm:h-5 sm:w-5" />
@@ -172,15 +199,18 @@ export default function SettingsPanel({
             value={tempInstruction}
             onChange={setTempInstruction}
             isApplicable={isSystemInstructionApplicable}
+            darkMode={isDarkMode}
           />
 
           {/* Advanced Model Settings (collapsible) */}
-          <div className="bg-gray-800 rounded-xl p-4 shadow-md">
+          <div className={`${isDarkMode ? 'bg-gray-800' : 'bg-gray-100'} rounded-xl p-4 shadow-md`}>
             <button 
               onClick={() => setShowAdvancedSettings(!showAdvancedSettings)}
               className="flex items-center justify-between w-full text-left"
             >
-              <h3 className="text-sm font-medium text-gray-300">Advanced Model Settings</h3>
+              <h3 className={`text-sm font-medium ${isDarkMode ? 'text-gray-300' : 'text-gray-700'}`}>
+                Advanced Model Settings
+              </h3>
               {showAdvancedSettings ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
             </button>
 
@@ -189,8 +219,10 @@ export default function SettingsPanel({
                 {/* Temperature */}
                 <div>
                   <div className="flex justify-between items-center mb-1">
-                    <label className="text-xs text-gray-400">Temperature: {temperature.toFixed(1)}</label>
-                    <span className="text-xs text-gray-400">
+                    <label className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                      Temperature: {temperature.toFixed(1)}
+                    </label>
+                    <span className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
                       {temperature < 0.3 ? 'Deterministic' : 
                        temperature > 0.9 ? 'Random' : 
                        temperature === 0.7 ? 'Balanced' : ''}
@@ -205,24 +237,28 @@ export default function SettingsPanel({
                 {/* Max Output Tokens */}
                 <div>
                   <div className="flex justify-between items-center mb-1">
-                    <label className="text-xs text-gray-400">Max Output Tokens: {maxOutputTokens}</label>
-                    <span className="text-xs text-gray-400"></span>
+                    <label className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                      Max Output Tokens: {maxOutputTokens}
+                    </label>
+                    <span className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}></span>
                   </div>
                   <MaxOutputTokensControl
                     value={maxOutputTokens}
                     onChange={onMaxOutputTokensChange}
                     currentModel={currentModel}
                   />
-                  <p className="text-xs text-gray-500 mt-1">
+                  <p className={`text-xs ${isDarkMode ? 'text-gray-500' : 'text-gray-500'} mt-1`}>
                     Maximum length of the generated response.
                   </p>
                 </div>
 
                 {/* Show Thoughts Toggle (only for Gemini 2.5 models) */}
                 {isThinkingSupported && (
-                  <div className="pt-4 border-t border-gray-700">
+                  <div className={`pt-4 border-t ${isDarkMode ? 'border-gray-700' : 'border-gray-300'}`}>
                     <div className="flex items-center justify-between mb-2">
-                      <h3 className="text-xs font-medium text-gray-400">Show Thoughts</h3>
+                      <h3 className={`text-xs font-medium ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
+                        Show Thoughts
+                      </h3>
                       <label className="relative inline-flex items-center cursor-pointer">
                         <input 
                           type="checkbox" 
@@ -231,10 +267,10 @@ export default function SettingsPanel({
                           onChange={(e) => handleThinkingToggle(e.target.checked)}
                           disabled={!isThinkingSupported}
                         />
-                        <div className={`w-9 h-5 bg-gray-600 rounded-full peer peer-checked:bg-indigo-600 peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all ${!isThinkingSupported ? 'opacity-50' : ''}`}></div>
+                        <div className={`w-9 h-5 ${isDarkMode ? 'bg-gray-600' : 'bg-gray-300'} rounded-full peer peer-checked:bg-indigo-600 peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all ${!isThinkingSupported ? 'opacity-50' : ''}`}></div>
                       </label>
                     </div>
-                    <p className="text-xs text-gray-500 mt-1 mb-3">
+                    <p className={`text-xs ${isDarkMode ? 'text-gray-500' : 'text-gray-500'} mt-1 mb-3`}>
                       {isThinkingSupported 
                         ? "Shows the model's reasoning process for complex tasks." 
                         : "Thinking process not supported by this model."}
@@ -245,9 +281,11 @@ export default function SettingsPanel({
                 {/* Thinking Budget (only show if thinking is enabled) */}
                 {enableThinking && isThinkingSupported && isThinkingBudgetSupported && (
                   <div className="pt-2">
-                    <h3 className="text-xs font-medium text-gray-400 mb-2">Thinking Budget</h3>
+                    <h3 className={`text-xs font-medium ${isDarkMode ? 'text-gray-400' : 'text-gray-600'} mb-2`}>
+                      Thinking Budget
+                    </h3>
                     <div className="flex justify-between items-center mb-1">
-                      <span className="text-xs text-gray-400">
+                      <span className={`text-xs ${isDarkMode ? 'text-gray-400' : 'text-gray-600'}`}>
                         {thinkingBudget === -1 ? "Dynamic (Auto)" : thinkingBudget === 0 ? "Disabled" : `${thinkingBudget} tokens`}
                       </span>
                     </div>
@@ -256,11 +294,11 @@ export default function SettingsPanel({
                       onChange={onThinkingBudgetChange}
                       currentModel={currentModel}
                     />
-                    <div className="flex justify-between text-xs text-gray-500 mt-1">
+                    <div className={`flex justify-between text-xs ${isDarkMode ? 'text-gray-500' : 'text-gray-500'} mt-1`}>
                       <span>Dynamic</span>
                       <span>Max</span>
                     </div>
-                    <p className="text-xs text-gray-500 mt-2">
+                    <p className={`text-xs ${isDarkMode ? 'text-gray-500' : 'text-gray-500'} mt-2`}>
                       {thinkingBudget === -1 
                         ? "Model automatically adjusts thinking based on complexity." 
                         : thinkingBudget === 0
@@ -275,10 +313,14 @@ export default function SettingsPanel({
         </div>
 
         {/* Footer with Save/Cancel Buttons */}
-        <div className="mt-auto pt-4 sm:pt-6 flex flex-col sm:flex-row justify-end space-y-2 sm:space-y-0 sm:space-x-3 flex-shrink-0 border-t border-gray-700">
+        <div className={`mt-auto pt-4 sm:pt-6 flex flex-col sm:flex-row justify-end space-y-2 sm:space-y-0 sm:space-x-3 flex-shrink-0 border-t ${isDarkMode ? 'border-gray-700' : 'border-gray-300'}`}>
           <button
             onClick={onClose}
-            className="w-full sm:w-auto px-3 py-2 sm:px-4 border border-gray-600 rounded-md text-xs sm:text-sm text-gray-300 hover:bg-gray-800 transition-colors"
+            className={`w-full sm:w-auto px-3 py-2 sm:px-4 border rounded-md text-xs sm:text-sm ${
+              isDarkMode
+                ? 'border-gray-600 text-gray-300 hover:bg-gray-800'
+                : 'border-gray-300 text-gray-600 hover:bg-gray-100'
+            } transition-colors`}
           >
             Cancel
           </button>

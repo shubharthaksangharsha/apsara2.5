@@ -294,9 +294,21 @@ export function useAuth() {
 
   // Google OAuth success handler
   const handleGoogleAuthSuccess = useCallback((googleUser) => {
+    // Ensure the user object has the required Google authentication properties
+    const enhancedUser = {
+      ...googleUser,
+      auth_provider: 'google',
+      googleId: googleUser.id || googleUser.googleId,
+      // Ensure we have a provider field for backward compatibility
+      provider: 'google'
+    };
+    
     setIsAuthenticated(true);
-    setUser(googleUser);
+    setUser(enhancedUser);
     setError(null);
+    
+    // Log for debugging
+    console.log('Google Auth Success: User object enhanced with auth_provider', enhancedUser);
   }, []);
 
   // Clear error function

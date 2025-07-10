@@ -42,9 +42,10 @@ const INSTRUCTION_TEMPLATES = [
  * @param {string} props.value - Current instruction value
  * @param {Function} props.onChange - Change handler
  * @param {boolean} props.isApplicable - Whether system instructions are applicable for current model
+ * @param {boolean} props.darkMode - Whether dark mode is enabled
  * @returns {JSX.Element} System instruction panel component
  */
-const SystemInstructionPanel = ({ value, onChange, isApplicable }) => {
+const SystemInstructionPanel = ({ value, onChange, isApplicable, darkMode = true }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [editValue, setEditValue] = useState(value);
   const [selectedTemplateId, setSelectedTemplateId] = useState(null);
@@ -82,25 +83,33 @@ const SystemInstructionPanel = ({ value, onChange, isApplicable }) => {
   // Render compact view (when not expanded)
   if (!isExpanded) {
     return (
-      <div className="bg-gray-800 rounded-xl p-3 shadow-md">
+      <div className={`${darkMode ? 'bg-gray-800' : 'bg-gray-200'} rounded-xl p-3 shadow-md`}>
         <div className="flex justify-between items-center">
-          <h3 className="text-sm font-medium text-gray-300">System Instruction</h3>
+          <h3 className={`text-sm font-medium ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>System Instruction</h3>
           <button
             onClick={() => setIsExpanded(true)}
-            className="p-1 rounded-md text-gray-400 hover:bg-gray-700 hover:text-gray-200 transition-colors"
+            className={`p-1 rounded-md ${
+              darkMode 
+                ? 'text-gray-400 hover:bg-gray-700 hover:text-gray-200' 
+                : 'text-gray-500 hover:bg-gray-300 hover:text-gray-700'
+            } transition-colors`}
             disabled={!isApplicable}
           >
             <Pencil className="h-3.5 w-3.5" />
           </button>
         </div>
-        <div className="mt-2 p-2 bg-gray-700 rounded-md text-sm text-gray-300 max-h-16 overflow-hidden">
+        <div className={`mt-2 p-2 ${
+          darkMode 
+            ? 'bg-gray-700 text-gray-300' 
+            : 'bg-gray-100 text-gray-700'
+        } rounded-md text-sm max-h-16 overflow-hidden`}>
           {value ? (
             <div className="line-clamp-2">{value}</div>
           ) : (
-            <div className="text-gray-500 italic">No system instruction set</div>
+            <div className={`${darkMode ? 'text-gray-500' : 'text-gray-400'} italic`}>No system instruction set</div>
           )}
         </div>
-        <p className="text-xs text-gray-500 mt-1">
+        <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-gray-500'} mt-1`}>
           Sets context for the AI (not used in Live mode or for image generation).
         </p>
       </div>
@@ -110,13 +119,15 @@ const SystemInstructionPanel = ({ value, onChange, isApplicable }) => {
   // Render expanded view with template selection
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm flex justify-center items-center z-[80]">
-      <div className="w-full max-w-2xl bg-gray-900 rounded-xl shadow-xl p-4 max-h-[90vh] overflow-hidden flex flex-col">
-        <h2 className="text-lg font-bold text-gray-200 mb-3">System Instruction</h2>
+      <div className={`w-full max-w-2xl ${
+        darkMode ? 'bg-gray-900' : 'bg-white'
+      } rounded-xl shadow-xl p-4 max-h-[90vh] overflow-hidden flex flex-col`}>
+        <h2 className={`text-lg font-bold ${darkMode ? 'text-gray-200' : 'text-gray-800'} mb-3`}>System Instruction</h2>
         
         <div className="flex-1 overflow-y-auto grid grid-cols-1 md:grid-cols-3 gap-4">
           {/* Templates List (Left Side) */}
           <div className="space-y-3 md:col-span-1 overflow-y-auto">
-            <h3 className="text-sm font-medium text-gray-400">Templates</h3>
+            <h3 className={`text-sm font-medium ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>Templates</h3>
             <div className="space-y-2 pr-2">
               {INSTRUCTION_TEMPLATES.map((template) => (
                 <button
@@ -125,7 +136,9 @@ const SystemInstructionPanel = ({ value, onChange, isApplicable }) => {
                   className={`w-full text-left p-2 rounded-md text-sm transition-colors ${
                     selectedTemplateId === template.id
                       ? 'bg-indigo-600 text-white'
-                      : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
+                      : darkMode
+                        ? 'bg-gray-800 text-gray-300 hover:bg-gray-700'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                   }`}
                 >
                   {template.name}
@@ -136,26 +149,34 @@ const SystemInstructionPanel = ({ value, onChange, isApplicable }) => {
           
           {/* Editor (Right Side) */}
           <div className="md:col-span-2">
-            <h3 className="text-sm font-medium text-gray-400 mb-2">Edit Instruction</h3>
+            <h3 className={`text-sm font-medium ${darkMode ? 'text-gray-400' : 'text-gray-600'} mb-2`}>Edit Instruction</h3>
             <textarea
               value={editValue}
               onChange={(e) => setEditValue(e.target.value)}
-              className="w-full p-3 border rounded-lg bg-gray-800 border-gray-700 text-gray-200 text-sm resize-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+              className={`w-full p-3 border rounded-lg ${
+                darkMode
+                  ? 'bg-gray-800 border-gray-700 text-gray-200'
+                  : 'bg-white border-gray-300 text-gray-800'
+              } text-sm resize-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent`}
               rows={10}
               placeholder="Enter custom system instruction..."
               disabled={!isApplicable}
             />
-            <p className="text-xs text-gray-500 mt-1 mb-4">
+            <p className={`text-xs ${darkMode ? 'text-gray-500' : 'text-gray-500'} mt-1 mb-4`}>
               The system instruction helps define the AI's behavior, knowledge, and tone.
             </p>
           </div>
         </div>
         
         {/* Action Buttons */}
-        <div className="flex justify-end gap-3 mt-4 pt-3 border-t border-gray-700">
+        <div className={`flex justify-end gap-3 mt-4 pt-3 border-t ${darkMode ? 'border-gray-700' : 'border-gray-200'}`}>
           <button
             onClick={handleCancel}
-            className="px-4 py-2 rounded-md bg-gray-800 text-gray-300 hover:bg-gray-700 transition-colors"
+            className={`px-4 py-2 rounded-md ${
+              darkMode
+                ? 'bg-gray-800 text-gray-300 hover:bg-gray-700'
+                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+            } transition-colors`}
           >
             Cancel
           </button>

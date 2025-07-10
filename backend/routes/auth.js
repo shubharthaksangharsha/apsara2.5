@@ -459,12 +459,22 @@ router.post('/refresh', async (req, res) => {
 // Check authentication status
 router.get('/status', (req, res) => {
   if (req.isAuthenticated && (req.userProfile || req.user)) {
+    // Determine if this is a Google OAuth authentication
+    const isGoogleAuth = Boolean(req.userProfile || req.cookies[AUTH_COOKIE_NAME]);
+    
     const profile = req.userProfile || {
       id: req.user._id.toString(),
       name: req.user.name,
       email: req.user.email,
-      picture: req.user.picture
+      picture: req.user.picture,
+      // Add the auth provider field to identify Google authentication
+      auth_provider: isGoogleAuth ? 'google' : 'email'
     };
+
+    // For Google auth, ensure we also add the googleId property if missing
+    if (isGoogleAuth && !profile.googleId && profile.id) {
+      profile.googleId = profile.id;
+    }
 
     return res.json({
       isAuthenticated: true,
