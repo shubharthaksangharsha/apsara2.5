@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Settings, X, ChevronDown, ChevronUp } from 'lucide-react';
-import SystemInstructionField from './components/SystemInstructionField';
+import SystemInstructionPanel from '../SystemInstructionPanel';
 import TemperatureControl from './components/TemperatureControl';
 import MaxOutputTokensControl from './components/MaxOutputTokensControl';
 import ThinkingBudgetControl from './components/ThinkingBudgetControl';
@@ -168,17 +168,11 @@ export default function SettingsPanel({
         {/* Settings Form Area */}
         <div className="flex-1 space-y-6 overflow-y-auto pr-1 custom-scrollbar">
           {/* System Instruction */}
-          <div className="bg-gray-800 rounded-xl p-4 shadow-md">
-            <h3 className="text-sm font-medium mb-2 text-gray-300">System Instruction</h3>
-            <SystemInstructionField
-              value={tempInstruction}
-              onChange={setTempInstruction}
-              isApplicable={isSystemInstructionApplicable}
-            />
-            <p className="text-xs text-gray-500 mt-2">
-              Sets context for the AI (not used in Live mode or for image generation).
-            </p>
-          </div>
+          <SystemInstructionPanel
+            value={tempInstruction}
+            onChange={setTempInstruction}
+            isApplicable={isSystemInstructionApplicable}
+          />
 
           {/* Advanced Model Settings (collapsible) */}
           <div className="bg-gray-800 rounded-xl p-4 shadow-md">
@@ -210,10 +204,14 @@ export default function SettingsPanel({
               
                 {/* Max Output Tokens */}
                 <div>
-                  <label className="block text-xs text-gray-400 mb-1">Max Output Tokens</label>
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="text-xs text-gray-400">Max Output Tokens: {maxOutputTokens}</label>
+                    <span className="text-xs text-gray-400"></span>
+                  </div>
                   <MaxOutputTokensControl
                     value={maxOutputTokens}
                     onChange={onMaxOutputTokensChange}
+                    currentModel={currentModel}
                   />
                   <p className="text-xs text-gray-500 mt-1">
                     Maximum length of the generated response.
@@ -256,6 +254,7 @@ export default function SettingsPanel({
                     <ThinkingBudgetControl
                       value={thinkingBudget}
                       onChange={onThinkingBudgetChange}
+                      currentModel={currentModel}
                     />
                     <div className="flex justify-between text-xs text-gray-500 mt-1">
                       <span>Dynamic</span>

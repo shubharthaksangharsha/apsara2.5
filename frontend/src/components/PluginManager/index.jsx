@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Mail, Calendar, Map, CloudLightning, Battery, Camera, FileText, BookOpen, ChevronDown, Clock, Search, Globe, LayoutDashboard, Loader2, Check } from 'lucide-react';
+import { X, Mail, Calendar, Map, CloudLightning, Battery, Camera, FileText, BookOpen, ChevronDown, Clock, Search, Globe, LayoutDashboard, Loader2, Check, ImageIcon } from 'lucide-react';
 import { BACKEND_URL } from '../../hooks/common-constants';
 
 /**
@@ -123,46 +123,123 @@ export default function PluginManager({
     return tools.length > 0 && tools.every(tool => selectedTools.includes(tool.name));
   };
 
-  // Group tools by category
+  // Filter out test tools that should be removed
+  const filterTestTools = (tools) => {
+    const testToolNames = [
+      'powerDiscoBall', 
+      'startMusic', 
+      'dimLights', 
+      'setRoomTemperature', 
+      'getRoomSensors'
+    ];
+    
+    return tools.filter(tool => !testToolNames.includes(tool.name));
+  };
+
+  // Group tools by category and bundle related tools
   const groupToolsByCategory = (tools) => {
+    // Filter out test tools first
+    const filteredTools = filterTestTools(tools);
+    
+    // Define categories with their icons
     const categories = {
-      core: { name: 'Core Functions', icon: <Clock className="h-5 w-5" />, tools: [] },
-      google: { name: 'Google Services', icon: <Mail className="h-5 w-5" />, tools: [] },
-      weather: { name: 'Weather', icon: <CloudLightning className="h-5 w-5" />, tools: [] },
-      ui: { name: 'UI Functions', icon: <LayoutDashboard className="h-5 w-5" />, tools: [] },
-      notes: { name: 'Notes', icon: <FileText className="h-5 w-5" />, tools: [] },
-      map: { name: 'Map', icon: <Map className="h-5 w-5" />, tools: [] },
-      other: { name: 'Other', icon: <Globe className="h-5 w-5" />, tools: [] }
+      core: { 
+        name: 'Core Functions', 
+        icon: <Clock className="h-5 w-5" />, 
+        tools: [] 
+      },
+      googleWorkspace: { 
+        name: 'Google Workspace', 
+        icon: <Mail className="h-5 w-5" />, 
+        tools: [],
+        onlyWhenAuthenticated: true
+      },
+      weather: { 
+        name: 'Weather', 
+        icon: <CloudLightning className="h-5 w-5" />, 
+        tools: [] 
+      },
+      images: { 
+        name: 'Image Generation', 
+        icon: <ImageIcon className="h-5 w-5" />, 
+        tools: [] 
+      },
+      notes: { 
+        name: 'Notes', 
+        icon: <FileText className="h-5 w-5" />, 
+        tools: [] 
+      },
+      ui: { 
+        name: 'UI Functions', 
+        icon: <LayoutDashboard className="h-5 w-5" />, 
+        tools: [] 
+      },
+      other: { 
+        name: 'Other', 
+        icon: <Globe className="h-5 w-5" />, 
+        tools: [] 
+      }
     };
 
-    tools.forEach(tool => {
+    // Sort tools into categories
+    filteredTools.forEach(tool => {
       const toolName = tool.name.toLowerCase();
+      
+      // Google Workspace tools (Gmail, Calendar, Maps)
       if (toolName.includes('gmail') || toolName.includes('calendar')) {
-        categories.google.tools.push(tool);
-      } else if (toolName.includes('map')) {
-        categories.map.tools.push(tool);
-      } else if (toolName.includes('weather')) {
+        categories.googleWorkspace.tools.push(tool);
+      } 
+      // Maps tools - also part of Google Workspace when authenticated
+      else if (toolName.includes('map')) {
+        categories.googleWorkspace.tools.push(tool);
+      } 
+      // Weather tools
+      else if (toolName.includes('weather')) {
         categories.weather.tools.push(tool);
-      } else if (toolName.includes('time') || toolName.includes('search')) {
+      } 
+      // Core tools
+      else if (toolName.includes('time') || toolName.includes('search') || toolName === 'echo' || toolName === 'getbatterystatus') {
         categories.core.tools.push(tool);
-      } else if (toolName.includes('ui') || toolName.includes('display')) {
-        categories.ui.tools.push(tool);
-      } else if (toolName.includes('note')) {
+      } 
+      // Image generation tools
+      else if (toolName.includes('image') || toolName === 'generateimage' || toolName === 'editimage') {
+        categories.images.tools.push(tool);
+      }
+      // Notes tools
+      else if (toolName.includes('note')) {
         categories.notes.tools.push(tool);
-      } else {
+      } 
+      // UI tools
+      else if (toolName.includes('screenshot') || toolName.includes('switchtab')) {
+        categories.ui.tools.push(tool);
+      } 
+      // Other tools
+      else {
         categories.other.tools.push(tool);
       }
     });
 
-    // Filter out empty categories
-    return Object.values(categories).filter(category => category.tools.length > 0);
+    // Filter out empty categories and those that require authentication when not authenticated
+    return Object.values(categories).filter(category => {
+      // Skip categories with no tools
+      if (category.tools.length === 0) return false;
+      
+      // Always show Google Workspace if function calling is enabled
+      // This fixes the issue where Google Workspace doesn't show up even when signed in
+      if (category.name === 'Google Workspace') {
+        return enableFunctionCalling;
+      }
+      
+      // For other categories, just check if they have tools
+      return true;
+    });
   };
 
   // Function calling mode options
   const functionModes = [
-    { value: 'auto', label: 'Auto', description: 'Let the model decide when to call functions' },
-    { value: 'any', label: 'Any', description: 'Allow the model to call any function' },
-    { value: 'none', label: 'None', description: 'Disable function calling' }
+    { value: 'auto', label: 'Auto', description: 'Let the model decide when to call the plugin' },
+    { value: 'any', label: 'Any', description: 'Allow the model to call any plugin each time' },
+    { value: 'none', label: 'None', description: 'Disable plugin calling' }
   ];
 
   // Get tool categories
@@ -257,24 +334,35 @@ export default function PluginManager({
                     </div>
 
                     {/* Category Tools */}
-                    <div className="p-4 space-y-3">
-                      {category.tools.map((tool) => (
-                        <div key={tool.name} className="flex items-center justify-between">
-                          <div className="flex-1">
-                            <p className="text-sm font-medium text-gray-700 dark:text-gray-300">{tool.name}</p>
-                            <p className="text-xs text-gray-500 dark:text-gray-400">{tool.description || 'No description available'}</p>
+                    <div className="p-4">
+                      <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
+                        {category.name === 'Notes' && 'Save and access notes during your conversations.'}
+                        {category.name === 'Image Generation' && 'Create and edit images using AI.'}
+                        {category.name === 'Google Workspace' && 'Access your emails, calendar events, and maps.'}
+                        {category.name === 'Weather' && 'Get current weather information for any location.'}
+                        {category.name === 'Core Functions' && 'Basic utilities for time, search, and system information.'}
+                        {category.name === 'UI Functions' && 'Interact with the user interface.'}
+                      </p>
+                      
+                      <div className="space-y-3">
+                        {category.tools.map((tool) => (
+                          <div key={tool.name} className="flex items-center justify-between">
+                            <div className="flex-1">
+                              <p className="text-sm font-medium text-gray-700 dark:text-gray-300">{tool.name}</p>
+                              <p className="text-xs text-gray-500 dark:text-gray-400">{tool.description || 'No description available'}</p>
+                            </div>
+                            <div className="ml-2 hidden">
+                              <input 
+                                type="checkbox"
+                                className="form-checkbox h-4 w-4 text-green-500 rounded border-gray-300 dark:border-gray-600 focus:ring-green-500 dark:focus:ring-green-500"
+                                checked={selectedTools.includes(tool.name)}
+                                onChange={() => toggleTool(tool.name)}
+                                disabled={!enableFunctionCalling}
+                              />
+                            </div>
                           </div>
-                          <div className="ml-2">
-                            <input 
-                              type="checkbox"
-                              className="form-checkbox h-4 w-4 text-green-500 rounded border-gray-300 dark:border-gray-600 focus:ring-green-500 dark:focus:ring-green-500"
-                              checked={selectedTools.includes(tool.name)}
-                              onChange={() => toggleTool(tool.name)}
-                              disabled={!enableFunctionCalling}
-                            />
-                          </div>
-                        </div>
-                      ))}
+                        ))}
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -290,7 +378,7 @@ export default function PluginManager({
               <p className="text-sm font-medium text-gray-800 dark:text-gray-200">Plugins behavior: {functionCallingMode.toUpperCase()}</p>
               <p className="text-xs text-gray-500 dark:text-gray-400">
                 {functionCallingMode === 'auto' ? 'Model decides when to use plugins' :
-                 functionCallingMode === 'any' ? 'Model can use any plugin when needed' :
+                 functionCallingMode === 'any' ? 'Model can use any plugin each time' :
                  'Plugins are disabled'}
               </p>
             </div>
