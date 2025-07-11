@@ -136,7 +136,7 @@ const UserMessage = ({
           )}
         >
           <ClipboardCopy className="w-4 h-4" />
-          {copiedMsgId === (message.id || uniqueId) ? 'Copied!' : 'Copy'}
+          {copiedMsgId === (message.id || uniqueId) ? 'Copied!' : ''}
         </button>
       </div>
       
