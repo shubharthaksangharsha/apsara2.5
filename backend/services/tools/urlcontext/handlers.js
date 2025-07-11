@@ -32,18 +32,26 @@ export async function handleUrlContext({ url, query }) {
     const responseText = response.candidates?.[0]?.content?.parts?.[0]?.text || '';
     console.log(`[Tool: urlContext] Response received, length: ${responseText.length}`);
     
-    // Extract any URL metadata from the response
-    const urlMetadata = response.candidates?.[0]?.urlContextMetadata?.urlMetadata || [];
-    const retrievedUrls = urlMetadata.map(item => ({
-      url: item.retrievedUrl,
-      status: item.urlRetrievalStatus
-    }));
+    // Extract complete URL context metadata from the response
+    const urlContextMetadata = response.candidates?.[0]?.urlContextMetadata || {};
+    // Format the URL metadata for the frontend
+    const formattedUrlMetadata = urlContextMetadata.urlMetadata?.map(item => ({
+      retrieved_url: item.retrievedUrl,
+      url_retrieval_status: item.urlRetrievalStatus
+    })) || [];
     
     return {
       summary: responseText,
       metadata: {
-        retrievedUrls,
-        sourceCount: retrievedUrls.length
+        retrievedUrls: formattedUrlMetadata.map(item => ({
+          url: item.retrieved_url,
+          status: item.url_retrieval_status
+        })),
+        sourceCount: formattedUrlMetadata.length
+      },
+      // Add full metadata for the UI to display sources
+      url_context_metadata: {
+        url_metadata: formattedUrlMetadata
       }
     };
   } catch (error) {

@@ -29,12 +29,13 @@ export async function handleGoogleSearch({ query }) {
     const responseText = response.candidates?.[0]?.content?.parts?.[0]?.text || '';
     console.log(`[Tool: googleSearch] Response received, length: ${responseText.length}`);
     
-    // Extract search metadata if available
+    // Extract complete grounding metadata for the UI
     const groundingMetadata = response.candidates?.[0]?.groundingMetadata || {};
     const webSearchQueries = groundingMetadata.webSearchQueries || [];
     const groundingChunks = groundingMetadata.groundingChunks || [];
+    const groundingSupports = groundingMetadata.groundingSupports || [];
     
-    // Process the grounding chunks to extract sources
+    // Process the grounding chunks to extract sources for the metadata summary
     const sources = groundingChunks
       .filter(chunk => chunk.web)
       .map(chunk => ({
@@ -48,6 +49,12 @@ export async function handleGoogleSearch({ query }) {
         searchQueries: webSearchQueries,
         sources: sources,
         sourceCount: sources.length
+      },
+      // Add the complete grounding metadata for the UI to display sources
+      groundingMetadata: {
+        webSearchQueries,
+        groundingChunks,
+        groundingSupports
       }
     };
   } catch (error) {

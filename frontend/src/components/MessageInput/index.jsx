@@ -70,7 +70,12 @@ export default function MessageInput({
   const [inputRows, setInputRows] = useState(1);
   const [isDragging, setIsDragging] = useState(false);
   const [showAttachmentOptions, setShowAttachmentOptions] = useState(false);
+  const attachmentBtnRef = useRef(null);
+  const attachmentMenuRef = useRef(null);
   
+  // Add a new state to track the button position
+  const [attachmentMenuPosition, setAttachmentMenuPosition] = useState({ top: 0, left: 0 });
+
   // Determine thinking mode based on enableThinking and thinkingBudget
   const thinkingMode = !enableThinking ? 'off' : (thinkingBudget === -1 ? 'auto' : 'on');
 
@@ -89,6 +94,30 @@ export default function MessageInput({
       onToggleThinking(false, 0); // Disable thinking
     }
   };
+
+  // Handle outside click to close attachment menu
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (
+        showAttachmentOptions &&
+        attachmentMenuRef.current && 
+        attachmentBtnRef.current &&
+        !attachmentMenuRef.current.contains(event.target) &&
+        !attachmentBtnRef.current.contains(event.target)
+      ) {
+        setShowAttachmentOptions(false);
+      }
+    };
+
+    // Add event listeners for both mousedown and touchstart
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('touchstart', handleClickOutside);
+    
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('touchstart', handleClickOutside);
+    };
+  }, [showAttachmentOptions]);
 
   useEffect(() => {
     if (inputRef.current) {
@@ -176,6 +205,17 @@ export default function MessageInput({
   // Toggle the attachment options menu
   const toggleAttachmentOptions = (e) => {
     e.preventDefault();
+    e.stopPropagation();
+    
+    // If opening the menu, calculate position
+    if (!showAttachmentOptions && attachmentBtnRef.current) {
+      const rect = attachmentBtnRef.current.getBoundingClientRect();
+      setAttachmentMenuPosition({
+        top: rect.top - 5, // Position slightly above the button
+        left: rect.left
+      });
+    }
+    
     setShowAttachmentOptions(!showAttachmentOptions);
   };
 
@@ -253,9 +293,10 @@ export default function MessageInput({
       <div className="max-w-3xl mx-auto">
         <div className={`${INPUT_WRAPPER_CLASS} ${isDragging ? 'pointer-events-none' : ''} py-3 px-3`}>
           {/* Left-side tools */}
-          <div className="flex items-center pl-1 gap-2">
+          <div className="flex items-center pl-1 gap-2 relative z-20">
             {/* Plus button to replace file manager icon */}
             <button
+              ref={attachmentBtnRef}
               className="p-1.5 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700"
               onClick={toggleAttachmentOptions}
               title="Add attachments"
@@ -263,14 +304,23 @@ export default function MessageInput({
               <Plus className="h-5 w-5" />
             </button>
             
-            {/* Floating menu for attachment options */}
+            {/* Floating menu for attachment options - fixed positioning */}
             {showAttachmentOptions && (
-              <div className="absolute top-12 left-3 bg-white dark:bg-gray-700 p-2 rounded-lg shadow-lg border border-gray-200 dark:border-gray-600 flex flex-col gap-2 min-w-[150px] z-10">
+              <div 
+                ref={attachmentMenuRef}
+                className="fixed bg-white dark:bg-gray-700 p-2 rounded-lg shadow-lg border border-gray-200 dark:border-gray-600 flex flex-col gap-2 min-w-[150px] z-[100]"
+                style={{
+                  bottom: `${window.innerHeight - attachmentMenuPosition.top + 10}px`,
+                  left: `${attachmentMenuPosition.left}px`,
+                }}
+              >
                 {/* File Manager Option */}
                 <button 
                   type="button"
                   className="flex items-center gap-2 p-2 hover:bg-gray-100 dark:hover:bg-gray-600 rounded w-full text-left"
                   onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
                     // Call the original file manager click handler
                     if (onFileManagerClick) {
                       onFileManagerClick(e);
@@ -286,7 +336,9 @@ export default function MessageInput({
                 <button 
                   type="button"
                   className="flex items-center gap-2 p-2 hover:bg-gray-100 dark:hover:bg-gray-600 rounded w-full text-left"
-                  onClick={() => {
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
                     const imageUploadInput = document.createElement('input');
                     imageUploadInput.type = 'file';
                     imageUploadInput.accept = 'image/*';

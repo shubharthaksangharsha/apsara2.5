@@ -5,6 +5,7 @@ import { ClipboardCopy } from 'lucide-react';
 import CodeBlock from './CodeBlock';
 import CodeExecutionResult from './CodeExecutionResult';
 import ThoughtSummary from './ThoughtSummary';
+import SourceButton from './SourceButton';
 import { MODEL_MESSAGE_CLASSES, SYSTEM_MESSAGE_CLASSES, ERROR_MESSAGE_CLASSES, COPY_BUTTON_CLASSES } from '../constants';
 
 /**
@@ -57,6 +58,37 @@ const ModelMessage = ({
 
   // Determine base class for message based on type
   const baseClass = isError ? ERROR_MESSAGE_CLASSES : isSystem ? SYSTEM_MESSAGE_CLASSES : MODEL_MESSAGE_CLASSES;
+  
+  // Log full message for debugging
+  console.log("Message data in ModelMessage:", message);
+  
+  // Check for source metadata in multiple possible locations
+  let sourceMetadata = null;
+  
+  // Check in the message directly
+  if (message.url_context_metadata?.url_metadata?.length > 0 || 
+      message.groundingMetadata?.groundingChunks?.length > 0) {
+    sourceMetadata = {
+      url_context_metadata: message.url_context_metadata,
+      groundingMetadata: message.groundingMetadata
+    };
+  }
+  // Check in functionResponse.response.result for URL context
+  else if (message.functionResponse?.response?.result?.url_context_metadata?.url_metadata?.length > 0) {
+    sourceMetadata = {
+      url_context_metadata: message.functionResponse.response.result.url_context_metadata,
+      groundingMetadata: null
+    };
+    console.log("Found URL context metadata in functionResponse:", sourceMetadata.url_context_metadata);
+  }
+  // Check in functionResponse.response.result for Google Search
+  else if (message.functionResponse?.response?.result?.groundingMetadata?.groundingChunks?.length > 0) {
+    sourceMetadata = {
+      url_context_metadata: null,
+      groundingMetadata: message.functionResponse.response.result.groundingMetadata
+    };
+    console.log("Found grounding metadata in functionResponse:", sourceMetadata.groundingMetadata);
+  }
 
   return (
     <div className={`flex flex-col items-start w-full group ${isSystem ? 'items-center' : ''}`}>
@@ -242,21 +274,52 @@ const ModelMessage = ({
             )}
           </>
         )}
+        
+        {/* Source metadata button */}
+        {!isStreaming && sourceMetadata && (
+          <SourceButton metadata={sourceMetadata} />
+        )}
       </div>
+      
+      {/* Special handling for user message with functionResponse */}
+      {message.role === 'user' && message.functionResponse && (
+        <div className="w-full mt-2">
+          {message.functionResponse.name === 'urlContext' && 
+           message.functionResponse.response?.result?.url_context_metadata?.url_metadata?.length > 0 && (
+            <SourceButton
+              metadata={{
+                url_context_metadata: message.functionResponse.response.result.url_context_metadata,
+                groundingMetadata: null
+              }}
+            />
+          )}
+          
+          {message.functionResponse.name === 'googleSearch' && 
+           message.functionResponse.response?.result?.groundingMetadata?.groundingChunks?.length > 0 && (
+            <SourceButton
+              metadata={{
+                url_context_metadata: null,
+                groundingMetadata: message.functionResponse.response.result.groundingMetadata
+              }}
+            />
+          )}
+        </div>
+      )}
       
       {/* Copy button for model messages (not for system or error, and not while streaming) */}
       {message.role === 'model' && !isStreaming && !isSystem && !isError && (
         <div className="flex justify-start mt-1 mb-2">
           <button
-            className={COPY_BUTTON_CLASSES}
-            title="Copy message"
+            className={`${COPY_BUTTON_CLASSES} ${copiedMsgId === (message.id || uniqueId) ? 'text-green-600 dark:text-green-500' : ''}`}
             onClick={() => handleCopyMessage(
               message.id || uniqueId, 
               (message.parts ? message.parts.map(p => p.text).filter(Boolean).join(' ') : message.text || '')
             )}
+            aria-label={copiedMsgId === (message.id || uniqueId) ? "Copied to clipboard" : "Copy to clipboard"}
+            title={copiedMsgId === (message.id || uniqueId) ? "Copied to clipboard" : "Copy to clipboard"}
           >
             <ClipboardCopy className="w-4 h-4" />
-            {copiedMsgId === (message.id || uniqueId) ? 'Copied!' : 'Copy'}
+            <span className="text-xs">{copiedMsgId === (message.id || uniqueId) ? "Copied" : "Copy"}</span>
           </button>
         </div>
       )}

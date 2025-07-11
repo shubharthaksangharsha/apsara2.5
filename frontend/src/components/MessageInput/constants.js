@@ -8,9 +8,9 @@ export const BASE_TEXTAREA_HEIGHT_PX = 20; // Approximate height of a single lin
 export const PADDING_VERTICAL_PX = 16; // Combined top/bottom padding (8px + 8px)
 
 // Classes
-export const CONTAINER_CLASS = "px-2 py-2 sm:px-4 sm:py-3 bg-gray-50 dark:bg-gray-800 sticky bottom-0 z-10";
+export const CONTAINER_CLASS = "px-2 py-2 sm:px-4 sm:py-3 bg-gray-50 dark:bg-gray-800 sticky bottom-0 z-20";
 export const DRAGGING_CLASS = "outline-dashed outline-2 outline-indigo-500 dark:outline-indigo-400";
-export const INPUT_WRAPPER_CLASS = "flex items-end gap-1 sm:gap-2 bg-white dark:bg-gray-700 rounded-xl border border-gray-300 dark:border-gray-600 shadow-sm overflow-hidden focus-within:ring-2 focus-within:ring-indigo-500";
+export const INPUT_WRAPPER_CLASS = "flex items-end gap-1 sm:gap-2 bg-white dark:bg-gray-700 rounded-xl border border-gray-300 dark:border-gray-600 shadow-sm overflow-hidden";
 export const TEXTAREA_CLASS = "flex-1 w-full resize-none py-1.5 sm:py-2 px-2 sm:px-3 bg-transparent text-gray-900 dark:text-gray-100 focus:outline-none custom-scrollbar placeholder-gray-500 dark:placeholder-gray-400 text-sm";
 
 // Button classes

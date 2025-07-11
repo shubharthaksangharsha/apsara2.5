@@ -351,6 +351,32 @@ export const startStreamChat = async (
                const errorPayload = line.slice(line.indexOf(':') + 1);
                const errorData = JSON.parse(errorPayload);
                throw new Error(errorData.error || 'Unknown stream error event');
+          } else if (line.startsWith('event: grounding')) {
+               try {
+                   const groundingPayload = line.slice(line.indexOf('data:') + 5).trim();
+                   const groundingData = JSON.parse(groundingPayload);
+                   console.log('📚 Grounding metadata event received:', groundingData);
+                   
+                   // Store grounding metadata directly on the model message
+                   setConvos(prevConvos => prevConvos.map(c => {
+                       if (c.id !== finalConvoId) return c;
+                       const updatedMessages = c.messages.map(m => {
+                           if (m.id === tempModelMessageId) {
+                               return {
+                                   ...m,
+                                   groundingMetadata: groundingData  // Store directly on the message
+                               };
+                           }
+                           return m;
+                       });
+                       return { ...c, messages: updatedMessages };
+                   }));
+                   
+                   // Also store in finalMetadata for end-of-stream processing
+                   finalMetadata.groundingMetadata = groundingData;
+               } catch (e) {
+                   console.error('Error parsing grounding event:', e);
+               }
           } else if (line.startsWith('event: function_call')) {
                try {
                    const functionCallPayload = line.slice(line.indexOf('data:') + 5).trim();
@@ -398,13 +424,22 @@ export const startStreamChat = async (
                    const functionResultPayload = line.slice(line.indexOf('data:') + 5).trim();
                    const functionResultData = JSON.parse(functionResultPayload);
                    console.log('Function result event:', functionResultData);
+                   
                    // Handle function result display in the UI
                    if (functionResultData.functionCall && functionResultData.result) {
                        const isImageFunction = functionResultData.functionCall.name === 'generateImage' || 
                                              functionResultData.functionCall.name === 'editImage';
                        
+                       // Special handling for URL context tool
+                       const isUrlContext = functionResultData.functionCall.name === 'urlContext';
+                       
+                       // Special handling for Google Search tool
+                       const isGoogleSearch = functionResultData.functionCall.name === 'googleSearch';
+                       
                        setConvos(prevConvos => prevConvos.map(c => {
                            if (c.id !== finalConvoId) return c;
+                           
+                           // First, update the model message
                            const updatedMessages = c.messages.map(m => {
                                if (m.id === tempModelMessageId) {
                                    const currentParts = [...(m.parts || [])];
@@ -426,10 +461,53 @@ export const startStreamChat = async (
                                            text: `✅ ${functionResultData.functionCall.name} completed\n`
                                        });
                                    }
+                                   
+                                   // Handle URL Context metadata
+                                   if (isUrlContext && functionResultData.result?.url_context_metadata?.url_metadata) {
+                                       console.log('📄 URL context metadata detected:', 
+                                           functionResultData.result.url_context_metadata);
+                                       
+                                       return { 
+                                           ...m, 
+                                           parts: currentParts,
+                                           url_context_metadata: functionResultData.result.url_context_metadata
+                                       };
+                                   }
+                                   
+                                   // Handle Google Search metadata (should be handled by grounding event, but this is a backup)
+                                   if (isGoogleSearch && functionResultData.result?.groundingMetadata) {
+                                       console.log('🔍 Google Search metadata detected in function result:', 
+                                           functionResultData.result.groundingMetadata);
+                                       
+                                       return { 
+                                           ...m, 
+                                           parts: currentParts,
+                                           groundingMetadata: functionResultData.result.groundingMetadata 
+                                       };
+                                   }
+                                   
                                    return { ...m, parts: currentParts };
                                }
                                return m;
                            });
+                           
+                           // Then, update the user message with function response
+                           const userMessageIndex = c.messages.findIndex(m => 
+                               m.role === 'user' && 
+                               !m.functionResponse &&
+                               m.parts && m.parts.some(p => p.text && p.text.includes(text.substring(0, 20)))
+                           );
+                           
+                           if (userMessageIndex !== -1) {
+                               updatedMessages[userMessageIndex] = {
+                                   ...updatedMessages[userMessageIndex],
+                                   functionResponse: {
+                                       name: functionResultData.functionCall.name,
+                                       response: { result: functionResultData.result }
+                                   }
+                               };
+                           }
+                           
                            return { ...c, messages: updatedMessages };
                        }));
                    }
@@ -587,4 +665,32 @@ export const startStreamChat = async (
   setStreamingModelMessageId(null);
   throw outerErr;
 }
+};
+
+/**
+ * Helper function to update convos with model message parts
+ */
+const updateConvosWithModelMessage = (convos, convoId, msgId, parts, additionalMetadata = {}) => {
+  return convos.map(convo => {
+    if (convo.id !== convoId) return convo;
+    
+    const msgIndex = convo.messages.findIndex(msg => msg.id === msgId);
+    if (msgIndex === -1) return convo;
+    
+    // Clone messages array
+    const updatedMessages = [...convo.messages];
+    
+    // Create updated model message with parts and any additional metadata
+    updatedMessages[msgIndex] = {
+      ...updatedMessages[msgIndex],
+      parts: [...parts],
+      ...additionalMetadata // Add any additional metadata (groundingMetadata, url_context_metadata)
+    };
+    
+    // Return updated convo
+    return {
+      ...convo,
+      messages: updatedMessages
+    };
+  });
 };
