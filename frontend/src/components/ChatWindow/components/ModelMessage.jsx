@@ -341,7 +341,7 @@ const ModelMessage = ({
             title={copiedMsgId === (message.id || uniqueId) ? "Copied to clipboard" : "Copy to clipboard"}
           >
             <ClipboardCopy className="w-4 h-4" />
-            <span className="text-xs">{copiedMsgId === (message.id || uniqueId) ? "Copied" : "Copy"}</span>
+            <span className="text-xs">{copiedMsgId === (message.id || uniqueId) ? "Copied" : ""}</span>
           </button>
           
           {/* Reload button */}
@@ -353,7 +353,7 @@ const ModelMessage = ({
               title="Regenerate response"
             >
               <RefreshCw className="w-4 h-4" />
-              <span className="text-xs">Reload</span>
+              <span className="text-xs"></span>
             </button>
           )}
         </div>
