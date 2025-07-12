@@ -190,11 +190,7 @@ export function useLiveSession({
       slidingWindowTokens,
       nativeAudioFeature,
       mediaResolution,
-      // Add RAG parameters from sessionOptions
-      ragEnabled: sessionOptions.ragEnabled || false,
-      ragStoreId: sessionOptions.ragStoreId || null,
-      ragSimilarityTopK: sessionOptions.ragSimilarityTopK || 5,
-      ragVectorDistanceThreshold: sessionOptions.ragVectorDistanceThreshold || 0.3
+
     };
     
     console.log("🔍 [useLiveSession] Final session options being passed:", finalSessionOptions);

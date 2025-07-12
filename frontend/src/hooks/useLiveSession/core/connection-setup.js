@@ -85,17 +85,11 @@ export const useConnectionSetup = ({
     slidingWindowTokens = 4000,
     nativeAudioFeature = 'none',
     mediaResolution = 'MEDIA_RESOLUTION_MEDIUM',
-    ragEnabled = false,
-    ragStoreId = null,
-    ragSimilarityTopK = 5,
-    ragVectorDistanceThreshold = 0.3
+
   } = {}) => {
     console.log('🔄 [Live WS] setupLiveConnection CALLED with nativeAudioFeature:', nativeAudioFeature);
     console.log('🔍 [Live WS] RAG Parameters received:', {
-      ragEnabled,
-      ragStoreId,
-      ragSimilarityTopK,
-      ragVectorDistanceThreshold
+
     });
     
     // Handle existing connection
@@ -110,10 +104,7 @@ export const useConnectionSetup = ({
         slidingWindowTokens,
         nativeAudioFeature,
         mediaResolution,
-        ragEnabled,
-        ragStoreId,
-        ragSimilarityTopK,
-        ragVectorDistanceThreshold
+
       }), 250);
       return;
     }
@@ -213,22 +204,9 @@ export const useConnectionSetup = ({
       wsUrl.searchParams.append('mediaResolution', mediaResolution);
     }
 
-    // Add RAG (Retrieval-Augmented Generation) parameters if enabled
-    if (ragEnabled && ragStoreId) {
-      console.log('🎯 [Live WS] Adding RAG parameters:', {
-        storeId: ragStoreId,
-        similarityTopK: ragSimilarityTopK,
-        vectorDistanceThreshold: ragVectorDistanceThreshold
-      });
-      
-      wsUrl.searchParams.append('enableRagContextStoring', 'true');
-      wsUrl.searchParams.append('ragStoreId', ragStoreId);
-      wsUrl.searchParams.append('ragSimilarityTopK', ragSimilarityTopK.toString());
-      wsUrl.searchParams.append('ragVectorDistanceThreshold', ragVectorDistanceThreshold.toString());
-    }
 
     // Add session resumption handle if available (from previous connection)
-    if (resumeHandle) {
+     if (resumeHandle) {
       console.log("[Live WS] Attempting to resume session with handle:", resumeHandle);
       wsUrl.searchParams.append('resumeHandle', resumeHandle);
       

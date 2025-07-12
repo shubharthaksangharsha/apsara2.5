@@ -46,6 +46,7 @@ const cleanMessagesForApi = (messages) => {
  * @param {boolean|null} overrideEnableFunctionCalling - Override for function calling enablement
  * @param {Array|null} overrideSelectedTools - Override for selected tools
  * @param {AbortSignal|null} abortSignal - Signal to abort the fetch request
+ * @param {string|null} modelMessageIdToReplace - ID of model message to replace (for regeneration)
  * @param {Function} setIsLoading - State setter for loading indicator
  * @param {Function} setStreamingModelMessageId - State setter for streaming message ID
  * @param {string|null} activeConvoId - Active conversation ID
@@ -79,6 +80,7 @@ export const startStreamChat = async (
   overrideEnableFunctionCalling = null,
   overrideSelectedTools = null,
   abortSignal = null,
+  modelMessageIdToReplace = null,
   setIsLoading,
   setStreamingModelMessageId,
   activeConvoId,
@@ -108,7 +110,7 @@ export const startStreamChat = async (
 
   setIsLoading(true);
   let finalConvoId = convoIdToUse;
-  let tempModelMessageId = null; // Temporary ID for the message being built
+  let tempModelMessageId = modelMessageIdToReplace || (Date.now() + Math.random() + '_model'); // Use provided ID or generate new one
   let userMessageParts = [{ text }]; // Start with the text part
 
   // Determine which files to use - either explicit files passed in or default hook-managed files
@@ -165,28 +167,66 @@ export const startStreamChat = async (
      } else {
         // --- Existing convo logic ---
        activeConvo = convos.find(c => c.id === convoIdToUse);
-    if (!activeConvo) throw new Error('No active conversation found');
+       if (!activeConvo) throw new Error('No active conversation found');
 
-    const validMessages = (activeConvo.messages || [])
+       const validMessages = (activeConvo.messages || [])
          .filter(msg => (msg.role === 'user' || msg.role === 'model') && msg.parts?.length > 0);
-       const cleanedMessages = cleanMessagesForApi(validMessages);
+       
+       // For regeneration, remove the model message being replaced and all messages after it
+       let messagesToUse = validMessages;
+       if (modelMessageIdToReplace) {
+         const replaceIndex = validMessages.findIndex(msg => msg.id === modelMessageIdToReplace);
+         if (replaceIndex >= 0) {
+           messagesToUse = validMessages.slice(0, replaceIndex);
+           console.log(`[useChatApi Stream] Regenerating response, using ${messagesToUse.length} messages before the replaced message`);
+         }
+       }
+       
+       const cleanedMessages = cleanMessagesForApi(messagesToUse);
        turns = [...cleanedMessages, { role: 'user', parts: userMessageParts }]; // Use combined parts
 
-       tempModelMessageId = Date.now() + Math.random() + '_model';
        setStreamingModelMessageId(tempModelMessageId);
 
-       // Add user message and placeholder model message
-    setConvos(prev => prev.map(c => {
-         if (c.id !== convoIdToUse) return c;
-      return {
-        ...c,
-           messages: [
-             ...(c.messages || []),
-             { role: 'user', parts: userMessageParts, id: Date.now() + Math.random() + '_user' }, // Use combined parts
-             { role: 'model', parts: [], id: tempModelMessageId } // Placeholder
-           ]
-      };
-    }));
+       if (modelMessageIdToReplace) {
+         // For regeneration, update the existing model message
+         setConvos(prev => prev.map(c => {
+           if (c.id !== convoIdToUse) return c;
+           
+           // Find the message to replace
+           const messageIndex = c.messages.findIndex(m => m.id === modelMessageIdToReplace);
+           if (messageIndex < 0) return c;
+           
+           // Create a new messages array with the updated model message
+           const updatedMessages = [...c.messages];
+           updatedMessages[messageIndex] = {
+             ...updatedMessages[messageIndex],
+             parts: [], // Clear existing parts
+             regenerating: false, // Clear regenerating flag
+             id: tempModelMessageId // Update ID to new one
+           };
+           
+           // Remove any messages after the regenerated one
+           const finalMessages = updatedMessages.slice(0, messageIndex + 1);
+           
+           return {
+             ...c,
+             messages: finalMessages
+           };
+         }));
+       } else {
+         // Add user message and placeholder model message
+         setConvos(prev => prev.map(c => {
+           if (c.id !== convoIdToUse) return c;
+           return {
+             ...c,
+             messages: [
+               ...(c.messages || []),
+               { role: 'user', parts: userMessageParts, id: Date.now() + Math.random() + '_user' }, // Use combined parts
+               { role: 'model', parts: [], id: tempModelMessageId } // Placeholder
+             ]
+           };
+         }));
+       }
      }
 
      // --- API Call ---
@@ -404,9 +444,12 @@ export const startStreamChat = async (
                                            loadingId: `${tempModelMessageId}-${functionCallData.functionCall.name}-loading`
                                        });
                                    } else {
-                                       // Add function call display part for other functions
+                                       // Add function call display part
                                        currentParts.push({
-                                           text: `🔧 Calling function: ${functionCallData.functionCall.name}`
+                                           functionCall: {
+                                               name: functionCallData.functionCall.name,
+                                               args: functionCallData.functionCall.args || {}
+                                           }
                                        });
                                    }
                                    return { ...m, parts: currentParts };
@@ -424,7 +467,6 @@ export const startStreamChat = async (
                    const functionResultPayload = line.slice(line.indexOf('data:') + 5).trim();
                    const functionResultData = JSON.parse(functionResultPayload);
                    console.log('Function result event:', functionResultData);
-                   
                    // Handle function result display in the UI
                    if (functionResultData.functionCall && functionResultData.result) {
                        const isImageFunction = functionResultData.functionCall.name === 'generateImage' || 
@@ -456,10 +498,28 @@ export const startStreamChat = async (
                                            };
                                        }
                                    } else {
-                                       // Add function result display part for other functions
-                                       currentParts.push({
-                                           text: `✅ ${functionResultData.functionCall.name} completed\n`
-                                       });
+                                       // Find and replace function call part with function result
+                                       const functionCallIndex = currentParts.findIndex(p => 
+                                           p.functionCall && p.functionCall.name === functionResultData.functionCall.name
+                                       );
+                                       
+                                       if (functionCallIndex !== -1) {
+                                           // Replace function call with function result
+                                           currentParts[functionCallIndex] = {
+                                               functionResult: {
+                                                   name: functionResultData.functionCall.name,
+                                                   result: functionResultData.result
+                                               }
+                                           };
+                                       } else {
+                                           // If no function call part found, add a new function result part
+                                           currentParts.push({
+                                               functionResult: {
+                                                   name: functionResultData.functionCall.name,
+                                                   result: functionResultData.result
+                                               }
+                                           });
+                                       }
                                    }
                                    
                                    // Handle URL Context metadata

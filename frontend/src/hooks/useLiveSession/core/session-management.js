@@ -34,10 +34,7 @@ export const useSessionManagement = ({
     console.log("[Live WS] Starting live session with model:", selectedModel);
     console.log("🔍 [Live WS] Session options received:", sessionOptions);
     console.log("🔍 [Live WS] RAG-specific options:", {
-      ragEnabled: sessionOptions.ragEnabled,
-      ragStoreId: sessionOptions.ragStoreId,
-      ragSimilarityTopK: sessionOptions.ragSimilarityTopK,
-      ragVectorDistanceThreshold: sessionOptions.ragVectorDistanceThreshold
+
     });
     
     // Clear any previous media state
@@ -69,10 +66,7 @@ export const useSessionManagement = ({
       nativeAudioFeature,
       mediaResolution,
       // Extract RAG parameters from sessionOptions
-      ragEnabled: sessionOptions.ragEnabled || false,
-      ragStoreId: sessionOptions.ragStoreId || null,
-      ragSimilarityTopK: sessionOptions.ragSimilarityTopK || 5,
-      ragVectorDistanceThreshold: sessionOptions.ragVectorDistanceThreshold || 0.3
+
     };
     
     console.log("🔍 [Live WS] Final connection options:", connectionOptions);

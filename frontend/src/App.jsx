@@ -498,7 +498,7 @@ function AuthenticatedApp({ darkMode, setDarkMode, user, onLogout }) {
     return startStreamChat(text, targetConvoId, initialConvoData, targetModelId);
   };
 
-  const startStreamChat = async (text, targetConvoId = null, initialConvoData = null, targetModelId = null, overrideEnableSearch = null, overrideEnableCodeExec = null, explicitFiles = null, overrideEnableFunctionCalling = null, overrideSelectedTools = null) => {
+  const startStreamChat = async (text, targetConvoId = null, initialConvoData = null, targetModelId = null, overrideEnableSearch = null, overrideEnableCodeExec = null, explicitFiles = null, overrideEnableFunctionCalling = null, overrideSelectedTools = null, abortSignal = null, modelMessageIdToReplace = null) => {
     setIsAppLoading(true);
 
     // Create a new AbortController for this request
@@ -566,7 +566,8 @@ function AuthenticatedApp({ darkMode, setDarkMode, user, onLogout }) {
         filesForMessage,
         overrideEnableFunctionCalling,
         overrideSelectedTools,
-        signal // Pass the abort signal
+        signal, // Pass the abort signal
+        modelMessageIdToReplace // Pass the model message ID to replace
       );
     } catch (error) {
       if (error.name === 'AbortError') {
@@ -853,6 +854,51 @@ function AuthenticatedApp({ darkMode, setDarkMode, user, onLogout }) {
       );
   }
 
+  // Function to handle reloading/regenerating a message
+  const handleReloadMessage = (userText, modelMessageId) => {
+    if (!activeConvoId || !userText || !modelMessageId) return;
+    
+    // Find the active conversation
+    const activeConvo = convos.find(c => c.id === activeConvoId);
+    if (!activeConvo) return;
+    
+    // Find the model message to replace
+    const messageIndex = activeConvo.messages.findIndex(m => m.id === modelMessageId);
+    if (messageIndex < 0) return;
+    
+    // Update the model message to show "Regenerating..." while we wait
+    setConvos(prevConvos => prevConvos.map(c => {
+      if (c.id !== activeConvoId) return c;
+      
+      const updatedMessages = [...c.messages];
+      updatedMessages[messageIndex] = {
+        ...updatedMessages[messageIndex],
+        parts: [{ text: "Regenerating response..." }],
+        regenerating: true
+      };
+      
+      return {
+        ...c,
+        messages: updatedMessages
+      };
+    }));
+    
+    // Stream the new response with the same message ID
+    startStreamChat(
+      userText,            // text
+      activeConvoId,       // targetConvoId
+      null,                // initialConvoData
+      null,                // targetModelId
+      null,                // overrideEnableSearch
+      null,                // overrideEnableCodeExec
+      null,                // explicitFiles
+      null,                // overrideEnableFunctionCalling
+      null,                // overrideSelectedTools
+      null,                // abortSignal
+      modelMessageId       // modelMessageIdToReplace
+    );
+  };
+
   return (
     <div className="relative flex h-screen bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-gray-200 font-sans overflow-hidden">
       {/* Sidebar Overlay - Only for small screens */}
@@ -923,7 +969,8 @@ function AuthenticatedApp({ darkMode, setDarkMode, user, onLogout }) {
                   key={activeConvoId}
                   convo={activeConvo}
                   streamingModelMessageId={streamingModelMessageId}
-                  isLoading={isChatLoading} 
+                  isLoading={isChatLoading}
+                  onReloadMessage={handleReloadMessage}
                 /> 
               } else {
                 // Active chat but NO messages yet: Show EmptyChatContent

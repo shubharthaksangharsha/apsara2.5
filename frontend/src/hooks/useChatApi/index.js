@@ -77,7 +77,8 @@ export function useChatApi({
     explicitFiles = null,
     overrideEnableFunctionCalling = null,
     overrideSelectedTools = null,
-    abortSignal = null
+    abortSignal = null,
+    modelMessageIdToReplace = null
   ) => {
     return startStreamChat(
       text, 
@@ -90,6 +91,7 @@ export function useChatApi({
       overrideEnableFunctionCalling,
       overrideSelectedTools,
       abortSignal,
+      modelMessageIdToReplace,
       setIsLoading,
       setStreamingModelMessageId,
       activeConvoId,

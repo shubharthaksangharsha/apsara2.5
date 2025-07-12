@@ -12,9 +12,10 @@ import { ArrowUp, ArrowDown } from 'lucide-react';
  * @param {Object} props.convo - Conversation data containing messages
  * @param {string|null} props.streamingModelMessageId - ID of the message being streamed, if any
  * @param {boolean} props.isLoading - Whether a message is currently being processed
+ * @param {Function} props.onReloadMessage - Handler for reloading a message
  * @returns {JSX.Element} ChatWindow component
  */
-export default function ChatWindow({ convo, streamingModelMessageId, isLoading }) {
+export default function ChatWindow({ convo, streamingModelMessageId, isLoading, onReloadMessage }) {
   const messagesEndRef = useRef(null);
   const chatContainerRef = useRef(null);
   const [modalOpen, setModalOpen] = useState(false);
@@ -125,6 +126,35 @@ export default function ChatWindow({ convo, streamingModelMessageId, isLoading }
     });
   };
 
+  // Handler for reloading/regenerating a message
+  const handleReloadMessage = (message) => {
+    if (!onReloadMessage || !message) return;
+    
+    // Find the user message that triggered this model response
+    const messageIndex = convo.messages.findIndex(m => m.id === message.id);
+    if (messageIndex <= 0) return; // No user message found before this one
+    
+    // Get the last user message before this model message
+    let userMessageIndex = messageIndex - 1;
+    while (userMessageIndex >= 0 && convo.messages[userMessageIndex].role !== MESSAGE_TYPES.USER) {
+      userMessageIndex--;
+    }
+    
+    if (userMessageIndex < 0) return; // No user message found
+    
+    const userMessage = convo.messages[userMessageIndex];
+    if (!userMessage.parts || !userMessage.parts.some(p => p.text)) return;
+    
+    // Get the text from the user message
+    const userText = userMessage.parts
+      .filter(p => p.text)
+      .map(p => p.text)
+      .join(' ');
+    
+    // Call the onReloadMessage handler with the user text and the model message ID to replace
+    onReloadMessage(userText, message.id);
+  };
+
   // Render streaming text with fade-in animation
   const renderStreamingText = (text) => {
     // Split text into words
@@ -200,6 +230,7 @@ export default function ChatWindow({ convo, streamingModelMessageId, isLoading }
               handleCopyCode={handleCopyCode}
               toggleCollapse={toggleCollapse}
               renderStreamingText={renderStreamingText}
+              handleReloadMessage={onReloadMessage ? handleReloadMessage : null}
             />
           );
         }

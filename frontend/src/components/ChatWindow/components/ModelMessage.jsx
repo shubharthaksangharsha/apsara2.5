@@ -1,11 +1,12 @@
 import React from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { ClipboardCopy } from 'lucide-react';
+import { ClipboardCopy, RefreshCw } from 'lucide-react';
 import CodeBlock from './CodeBlock';
 import CodeExecutionResult from './CodeExecutionResult';
 import ThoughtSummary from './ThoughtSummary';
 import SourceButton from './SourceButton';
+import FunctionCallStatus from './FunctionCallStatus';
 import { MODEL_MESSAGE_CLASSES, SYSTEM_MESSAGE_CLASSES, ERROR_MESSAGE_CLASSES, COPY_BUTTON_CLASSES } from '../constants';
 
 /**
@@ -25,6 +26,7 @@ import { MODEL_MESSAGE_CLASSES, SYSTEM_MESSAGE_CLASSES, ERROR_MESSAGE_CLASSES, C
  * @param {Function} props.handleCopyCode - Handler for copying code
  * @param {Function} props.toggleCollapse - Handler for toggling collapse state
  * @param {Function} props.renderStreamingText - Handler for rendering streaming text
+ * @param {Function} props.handleReloadMessage - Handler for reloading/regenerating a message
  * @returns {JSX.Element} ModelMessage component
  */
 const ModelMessage = ({
@@ -40,7 +42,8 @@ const ModelMessage = ({
   copiedStates,
   handleCopyCode,
   toggleCollapse,
-  renderStreamingText
+  renderStreamingText,
+  handleReloadMessage
 }) => {
   // Extract thought content and other parts
   let thoughtContent = '';
@@ -50,7 +53,7 @@ const ModelMessage = ({
     message.parts.forEach(part => {
       if (part.thought && typeof part.text === 'string') {
         thoughtContent += part.text + '\n'; // Accumulate thought text
-      } else if (part.text || part.executableCode || part.codeExecutionResult || part.inlineData || part.imageLoading) {
+      } else if (part.text || part.executableCode || part.codeExecutionResult || part.inlineData || part.imageLoading || part.functionCall || part.functionResult) {
         regularContentParts.push(part);
       }
     });
@@ -205,6 +208,25 @@ const ModelMessage = ({
                   </div>
                 </div>
               );
+            } else if (part.functionCall) {
+              // Handle function call status
+              return (
+                <FunctionCallStatus
+                  key={`${partId}-function-call`}
+                  functionName={part.functionCall.name}
+                  status="executing"
+                />
+              );
+            } else if (part.functionResult) {
+              // Handle function result
+              return (
+                <FunctionCallStatus
+                  key={`${partId}-function-result`}
+                  functionName={part.functionResult.name}
+                  status="completed"
+                  result={part.functionResult.result}
+                />
+              );
             }
             
             return null;
@@ -308,7 +330,7 @@ const ModelMessage = ({
       
       {/* Copy button for model messages (not for system or error, and not while streaming) */}
       {message.role === 'model' && !isStreaming && !isSystem && !isError && (
-        <div className="flex justify-start mt-1 mb-2">
+        <div className="flex justify-start mt-1 mb-2 gap-2">
           <button
             className={`${COPY_BUTTON_CLASSES} ${copiedMsgId === (message.id || uniqueId) ? 'text-green-600 dark:text-green-500' : ''}`}
             onClick={() => handleCopyMessage(
@@ -319,8 +341,21 @@ const ModelMessage = ({
             title={copiedMsgId === (message.id || uniqueId) ? "Copied to clipboard" : "Copy to clipboard"}
           >
             <ClipboardCopy className="w-4 h-4" />
-            <span className="text-xs">{copiedMsgId === (message.id || uniqueId) ? "Copied" : ""}</span>
+            <span className="text-xs">{copiedMsgId === (message.id || uniqueId) ? "Copied" : "Copy"}</span>
           </button>
+          
+          {/* Reload button */}
+          {handleReloadMessage && (
+            <button
+              className={`${COPY_BUTTON_CLASSES}`}
+              onClick={() => handleReloadMessage(message)}
+              aria-label="Regenerate response"
+              title="Regenerate response"
+            >
+              <RefreshCw className="w-4 h-4" />
+              <span className="text-xs">Reload</span>
+            </button>
+          )}
         </div>
       )}
     </div>

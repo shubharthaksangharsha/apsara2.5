@@ -5,6 +5,80 @@ import { toolHandlers } from '../services/tools/index.js';
 
 const router = express.Router();
 
+/**
+ * Sanitizes a conversation history to make it compatible with Gemini API
+ * Removes problematic fields like functionCall, functionResult, etc.
+ */
+function sanitizeConversation(contents) {
+  if (!Array.isArray(contents)) return [];
+  
+  return contents.map(message => {
+    // Create a clean message
+    const cleanMessage = {
+      role: message.role
+    };
+    
+    // If message has an ID, preserve it
+    if (message.id) {
+      cleanMessage.id = message.id;
+    }
+    
+    // Only include valid, simple parts
+    if (Array.isArray(message.parts)) {
+      cleanMessage.parts = message.parts.map(part => {
+        // For text parts, just keep the text
+        if (part.text) {
+          return { text: part.text };
+        }
+        
+        // For inline data (images, etc), keep just the inline data
+        if (part.inlineData) {
+          return { inlineData: part.inlineData };
+        }
+        
+        // For function responses in user messages, convert to text
+        if (message.role === 'user' && part.functionResponse) {
+          return { 
+            text: `Function result from ${part.functionResponse.name}: ${JSON.stringify(part.functionResponse.response || {}, null, 2)}`
+          };
+        }
+
+        // For thought parts, keep as is
+        if (part.thought === true && part.text) {
+          return { thought: true, text: part.text };
+        }
+        
+        // For executable code parts
+        if (part.executableCode) {
+          return { executableCode: part.executableCode };
+        }
+        
+        // For code execution results
+        if (part.codeExecutionResult) {
+          return { codeExecutionResult: part.codeExecutionResult };
+        }
+        
+        // Default case: convert to string if possible
+        if (typeof part === 'object') {
+          try {
+            return { text: JSON.stringify(part) };
+          } catch (e) {
+            return { text: "[Unsupported content]" };
+          }
+        }
+        
+        // Last resort, use empty text
+        return { text: "" };
+      }).filter(part => Object.keys(part).length > 0); // Filter out empty parts
+    } else {
+      // If message has no parts, add empty array
+      cleanMessage.parts = [];
+    }
+    
+    return cleanMessage;
+  });
+}
+
 // Streaming chat endpoint - This is now the only endpoint
 router.post('/stream', async (req, res) => {
   const modelId = req.body.modelId || 'gemini-2.0-flash';
@@ -102,6 +176,12 @@ router.post('/stream', async (req, res) => {
 
     const cacheService = req.app.get('cacheService');
     const apiRequest = await buildApiRequestWithCaching(req.body, cacheService);
+    
+    // Sanitize the conversation history
+    if (apiRequest.contents && Array.isArray(apiRequest.contents)) {
+      apiRequest.contents = sanitizeConversation(apiRequest.contents);
+    }
+    
     console.log(`[POST /chat/stream] Request to Google API (Model: ${modelId}):`, JSON.stringify(apiRequest, null, 2));
     
     // Rest of the streaming implementation remains unchanged
@@ -182,12 +262,28 @@ router.post('/stream', async (req, res) => {
       // Create updated conversation with function results
       const updatedContents = [...apiRequest.contents];
       
-      // Add the assistant's response with function calls
-      // Use all the streamed parts, including the function calls
-      updatedContents.push({
-        role: 'model',
-        parts: allStreamedParts
-      });
+      // Add the assistant's response WITHOUT function calls
+      // Filter out function call parts and keep only text/other content
+      const cleanParts = allStreamedParts
+        .filter(part => !part.functionCall)
+        .map(part => {
+          // Create clean copies without any function-related fields
+          const cleanPart = {};
+          if (part.text) cleanPart.text = part.text;
+          if (part.inlineData) cleanPart.inlineData = part.inlineData;
+          if (part.executableCode) cleanPart.executableCode = part.executableCode;
+          if (part.codeExecutionResult) cleanPart.codeExecutionResult = part.codeExecutionResult;
+          return cleanPart;
+        })
+        .filter(part => Object.keys(part).length > 0);
+
+      // Only add model response if there's actual content to add
+      if (cleanParts.length > 0) {
+        updatedContents.push({
+          role: 'model',
+          parts: cleanParts
+        });
+      }
       
       // Execute function calls in parallel and send events to client
       const functionResults = await Promise.allSettled(
@@ -290,16 +386,7 @@ router.post('/stream', async (req, res) => {
             updatedContents.push({
               role: 'user',
               parts: [{
-                functionResponse: {
-                  name: functionCall.name,
-                  response: { 
-                    result: {
-                      status: result.status,
-                      message: result.message,
-                      description: result.description || 'Image generated successfully'
-                    }
-                  }
-                }
+                text: `Function result from ${functionCall.name}: ${JSON.stringify(result, null, 2)}`
               }]
             });
           } else {
@@ -307,10 +394,7 @@ router.post('/stream', async (req, res) => {
             updatedContents.push({
               role: 'user',
               parts: [{
-                functionResponse: {
-                  name: functionCall.name,
-                  response: { result }
-                }
+                text: `Function result from ${functionCall.name}: ${JSON.stringify(result, null, 2)}`
               }]
             });
             
@@ -344,6 +428,9 @@ router.post('/stream', async (req, res) => {
           ...apiRequest,
           contents: updatedContents
         };
+        
+        // Sanitize follow-up request contents
+        followUpRequest.contents = sanitizeConversation(followUpRequest.contents);
         
         console.log(`[POST /chat/stream] Making follow-up request with function results`);
         console.log(`[POST /chat/stream] Follow-up request contents:`, JSON.stringify(followUpRequest.contents, null, 2));
@@ -494,8 +581,24 @@ router.post('/function-result', async (req, res) => {
   try {
     const { modelId, originalContents, functionResponse, config } = req.body;
     if (!originalContents || !functionResponse) return res.status(400).json({ error: 'Invalid input.' });
-    const newContents = [...originalContents, { role: 'function', parts: [{ functionResponse: { name: functionResponse.name, response: functionResponse.response }}]}];
-    const apiRequest = { model: modelId || 'gemini-2.0-flash', contents: newContents, config: {} };
+    
+    // Create the request with sanitized contents
+    let newContents = [...originalContents, { 
+      role: 'function', 
+      parts: [{ 
+        text: `Function result from ${functionResponse.name}: ${JSON.stringify(functionResponse.response || {}, null, 2)}`
+      }]
+    }];
+    
+    // Apply sanitization to ensure valid format
+    newContents = sanitizeConversation(newContents);
+    
+    const apiRequest = { 
+      model: modelId || 'gemini-2.0-flash', 
+      contents: newContents, 
+      config: {} 
+    };
+    
     if (config) apiRequest.config = config;
     const result = await req.app.get('ai').models.generateContent(apiRequest);
     const c = result.candidates[0];
