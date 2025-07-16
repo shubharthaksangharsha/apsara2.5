@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ChevronDown, ChevronUp, Copy, Download } from 'lucide-react';
+import { ChevronDown, ChevronUp, Copy, Download, Play } from 'lucide-react';
 
 /**          <pre 
             style={{ 
@@ -31,11 +31,46 @@ const CodeBlock = ({
   codeContent, 
   language, 
   uniqueId, 
-  handleCopyCode
+  handleCopyCode,
+  handleRunCode,
+  sessionId
 }) => {
   const sectionId = `${uniqueId}-code`;
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(false);
+
+  // Add file upload state
+  const [files, setFiles] = useState([]);
+  const [isUploading, setIsUploading] = useState(false);
+  
+  const handleFileUpload = async (e) => {
+    if (!sessionId) return;
+    
+    setIsUploading(true);
+    const formData = new FormData();
+    formData.append('file', e.target.files[0]);
+    
+    try {
+      const response = await fetch(`/api/code/sessions/${sessionId}/upload`, {
+        method: 'POST',
+        body: formData
+      });
+      
+      const data = await response.json();
+      if (data.success) {
+        setFiles(prev => [...prev, data.file]);
+      }
+    } catch (error) {
+      console.error('File upload failed:', error);
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  // Add x option with session context
+  const onRunCode = () => {
+    handleRunCode(codeContent, uniqueId, files);
+  };
 
   // Check for dark mode by observing the 'dark' class on document element
   useEffect(() => {
@@ -109,9 +144,11 @@ const CodeBlock = ({
   return (
     <>
       <div 
+        id={uniqueId}
         style={{ 
           backgroundColor: isDarkMode ? '#374151' : '#d1d5db',
           border: isDarkMode ? '2px solid #374151' : '1px solid #9ca3af',
+          borderBottomWidth: 0,
           borderRadius: '0.75rem 0.75rem 0 0',
           margin: '1rem 0 0 0',
           padding: '0.75rem 1rem',
@@ -151,8 +188,6 @@ const CodeBlock = ({
               backgroundColor: isDarkMode ? '#000000' : '#f5f5f5',
               borderLeft: isDarkMode ? '2px solid #374151' : '1px solid #9ca3af',
               borderRight: isDarkMode ? '2px solid #374151' : '1px solid #9ca3af',
-              borderTop: 'none',
-              borderBottom: 'none',
               margin: '0',
               padding: '1.25rem 0',
               overflow: 'auto',
@@ -206,7 +241,7 @@ const CodeBlock = ({
             style={{ 
               backgroundColor: isDarkMode ? '#374151' : '#d1d5db',
               border: isDarkMode ? '2px solid #374151' : '1px solid #9ca3af',
-              borderTop: 'none',
+              borderTopWidth: 0,
               borderRadius: '0 0 0.75rem 0.75rem',
               margin: '0 0 1rem 0',
               padding: '0.75rem 1rem',
@@ -252,6 +287,24 @@ const CodeBlock = ({
               title="Copy code"
             >
               <Copy size={16} />
+            </button>
+            <button
+              onClick={onRunCode}
+              style={{
+                width: '2rem',
+                height: '2rem',
+                backgroundColor: isDarkMode ? '#4b5563' : '#9ca3af',
+                border: 'none',
+                borderRadius: '0.375rem',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                color: isDarkMode ? '#ffffff' : '#ffffff'
+              }}
+              title="Run code"
+            >
+              <Play size={16} />
             </button>
           </div>
         </>

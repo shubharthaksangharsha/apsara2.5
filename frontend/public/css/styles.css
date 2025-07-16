@@ -1927,3 +1927,281 @@ body.dark-mode .spinner {
 body.dark-mode .spinner-container p {
     color: var(--text-color-light);
 }
+
+/* Terminal-style Code execution result styling */
+.code-execution-result {
+  border-radius: 8px;
+  margin: 1rem 0;
+  overflow: hidden;
+  background-color: #1e1e1e;
+  color: #f0f0f0;
+  font-family: 'Consolas', 'Courier New', monospace;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+  position: fixed;
+  animation: fadeInTerminal 0.3s ease-out;
+  border: 1px solid #444;
+  z-index: 1000;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 80%;
+  max-width: 800px;
+  max-height: 500px;
+}
+
+@keyframes fadeInTerminal {
+  from { opacity: 0; transform: translate(-50%, -40%); }
+  to { opacity: 1; transform: translate(-50%, -50%); }
+}
+
+.code-execution-result .result-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px;
+  background-color: #333;
+  border-bottom: 1px solid #555;
+  user-select: none;
+}
+
+.code-execution-result .result-header span {
+  color: #f0f0f0;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.terminal-dot {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  background-color: #3ee042;
+  border-radius: 50%;
+  margin-right: 6px;
+  box-shadow: 0 0 8px rgba(62, 224, 66, 0.6);
+}
+
+.code-execution-result .result-header button {
+  background: none;
+  border: none;
+  color: #f0f0f0;
+  font-size: 0.85rem;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: background-color 0.2s;
+}
+
+.code-execution-result .result-header button:hover {
+  background-color: rgba(255, 255, 255, 0.2);
+}
+
+.code-execution-result .terminal-body {
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100% - 40px);
+  overflow: hidden;
+}
+
+.code-execution-result .result-output {
+  padding: 1rem;
+  margin: 0;
+  overflow-x: auto;
+  font-size: 0.95rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  max-height: 400px;
+  overflow-y: auto;
+  background-color: #1e1e1e;
+  color: #f0f0f0;
+  flex-grow: 1;
+}
+
+/* Spinner for loading state */
+.spinner-inline {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-radius: 50%;
+  border-top-color: #3ee042;
+  animation: spin 1s linear infinite;
+  margin-right: 8px;
+}
+
+/* Syntax highlighting for terminal-like colors */
+.code-execution-result .result-output .green {
+  color: #3ee042;
+}
+
+.code-execution-result .result-output .red {
+  color: #ff5555;
+}
+
+.code-execution-result .result-output .blue {
+  color: #6272a4;
+}
+
+.code-execution-result .result-output .yellow {
+  color: #f1fa8c;
+}
+
+/* Error styling */
+.code-execution-result.error .result-header {
+  background-color: #442222;
+  border-bottom: 1px solid #662222;
+}
+
+.code-execution-result.error .terminal-dot,
+.code-execution-result .error-text:before {
+  background-color: #ff5555;
+  box-shadow: 0 0 8px rgba(255, 85, 85, 0.6);
+}
+
+.code-execution-result.error .result-output.error {
+  background-color: #2a1a1a;
+  color: #ff8888;
+}
+
+/* Generated files list */
+.generated-files {
+  padding: 0.75rem 1rem;
+  border-top: 1px solid #444;
+  background-color: #252525;
+}
+
+.generated-files h4 {
+  margin-bottom: 0.5rem;
+  font-weight: 600;
+  color: #f8f8f8;
+  display: flex;
+  align-items: center;
+}
+
+.generated-files ul {
+  list-style-type: none;
+  padding-left: 0.5rem;
+  margin: 0;
+}
+
+.generated-files li {
+  margin: 4px 0;
+  display: flex;
+  align-items: center;
+}
+
+.generated-files li:before {
+  content: "📄";
+  margin-right: 8px;
+}
+
+.generated-files a {
+  color: #61afef;
+  text-decoration: none;
+  transition: color 0.2s;
+}
+
+.generated-files a:hover {
+  color: #78bcf7;
+  text-decoration: underline;
+}
+
+/* Light theme overrides */
+.light .code-execution-result {
+  background-color: #f8f8f8;
+  color: #333;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+  border: 1px solid #ddd;
+}
+
+.light .code-execution-result .result-header {
+  background-color: #e0e0e0;
+  border-bottom: 1px solid #ccc;
+}
+
+.light .code-execution-result .result-header span {
+  color: #333;
+}
+
+.light .terminal-dot {
+  background-color: #28a745;
+  box-shadow: 0 0 8px rgba(40, 167, 69, 0.4);
+}
+
+.light .code-execution-result .result-header button {
+  color: #333;
+}
+
+.light .code-execution-result .result-header button:hover {
+  background-color: rgba(0, 0, 0, 0.1);
+}
+
+.light .code-execution-result .result-output {
+  background-color: #f8f8f8;
+  color: #333;
+}
+
+.light .generated-files {
+  background-color: #f0f0f0;
+  border-top: 1px solid #ddd;
+}
+
+.light .generated-files h4 {
+  color: #333;
+}
+
+.light .generated-files a {
+  color: #0366d6;
+}
+
+.light .generated-files a:hover {
+  color: #0056b3;
+}
+
+/* Fullscreen mode */
+.code-execution-result.fullscreen {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 90%;
+  height: 80%;
+  max-width: 1200px;
+  max-height: 800px;
+  z-index: 1000;
+}
+
+.code-execution-result.fullscreen .terminal-body {
+  height: calc(100% - 40px);
+}
+
+.code-execution-result.fullscreen .result-output {
+  max-height: 100%;
+}
+
+/* Button styles */
+.file-btn, .toggle-btn {
+  background: none;
+  border: none;
+  color: #f0f0f0;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  transition: background-color 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.file-btn:hover, .toggle-btn:hover {
+  background-color: rgba(255, 255, 255, 0.2);
+}
+
+.light .file-btn, .light .toggle-btn {
+  color: #333;
+}
+
+.light .file-btn:hover, .light .toggle-btn:hover {
+  background-color: rgba(0, 0, 0, 0.1);
+}

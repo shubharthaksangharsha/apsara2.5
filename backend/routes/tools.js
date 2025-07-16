@@ -1,8 +1,23 @@
 // routes/tools.js
 import express from 'express';
 import { getToolDeclarations, toolHandlers, customToolNames } from '../services/tools/index.js';
+import { handleCodeExecution } from '../services/tools/codeexecution/handlers.js';
 
 const router = express.Router();
+
+// Add this route to your existing router
+router.post('/codeexecution', async (req, res) => {
+  try {
+    const result = await handleCodeExecution(req.body);
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({
+      success: false, 
+      error: error.message || 'Code execution failed'
+    });
+  }
+});
+
 
 // Get available tools
 router.get('/', (req, res) => {

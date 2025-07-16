@@ -25,6 +25,7 @@ import fileRoutes from './routes/files.js';
 import chatRoutes from './routes/chat.js';
 import toolsRoutes from './routes/tools.js';
 import cacheRoutes from './routes/cache.js';
+import codeFilesRouter from './routes/codeFiles.js';
 
 // Import WebSocket handler
 import { setupWebSocketServer } from './websocket/liveHandler.js';
@@ -104,6 +105,9 @@ app.use('/tools', toolsRoutes);
 // Chat routes
 app.use('/chat', chatRoutes);
 
+// Add the router to your Express app
+app.use('/api/code', codeFilesRouter);
+
 // Setup WebSocket server for live connections
 setupWebSocketServer(server, ai);
 
@@ -113,7 +117,7 @@ connectDB();
 // Start server
 server.listen(PORT, () => {
   console.log(`Server listening on port ${PORT}`);
-  console.log('REST: /health, /models, /voices, /voices/select, /system, /tools, /tools/invoke, /files, /cache, /chat, /chat/stream, /chat/function-result');
+  console.log('REST: /health, /models, /voices, /voices/select, /system, /tools, /tools/invoke, /files, /cache, /chat, /chat/stream, /chat/function-result, /api/code/files');
   console.log('WS: ws://<host>/live[ /text /audio /video ]');
 });
 

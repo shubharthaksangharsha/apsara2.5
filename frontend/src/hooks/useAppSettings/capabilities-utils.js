@@ -37,9 +37,9 @@ export const updateSettingsBasedOnCapabilities = (
   let modelDefaultThinking = false;
   let modelDefaultBudget = 0;
 
-  if (modelId === 'gemini-2.5-pro-exp-03-25' || modelId === 'gemini-2.5-flash-preview-04-17') {
+  if (modelId === 'gemini-2.5-pro-exp-03-25' || modelId === 'gemini-2.5-flash-preview-04-17' || modelId === 'gemini-2.5-flash-preview-05-20' || modelId === 'gemini-2.5-flash') {
     modelDefaultThinking = true;
-    if (modelId === 'gemini-2.5-flash-preview-04-17') {
+    if (modelId === 'gemini-2.5-flash-preview-04-17' || modelId === 'gemini-2.5-flash-preview-05-20' || modelId === 'gemini-2.5-flash') {
       modelDefaultBudget = 100;
     }
   }

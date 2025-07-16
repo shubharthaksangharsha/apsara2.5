@@ -11,6 +11,10 @@ export const getModelCapabilities = (modelId) => {
       return { supportsSearch: true, supportsSystemInstruction: true, supportsCodeExecution: true, supportsThinking: true, supportsThinkingBudget: false };
     case "gemini-2.5-flash-preview-04-17": // Assuming based on 2.5 family
       return { supportsSearch: true, supportsSystemInstruction: true, supportsCodeExecution: true, supportsThinking: true, supportsThinkingBudget: true };
+    case "gemini-2.5-flash-preview-05-20": // Assuming based on 2.5 family
+      return { supportsSearch: true, supportsSystemInstruction: true, supportsCodeExecution: true, supportsThinking: true, supportsThinkingBudget: true };
+    case "gemini-2.5-flash": // Assuming based on 2.5 family
+      return { supportsSearch: true, supportsSystemInstruction: true, supportsCodeExecution: true, supportsThinking: true, supportsThinkingBudget: true };
     case "gemini-2.0-flash": // Assuming based on 2.0 family, added Search based on prompt
       return { supportsSearch: true, supportsSystemInstruction: true, supportsCodeExecution: true, supportsThinking: false, supportsThinkingBudget: false };
     case "gemini-2.0-flash-preview-image-generation": // Image only

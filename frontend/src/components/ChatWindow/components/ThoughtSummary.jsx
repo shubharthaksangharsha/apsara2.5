@@ -34,12 +34,12 @@ const ThoughtSummary = ({
       >
         <div className="flex items-center gap-2">
           <BrainCircuit size={16} className="text-purple-600 dark:text-purple-300 flex-shrink-0" />
-          <span className="font-semibold text-gray-800 dark:text-purple-300">Details</span>
+          <span className="font-semibold text-gray-800 dark:text-purple-300">{isCollapsed ? "Show Thoughts" : "Hide Thoughts"}</span>
         </div>
         <button
-          className="p-1 text-gray-500 dark:text-gray-400 hover:text-black dark:hover:text-white transition rounded-full"
-          title={isCollapsed ? "Show details" : "Hide details"}
-          aria-label={isCollapsed ? "Show details" : "Hide details"}
+          className="p-1 text-gray-500 dark:text-gray-400 hover:text-black dark:hover:text-white transition rounded-full flex items-center gap-1"
+          title={isCollapsed ? "Show thoughts" : "Hide thoughts"}
+          aria-label={isCollapsed ? "Show thoughts" : "Hide thoughts"}
           aria-expanded={!isCollapsed}
           type="button"
         >
@@ -57,4 +57,4 @@ const ThoughtSummary = ({
   );
 };
 
-export default ThoughtSummary; 
+export default ThoughtSummary;

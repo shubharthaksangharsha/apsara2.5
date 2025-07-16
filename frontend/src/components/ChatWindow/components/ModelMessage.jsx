@@ -27,6 +27,7 @@ import { MODEL_MESSAGE_CLASSES, SYSTEM_MESSAGE_CLASSES, ERROR_MESSAGE_CLASSES, C
  * @param {Function} props.toggleCollapse - Handler for toggling collapse state
  * @param {Function} props.renderStreamingText - Handler for rendering streaming text
  * @param {Function} props.handleReloadMessage - Handler for reloading/regenerating a message
+ * @param {Function} props.handleRunCode - Handler for running code in a code block
  * @returns {JSX.Element} ModelMessage component
  */
 const ModelMessage = ({
@@ -43,7 +44,8 @@ const ModelMessage = ({
   handleCopyCode,
   toggleCollapse,
   renderStreamingText,
-  handleReloadMessage
+  handleReloadMessage,
+  handleRunCode
 }) => {
   // Extract thought content and other parts
   let thoughtContent = '';
@@ -136,6 +138,7 @@ const ModelMessage = ({
                                 uniqueId={`${partId}-markdown-code-${i}`}
                                 copiedStates={copiedStates}
                                 handleCopyCode={handleCopyCode}
+                                handleRunCode={handleRunCode}
                               />
                             );
                           } else {
@@ -166,6 +169,7 @@ const ModelMessage = ({
                   uniqueId={partId}
                   copiedStates={copiedStates}
                   handleCopyCode={handleCopyCode}
+                  handleRunCode={handleRunCode}
                 />
               );
             } else if (part.codeExecutionResult) {
@@ -255,6 +259,7 @@ const ModelMessage = ({
                               uniqueId={`${uniqueId}-fallback-code`}
                               copiedStates={copiedStates}
                               handleCopyCode={handleCopyCode}
+                              handleRunCode={handleRunCode}
                             />
                           );
                         } else {
@@ -284,6 +289,7 @@ const ModelMessage = ({
                 uniqueId={`${uniqueId}-topLegacyCode`}
                 copiedStates={copiedStates}
                 handleCopyCode={handleCopyCode}
+                handleRunCode={handleRunCode}
               />
             )}
             {message.codeExecutionResult && (
@@ -341,7 +347,7 @@ const ModelMessage = ({
             title={copiedMsgId === (message.id || uniqueId) ? "Copied to clipboard" : "Copy to clipboard"}
           >
             <ClipboardCopy className="w-4 h-4" />
-            <span className="text-xs">{copiedMsgId === (message.id || uniqueId) ? "Copied" : "Copy"}</span>
+            <span className="text-xs">{copiedMsgId === (message.id || uniqueId) ? "Copied" : ""}</span>
           </button>
           
           {/* Reload button */}
@@ -353,7 +359,7 @@ const ModelMessage = ({
               title="Regenerate response"
             >
               <RefreshCw className="w-4 h-4" />
-              <span className="text-xs">Reload</span>
+              <span className="text-xs"></span>
             </button>
           )}
         </div>

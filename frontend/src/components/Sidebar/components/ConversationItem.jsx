@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { MoreVertical, Edit2, Pin, PinOff, Trash2 } from 'lucide-react';
 
 /**
@@ -24,6 +24,7 @@ const ConversationItem = ({
   const [menuOpen, setMenuOpen] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState(conversation.title || 'Untitled');
+  const menuRef = useRef(null);
 
   const handleEdit = () => {
     setIsEditing(true);
@@ -39,6 +40,25 @@ const ConversationItem = ({
   const handleEditCancel = () => {
     setIsEditing(false);
   };
+
+  // Effect to close the menu when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (menuRef.current && !menuRef.current.contains(event.target)) {
+        setMenuOpen(false);
+      }
+    }
+
+    // Add event listener when the menu is open
+    if (menuOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    
+    // Clean up
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [menuOpen]);
 
   return (
     <li
@@ -86,7 +106,7 @@ const ConversationItem = ({
           <MoreVertical className="h-4 w-4" />
         </button>
         {menuOpen && (
-          <div className="absolute right-0 mt-2 w-40 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded shadow-lg z-50">
+          <div ref={menuRef} className="absolute right-0 mt-2 w-40 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded shadow-lg z-50">
             <button
               className="flex items-center w-full px-3 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-200 gap-2"
               onClick={handleEdit}

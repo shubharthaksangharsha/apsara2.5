@@ -14,7 +14,7 @@ const cacheService = new CacheService(GEMINI_API_KEY);
  */
 router.post('/', async (req, res) => {
   try {
-    const { model = 'models/gemini-1.5-flash', systemInstruction, files = [], ttlHours = 1 } = req.body;
+    const { model = 'models/gemini-2.0-flash', systemInstruction, files = [], ttlHours = 1 } = req.body;
     
     if (!systemInstruction && (!files || files.length === 0)) {
       return res.status(400).json({ 
@@ -50,7 +50,7 @@ router.post('/', async (req, res) => {
  */
 router.post('/from-history', async (req, res) => {
   try {
-    const { model = 'models/gemini-1.5-flash', chatHistory, systemInstruction, ttlHours = 2 } = req.body;
+    const { model = 'models/gemini-2.0-flash', chatHistory, systemInstruction, ttlHours = 2 } = req.body;
     
     if (!chatHistory || !Array.isArray(chatHistory) || chatHistory.length === 0) {
       return res.status(400).json({ 
@@ -241,7 +241,7 @@ router.post('/find-suitable', async (req, res) => {
 router.post('/force-create', async (req, res) => {
   try {
     const { 
-      model = 'models/gemini-1.5-flash', 
+      model = 'models/gemini-2.0-flash', 
       systemInstruction = 'You are a helpful assistant.',
       files = [], 
       ttlHours = 1,

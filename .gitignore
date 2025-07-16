@@ -143,6 +143,13 @@ pnpm-debug.log*
 # Ignore coverage or testing files
 coverage/
 
+# Docker
+Dockerfile
+docker-compose.yml
+.dockerignore
+*.dockerfile
+docker/
+
 # Sensitive files
 backend/credentials.json
 backend/credentials2.json
