@@ -123,7 +123,7 @@ import {
     // Define models that DO support thinking configuration
     const modelsWithThinkingConfigSupport = {
       "gemini-2.5-flash": { supportsBudget: true },
-      "gemini-2.5-pro-exp-03-25": { supportsBudget: false },
+      "gemini-2.5-pro": { supportsBudget: true },
       "gemini-2.5-flash-preview-04-17": { supportsBudget: true },
       "gemini-2.5-flash-preview-05-20": { supportsBudget: true },
       // Add other model IDs here if they support thinking_config

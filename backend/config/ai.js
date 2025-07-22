@@ -7,7 +7,7 @@ export const availableModels = ["gemini-2.0-flash","gemini-2.0-pro","gemini-1.5-
 
 // --- Chat Models (REST API) ---
 export const chatModels = [
-  // { id: "gemini-2.5-pro", name: "Gemini 2.5 Pro" },
+  { id: "gemini-2.5-pro", name: "Gemini 2.5 Pro" },
   { id: "gemini-2.5-flash", name: "Gemini 2.5 Flash" },
   // { id: "gemini-2.5-flash-preview-05-20", name: "Gemini 2.5 Flash" },
   // { id: "gemini-2.5-flash-preview-04-17", name: "Gemini 2.5 Flash" },

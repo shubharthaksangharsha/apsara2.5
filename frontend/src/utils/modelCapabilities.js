@@ -7,8 +7,8 @@ export const getModelCapabilities = (modelId) => {
   // Define capabilities based on the user's list and previous documentation
   // Make sure these align with your backend capabilities!
   switch (modelId) {
-    case "gemini-2.5-pro-exp-03-25":
-      return { supportsSearch: true, supportsSystemInstruction: true, supportsCodeExecution: true, supportsThinking: true, supportsThinkingBudget: false };
+    case "gemini-2.5-pro":
+      return { supportsSearch: true, supportsSystemInstruction: true, supportsCodeExecution: true, supportsThinking: true, supportsThinkingBudget: true };
     case "gemini-2.5-flash-preview-04-17": // Assuming based on 2.5 family
       return { supportsSearch: true, supportsSystemInstruction: true, supportsCodeExecution: true, supportsThinking: true, supportsThinkingBudget: true };
     case "gemini-2.5-flash-preview-05-20": // Assuming based on 2.5 family

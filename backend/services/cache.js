@@ -28,8 +28,10 @@ class CacheService {
       const supportedModels = [
         'gemini-2.0-flash',
         'gemini-2.5-flash-preview-05-20',
-
+        'gemini-2.5-pro',
         'gemini-2.5-flash-preview-04-17',
+        'gemini-2.5-flash',
+        
       ];
       
       // Remove models/ prefix if present for SDK usage
